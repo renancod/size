@@ -1,14 +1,21 @@
 /**
- * PRIMEIRA INSTALAÇÃO (rode no editor, nesta ordem):
+ * PRIMEIRA INSTALAÇÃO: rode instalarTudo() no editor (uma vez). Ele faz, nesta ordem:
  *  1. setup()            → cria a planilha central "Size · Cadastros", a pasta "Compras Size" e o usuário admin
  *                          (a senha provisória aparece no "Registro de execução").
- *  2. migrarPrimeBeach() → cria a obra Prime Beach e importa os pedidos da planilha antiga
- *                          (preencha ID_PLANILHA_ANTIGA abaixo antes).
+ *  2. migrarPrimeBeach() → cria a obra Prime Beach e importa pedidos, fornecedores, materiais,
+ *                          edificações (viram frentes de trabalho) e usuários da planilha antiga "Pedidos_Size".
  *  3. instalarGatilho()  → leitura automática dos e-mails (orçamentos e notas) a cada 10 min.
- *  4. Implantar > Nova implantação > App da Web (executar como Eu, acesso Qualquer pessoa)
- *     e cole a URL em config.js do app.
+ * Depois: Implantar > Nova implantação > App da Web (executar como Eu, acesso Qualquer pessoa)
+ * e cole a URL em config.js do app.
  */
-const ID_PLANILHA_ANTIGA = 'COLE_AQUI_O_ID_DA_PLANILHA_PEDIDOS_SIZE';
+const ID_PLANILHA_ANTIGA = '1zhKNyU-EdqdREuX3hkDY7euiWU0p5K1HoRPW_O3dRug'; // Pedidos_Size
+
+function instalarTudo() {
+  setup();
+  migrarPrimeBeach();
+  instalarGatilho();
+  Logger.log('Pronto. Agora: Implantar > Nova implantação > App da Web.');
+}
 
 const CONFIG_PADRAO = [
   ['EMPRESA', 'Size Engenharia', 'Nome que aparece nos e-mails'],
@@ -16,7 +23,7 @@ const CONFIG_PADRAO = [
   ['REGRAS_ORCAMENTO', '', 'Faixas por valor, ex: 5000:2; 20000:3 (a partir de R$ 5.000 exige 2; de R$ 20.000 exige 3)'],
   ['PRAZO_FATURADO_PADRAO', 30, 'Prazo padrão (dias) do faturamento'],
   ['EMAIL_FINANCEIRO', '', 'E-mail(s) do financeiro, separados por vírgula (aviso de pagamento pendente)'],
-  ['APP_URL', '', 'Endereço do app (ex: https://renancod.github.io/compras-size/) para links nos e-mails'],
+  ['APP_URL', 'https://renancod.github.io/compras-size/', 'Endereço do app (ex: https://renancod.github.io/compras-size/) para links nos e-mails'],
   ['FRENTES_PADRAO', 'Canteiro; Fundação; Estrutura; Alvenaria; Instalações elétricas; Instalações hidrossanitárias; Cobertura; Revestimentos; Pintura; Acabamento', 'Frentes de trabalho criadas em toda obra nova (separe com ;)']
 ];
 const UNIDADES_PADRAO = ['un', 'pç', 'm', 'm²', 'm³', 'kg', 't', 'sc', 'L', 'gl', 'lata', 'cx', 'rolo', 'barra', 'par', 'jg', 'vb', 'h', 'dia', 'mês'];
@@ -136,6 +143,27 @@ function migrarPlanilhaAntiga_(idAntigo, nomeObra, sigla) {
     });
   });
 
+  // edificações / centros de custo (aba Obras) → frentes de trabalho
+  const Fr = obraTab_(ctx, 'Frentes');
+  abaAntiga_(velha, ['obra']).forEach(r => {
+    const nome = String(r[0]).trim();
+    if (!nome || Fr.all().some(x => norm_(x.nome) === norm_(nome))) return;
+    Fr.insert({ codigo: Fr.proxCodigo('codigo', 'FR', 2), nome: nome, descricao: 'Edificação / centro de custo', ativa: r[1] === '' || sim_(r[1]) ? 'Sim' : 'Não' });
+  });
+
+  // usuários (aba Acessos: nome, senha, perfil, ativo) → mesmo login e senha, com troca obrigatória no 1º acesso
+  const U = central_('Usuarios'), A = central_('Acessos'), perfis = central_('Perfis').all();
+  abaAntiga_(velha, ['acesso']).forEach(r => {
+    const nome = String(r[0]).trim(), login = norm_(nome).replace(/\s+/g, '.');
+    if (!nome || !String(r[1]) || U.all().some(x => norm_(x.login) === login)) return;
+    const perfil = perfis.find(p => norm_(p.perfil) === norm_(r[2])) || perfis.find(p => p.perfil === 'Solicitante');
+    const u = { id: U.proxCodigo('id', 'U', 3), nome: nome, login: login, admin: 'Não', ativo: r[3] === '' || sim_(r[3]) ? 'Sim' : 'Não', trocar_senha: 'Sim', criado_em: new Date(), salt: Utilities.getUuid() };
+    u.senha_hash = hash_(String(r[1]).trim(), u.salt);
+    U.insert(u);
+    A.insert({ usuario_id: u.id, usuario: nome, obra_id: obra.id, obra: obra.nome, perfil: perfil.perfil, permissoes: perfil.permissoes });
+    Logger.log('Usuário migrado: ' + login + ' (' + perfil.perfil + ') — mesma senha de antes, troca no 1º acesso');
+  });
+
   // pedidos: cada linha antiga vira um pedido com 1 item
   const P = obraTab_(ctx, 'Pedidos'), I = obraTab_(ctx, 'Itens');
   const ja = P.all().map(p => String(p.numero));
@@ -148,8 +176,9 @@ function migrarPlanilhaAntiga_(idAntigo, nomeObra, sigla) {
     const direto = /direto/i.test(pag) || /direto|antecipad|à vista|a vista/i.test(cond);
     const lib = r[23] instanceof Date || String(r[23]).trim() !== '';
     const p = {
-      numero: num, criado_em: r[1] instanceof Date ? r[1] : '', solicitante_id: '', solicitante: r[2], frente: r[4],
-      prioridade: r[8] || 'Normal', necessidade: r[9], observacoes: [r[3] ? 'Edificação: ' + r[3] : '', r[10]].filter(String).join(' · '),
+      numero: num, criado_em: r[1] instanceof Date ? r[1] : '', solicitante: r[2], frente: r[3] || r[4],
+      solicitante_id: (U.all().find(x => norm_(x.nome) === norm_(r[2])) || {}).id || '',
+      prioridade: r[8] || 'Normal', necessidade: r[9], observacoes: [r[4] ? 'Etapa: ' + r[4] : '', r[10]].filter(String).join(' · '),
       status: st, entrega: '', fin: '', cotado_a: r[22], fornecedor: r[12], valor_total: r[13], previsao: r[16],
       condicao: '', prazo_fat: '', forma_pagto: pag, pago_em: r[15], recebido_em: r[17], liberado_em: r[23], pasta_url: r[19],
       historico: 'Migrado da planilha antiga em ' + hoje_() + (r[18] ? '\nHistórico antigo: ' + r[18] : ''), atualizado_em: new Date()
@@ -175,7 +204,7 @@ function migrarPlanilhaAntiga_(idAntigo, nomeObra, sigla) {
       p.status = 'Aberto';
     }
     ped.push(p);
-    itens.push({ pedido: num, item: 1, material_cod: '', descricao: String(r[5]).trim(), unidade: r[7], qtd: num_(r[6]), qtd_recebida: recebido, valor_unit: '' });
+    itens.push({ pedido: num, item: 1, material_cod: (M.all().find(x => norm_(x.descricao) === norm_(r[5])) || {}).codigo || '', descricao: String(r[5]).trim(), unidade: r[7], qtd: num_(r[6]), qtd_recebida: recebido, valor_unit: '' });
   });
   P.insertMany(ped);
   I.insertMany(itens);

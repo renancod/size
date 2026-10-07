@@ -123,10 +123,14 @@ const SIT_CL = {
   'Liberar entrega': 'b-lib', 'Entrega liberada': 'b-lib', 'Recebido parcial': 'b-rec', 'Recebido': 'b-rec', 'Concluído': 'b-ok', 'Cancelado': 'b-canc'
 };
 const badge = s => `<span class="badge ${SIT_CL[s] || ''}">${esc(s)}</span>`;
+const PRIORIDADES = ['Baixa', 'Normal', 'Alta', 'Urgente'];
+const prio = p => Math.max(0, PRIORIDADES.indexOf(p.prioridade));
+const quente = p => prio(p) >= 2;
+const tagPrio = p => quente(p) ? `<span class="urg">${esc(String(p.prioridade).toUpperCase())}</span>` : '';
 const P_COMPRAS = ['compras_cotar', 'compras_definir', 'compras_aprovar', 'compras_liberar'];
 const FILTROS = {
   andamento: { t: 'Em andamento', f: p => !['Concluído', 'Cancelado'].includes(p.status) },
-  urgentes: { t: 'Urgentes', f: p => p.prioridade === 'Urgente' && !['Concluído', 'Cancelado'].includes(p.status) },
+  urgentes: { t: 'Urgentes', f: p => quente(p) && !['Concluído', 'Cancelado'].includes(p.status) },
   compras: { t: 'Compras', f: p => ['Aberto', 'Em cotação', 'Aguardando aprovação', 'Liberar entrega'].includes(p.situacao) },
   cotar: { t: 'Para cotar', f: p => p.situacao === 'Aberto' },
   cotacao: { t: 'Em cotação', f: p => p.situacao === 'Em cotação' },
@@ -386,7 +390,7 @@ function cartao(p, sel) {
   const prazo = p.fin === 'A pagar' && p.vencimento ? `<span class="${vencido(p.vencimento) ? 'atrasado' : ''}">vence ${fd(p.vencimento)}</span>`
     : p.necessidade && FILTROS.andamento.f(p) ? `<span class="${vencido(p.necessidade) && !['Recebido'].includes(p.situacao) ? 'atrasado' : ''}">até ${fd(p.necessidade)}</span>` : '';
   return `<div class="ped" data-num="${esc(p.numero)}">${sel ? `<input type="checkbox" class="sel" data-sel="${esc(p.numero)}" ${sel.has(p.numero) ? 'checked' : ''}>` : ''}
-    <div class="corpo"><div class="l1"><b>${esc(p.numero)}</b>${badge(p.situacao)}${p.prioridade === 'Urgente' ? '<span class="urg">URGENTE</span>' : ''}<span class="dir">${brl(p.valor_total)}</span></div>
+    <div class="corpo"><div class="l1"><b>${esc(p.numero)}</b>${badge(p.situacao)}${tagPrio(p)}<span class="dir">${brl(p.valor_total)}</span></div>
     <div class="l2">${esc(f ? f.descricao : '—')}${f ? ` <span class="mais">${nf(f.qtd)} ${esc(f.unidade)}${it.length > 1 ? ` · +${plural(it.length - 1, 'item', 'itens')}` : ''}</span>` : ''}</div>
     <div class="l3">${[p.frente, p.solicitante, p.fornecedor, p.n_orc && ['Aberto', 'Em cotação'].includes(p.status) ? plural(p.n_orc, 'orçamento', 'orçamentos') : '', prazo].filter(Boolean).join(' · ')}</div></div></div>`;
 }
@@ -406,7 +410,7 @@ async function vNovo() {
   const D = S.dados, mats = D.materiais.filter(m => ativo(m)), frentes = D.frentes.filter(x => ativo(x, 'ativa'));
   view(`<form class="card grid" id="f">
     <div class="g2"><label>Frente de trabalho<select name="frente"><option value="">—</option>${frentes.map(x => `<option>${esc(x.nome)}</option>`).join('')}</select></label>
-      <label>Prioridade<select name="prioridade"><option>Normal</option><option>Urgente</option></select></label></div>
+      <label>Prioridade<select name="prioridade">${PRIORIDADES.map(x => `<option ${x === 'Normal' ? 'selected' : ''}>${x}</option>`).join('')}</select></label></div>
     <label>Precisa estar na obra até<input type="date" name="necessidade" min="${hoje()}">${datas('necessidade')}</label>
     <h3 style="margin:6px 0 0">Materiais</h3><div class="itens" id="itens"></div>
     <button type="button" class="btn sec" id="add">${ic('plus')} Adicionar material</button>
@@ -470,7 +474,7 @@ async function vPedidos(qs) {
   const desenhar = () => {
     const t = norm($('#busca').value);
     const lista = ps.filter(FILTROS[k].f).filter(p => !t || norm([p.numero, p.frente, p.solicitante, p.fornecedor, p.situacao, ...(p.itens || []).map(i => i.descricao)].join(' ')).includes(t))
-      .sort((a, b) => (b.prioridade === 'Urgente') - (a.prioridade === 'Urgente') || String(a.necessidade || '9').localeCompare(String(b.necessidade || '9')) || String(b.numero).localeCompare(String(a.numero)));
+      .sort((a, b) => prio(b) - prio(a) || String(a.necessidade || '9').localeCompare(String(b.necessidade || '9')) || String(b.numero).localeCompare(String(a.numero)));
     $('#lista').innerHTML = lista.length ? lista.map(p => cartao(p, selecionavel && ['Aberto', 'Em cotação'].includes(p.status) ? SEL : null)).join('') : '<p class="vazio">Nenhum pedido aqui.</p>';
     ligarCartoes((n, on) => { on ? SEL.add(n) : SEL.delete(n); barra(); });
     barra();
@@ -522,7 +526,7 @@ async function vPedido(numero) {
   const itensTot = d.itens.some(i => i.valor_unit !== '' && i.valor_unit != null);
   view(`<a href="javascript:history.back()" class="linkbtn">${ic('back')} Voltar</a>
     <div class="card det-cab">
-      <div class="l1"><span class="num">${esc(p.numero)}</span>${badge(p.situacao)}${p.prioridade === 'Urgente' ? '<span class="urg">URGENTE</span>' : ''}</div>
+      <div class="l1"><span class="num">${esc(p.numero)}</span>${badge(p.situacao)}${tagPrio(p)}</div>
       ${passos}
       <dl class="kv">
         <dt>Aberto em</dt><dd>${fdh(p.criado_em)} · ${esc(p.solicitante)}</dd>
