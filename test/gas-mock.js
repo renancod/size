@@ -62,6 +62,7 @@ function criarGAS() {
   Folder.prototype.getUrl = function () { return 'https://drive.google.com/drive/folders/' + this.id; };
   Folder.prototype.createFolder = function (n) { return new Folder(n, this.id); };
   Folder.prototype.createFile = function (blob) { const f = new File(blob, this.id); return f; };
+  Folder.prototype.getFiles = function () { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.blob); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
   Folder.prototype.getFilesByName = function (n) { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.nome === n); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
   function File(blob, pai) { this.id = novoId('fi'); this.nome = blob.getName(); this.blob = blob; this.mime = blob.getContentType(); this.pai = pai; arquivos[this.id] = this; }
   File.prototype.getId = function () { return this.id; };
@@ -69,6 +70,7 @@ function criarGAS() {
   File.prototype.getUrl = function () { return 'https://drive.google.com/file/d/' + this.id + '/view'; };
   File.prototype.getBlob = function () { return this.blob.copyBlob(); };
   File.prototype.getMimeType = function () { return this.mime; };
+  File.prototype.getSize = function () { return this.blob.getSize(); };
   File.prototype.moveTo = function (f) { this.pai = f.id; return this; };
 
   const iter = l => ({ hasNext: () => l.length > 0, next: () => l.shift() });

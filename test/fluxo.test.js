@@ -267,21 +267,31 @@ test('captura de e-mail: resposta com PDF vira orçamento; NF encaminha ao finan
   const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
   t.adm('cad_salvar', { obra, tipo: 'fornecedores', dados: { nome: 'Casa', email: 'vendas@casa.com' } });
   const { numero } = t.adm('pedido_criar', { obra, itens: [{ descricao: 'Cal', qtd: 3, unidade: 'sc' }] });
-  const msg = (assunto, de) => ({
+  const msg = (assunto, de, arq = 'proposta.pdf', conteudo = '%PDF') => ({
     getFrom: () => 'Vendas <' + de + '>', getSubject: () => assunto, getId: () => 'm' + assunto.length,
-    getAttachments: () => [new t.G.Blob(Buffer.from('%PDF'), 'application/pdf', 'proposta.pdf')]
+    getAttachments: () => [new t.G.Blob(Buffer.from(conteudo), 'application/pdf', arq)]
   });
+  // o app antigo já tinha salvo o mesmo PDF na pasta do pedido (nome com o código da mensagem)
+  t.G.rodar(`(function () {
+    const o = central_('Obras').all()[0], ctx = { u: { nome: 'x' }, obra: o, ss: SpreadsheetApp.openById(o.planilha_id) };
+    const p = obraTab_(ctx, 'Pedidos').all()[0];
+    pastaPedido_(ctx, p).createFile(Utilities.newBlob('%PDF', 'application/pdf', 'ORC_vendas_casa.com_1a11234b_proposta.pdf'));
+    salvar_(ctx, p);
+  })()`);
+  const antes = Object.keys(t.G._arquivos).length;
   t.G._threads.push({ getMessages: () => [msg('Re: Cotação Size · Prime Beach [' + numero + ']', 'vendas@casa.com')] });
   t.adm('capturar_emails', { obra });
   t.adm('capturar_emails', { obra }); // não duplica
+  assert.equal(Object.keys(t.G._arquivos).length, antes); // nenhum arquivo novo no Drive: reaproveitou o do app antigo
   let d = t.adm('pedido_detalhe', { obra, numero });
+  assert.equal(d.arquivos.length, 1);
   assert.equal(d.orcamentos.length, 1);
   assert.equal(d.orcamentos[0].fornecedor, 'Casa');
   assert.equal(d.pedido.situacao, 'Em cotação');
   t.adm('orcamento_salvar', { obra, pedido: numero, id: d.orcamentos[0].id, fornecedor_cod: 'F001', valor: '90' });
   t.adm('pedido_definir', { obra, numero, orcamento: d.orcamentos[0].id, condicao: 'Faturado', aprovar: true });
   t.G._threads.length = 0;
-  t.G._threads.push({ getMessages: () => [msg('Re: Pedido Size · Prime Beach [' + numero + '] NF', 'vendas@casa.com')] });
+  t.G._threads.push({ getMessages: () => [msg('Re: Pedido Size · Prime Beach [' + numero + '] NF', 'vendas@casa.com', 'NF-1234.pdf', '%PDF nota fiscal')] });
   t.adm('capturar_emails', { obra });
   d = t.adm('pedido_detalhe', { obra, numero });
   assert.equal(d.pedido.fin, 'A pagar');

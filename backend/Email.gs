@@ -109,7 +109,12 @@ function capturarEmails() {
         anexos.forEach(a => {
           const marca = 'email ' + m.getId() + ' ' + a.getName();
           if (A.all().some(x => x.pedido === p.numero && x.origem === marca)) return;
-          const reg = salvarBlob_(ctx, p, tipo, a.copyBlob().setName(tipo + '_' + limpa_(rem) + '_' + limpa_(a.getName())), a.getName(), marca);
+          // o mesmo PDF pode já estar na pasta (salvo pelo app antigo ou por outra resposta): reaproveita em vez de duplicar
+          const igual = arquivoIgualNaPasta_(ctx, p, a);
+          if (igual && A.all().some(x => x.pedido === p.numero && String(x.file_id) === String(igual.getId()))) return; // já registrado
+          const reg = igual
+            ? A.insert({ id: Utilities.getUuid().slice(0, 8), pedido: p.numero, tipo: tipo, nome: a.getName(), url: igual.getUrl(), file_id: igual.getId(), data: new Date(), usuario: ctx.u.nome, origem: marca })
+            : salvarBlob_(ctx, p, tipo, a.copyBlob().setName(tipo + '_' + limpa_(rem) + '_' + limpa_(a.getName())), a.getName(), marca);
           salvos++;
           mudou = true;
           if (tipo === 'ORC' && ST_ABERTOS.indexOf(p.status) >= 0) {
@@ -130,6 +135,16 @@ function capturarEmails() {
     }));
     return { msg: salvos + ' arquivo(s) novo(s) recebido(s) por e-mail.' };
   } finally { L.releaseLock(); }
+}
+
+function arquivoIgualNaPasta_(ctx, p, anexo) {
+  const nome = limpa_(anexo.getName()), tam = anexo.getSize();
+  const it = pastaPedido_(ctx, p).getFiles();
+  while (it.hasNext()) {
+    const f = it.next();
+    if (f.getSize() === tam && (f.getName() === anexo.getName() || f.getName().slice(-nome.length) === nome)) return f;
+  }
+  return null;
 }
 
 // Rode UMA vez no editor: autoriza Gmail/Drive e agenda a captura de e-mails a cada 10 min.
