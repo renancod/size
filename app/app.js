@@ -289,7 +289,7 @@ function semObra() {
 /* ---------- login ---------- */
 function telaLogin(msg) {
   $('#raiz').innerHTML = `<div class="login"><form class="card" id="f">
-    <div class="marca"><img src="icon-192.png" alt=""><div><b>Compras</b><small>Size Engenharia</small></div></div>
+    <img class="logo" src="logo.png" alt="Size Engenharia"><div class="sistema">Gestão de Compras</div>
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
