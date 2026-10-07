@@ -16,6 +16,11 @@ function emailHtml_(titulo, intro, linhas, comValor) {
     (comValor ? '<th ' + th + '>Valor</th>' : '') + '</tr>' + lin + '</table><p>Atenciosamente,<br>Setor de Compras · ' + h_(empresa_()) + '</p></div>';
 }
 
+function botaoPortal_(url, texto) {
+  return '<p style="margin:18px 0"><a href="' + url + '" style="background:#04857A;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">' +
+    h_(texto) + '</a></p>';
+}
+
 function linhasEmail_(ctx, ps) {
   const out = [];
   ps.forEach(p => itensDe_(ctx, p.numero).forEach(i => out.push({
@@ -35,8 +40,9 @@ function emailCotacao_(ctx, f, ps, q) {
   const intro = 'Prezados' + (f.contato ? ' (' + h_(f.contato) + ')' : '') + ', solicitamos cotação dos itens abaixo para a obra <b>' + h_(ctx.obra.nome) + '</b>' +
     (ctx.obra.endereco ? ' (' + h_(ctx.obra.endereco) + ')' : '') + '.' +
     (q.prazo ? ' Prazo para resposta: <b>' + String(q.prazo).split('-').reverse().join('/') + '</b>.' : '') +
-    ' <b>Responda este e-mail anexando o orçamento em PDF</b> (mantenha o assunto) com preço, prazo de entrega e condição de pagamento.' +
-    (q.msg ? '<br>' + h_(q.msg) : '');
+    (q.msg ? '<br>' + h_(q.msg) : '') +
+    botaoPortal_(linkFornecedor_(ctx, f.codigo, ps.map(p => p.numero)), 'Enviar orçamento pelo portal') +
+    '<br><small>Se preferir, responda este e-mail anexando o orçamento em PDF (mantenha o assunto).</small>';
   enviar_(f.email, 'Cotação Size · ' + ctx.obra.nome + ' ' + tag_(ps), emailHtml_('Solicitação de cotação', intro, linhasEmail_(ctx, ps), false));
 }
 
@@ -44,6 +50,7 @@ function emailFornecedor_(ctx, p, prefixo, titulo, intro, anexos) {
   const f = obraTab_(ctx, 'Fornecedores').all().find(x => String(x.codigo) === String(p.fornecedor_cod) || norm_(x.nome) === norm_(p.fornecedor));
   if (!f || !f.email) return false;
   try {
+    intro += botaoPortal_(linkFornecedor_(ctx, f.codigo, [p.numero]), 'Informar data de entrega e enviar a nota fiscal');
     enviar_(f.email, prefixo + ' · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_(titulo, intro, linhasEmail_(ctx, [p]), true), anexos);
     return true;
   } catch (e) { return false; } // a operação já foi gravada; o app avisa que o e-mail não saiu

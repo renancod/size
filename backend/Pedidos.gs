@@ -148,16 +148,19 @@ function pedidoCotar_(q, ctx) {
     emailCotacao_(ctx, f, ps, q);
     ok.push(f.nome);
   });
-  if (!ok.length) throw new Error('Nenhum dos fornecedores escolhidos tem e-mail cadastrado.');
+  const todos = fs.map(f => f.nome);
   ps.forEach(p => {
     pastaPedido_(ctx, p);
     p.status = 'Em cotação';
-    p.cotado_a = (p.cotado_a ? p.cotado_a + ' | ' : '') + ok.join(', ') + ' (' + hoje_() + ')';
-    hist_(p, ctx, 'Cotação enviada a ' + ok.join(', '));
+    p.cotado_a = (p.cotado_a ? p.cotado_a + ' | ' : '') + todos.join(', ') + ' (' + hoje_() + ')';
+    hist_(p, ctx, 'Cotação enviada a ' + todos.join(', ') + (sem.length ? ' (sem e-mail, por link/WhatsApp: ' + sem.join(', ') + ')' : ''));
     salvar_(ctx, p);
   });
-  log_(ctx, 'pedido_cotar', nums.join(',') + ' → ' + ok.join(','));
-  return { msg: 'Cotação enviada a ' + ok.join(', ') + '.' + (sem.length ? ' Sem e-mail (não enviado): ' + sem.join(', ') + '.' : '') + ' Os PDFs respondidos por e-mail entram sozinhos como orçamento.' };
+  log_(ctx, 'pedido_cotar', nums.join(',') + ' → ' + todos.join(','));
+  return {
+    msg: (ok.length ? 'Cotação enviada por e-mail a ' + ok.join(', ') + '.' : '') + (sem.length ? ' Sem e-mail: envie o link pelo WhatsApp a ' + sem.join(', ') + '.' : ''),
+    links: fs.map(f => ({ codigo: f.codigo, nome: f.nome, telefone: f.telefone, email: f.email, url: linkFornecedor_(ctx, f.codigo, nums) }))
+  };
 }
 
 function orcamentoSalvar_(q, ctx) {
@@ -252,9 +255,10 @@ function aprovar_(ctx, p) {
     hist_(p, ctx, 'Compra aprovada → financeiro (faturamento direto: pagar antes de liberar a entrega)');
     avisarFinanceiro_(ctx, p, 'Pagamento antecipado (faturamento direto)');
   } else {
-    p.fin = 'Aguardando NF';
-    p.entrega = 'Aguardando liberação';
-    hist_(p, ctx, 'Compra aprovada → pronta para liberar entrega (faturado ' + p.prazo_fat + ' dias)');
+    p.fin = p.nf_numero ? 'A pagar' : 'Aguardando NF';
+    // pedido migrado que já teve a entrega liberada no sistema antigo não volta para "liberar"
+    p.entrega = p.liberado_em ? 'Entrega liberada' : 'Aguardando liberação';
+    hist_(p, ctx, 'Compra aprovada → ' + (p.liberado_em ? 'entrega já estava liberada' : 'pronta para liberar entrega') + ' (faturado ' + p.prazo_fat + ' dias)');
   }
 }
 
@@ -290,17 +294,20 @@ function pedidoPagar_(q, ctx) {
   p.pago_em = dataDe_(q.data) || new Date();
   p.pago_por = ctx.u.nome;
   p.forma_pagto = String(q.forma || '').trim();
-  if (antecipado) p.entrega = 'Aguardando liberação';
-  hist_(p, ctx, 'Pagamento registrado' + (p.forma_pagto ? ' (' + p.forma_pagto + ')' : '') + (antecipado ? ' → compras pode liberar a entrega' : ''));
+  // faturamento direto: o comprovante já libera a entrega
+  if (antecipado) { p.entrega = 'Entrega liberada'; p.liberado_em = new Date(); }
+  hist_(p, ctx, 'Pagamento registrado' + (p.forma_pagto ? ' (' + p.forma_pagto + ')' : '') + (antecipado ? ' → entrega liberada' : ''));
   fechar_(ctx, p);
   salvar_(ctx, p);
+  let avisado = false;
   if (antecipado && q.avisar !== false) {
-    emailFornecedor_(ctx, p, 'Pagamento Size', 'Pagamento efetuado',
-      'Prezados, o pagamento do pedido abaixo foi efetuado' + (p.forma_pagto ? ' via <b>' + h_(p.forma_pagto) + '</b>' : '') + '. Segue o comprovante em anexo.',
+    avisado = emailFornecedor_(ctx, p, 'Pagamento Size', 'Pagamento efetuado — entrega liberada',
+      'Prezados, o pagamento do pedido abaixo foi efetuado' + (p.forma_pagto ? ' via <b>' + h_(p.forma_pagto) + '</b>' : '') +
+      ' e a <b>entrega está liberada</b> na obra <b>' + h_(ctx.obra.nome) + '</b>' + (ctx.obra.endereco ? ' (' + h_(ctx.obra.endereco) + ')' : '') + '. Segue o comprovante em anexo.',
       [DriveApp.getFileById(a.file_id).getBlob()]);
   }
   log_(ctx, 'pedido_pagar', p.numero);
-  return { msg: 'Pagamento registrado.' };
+  return { msg: 'Pagamento registrado.' + (antecipado ? ' Entrega liberada' + (avisado ? ' e fornecedor avisado com o comprovante.' : '. Fornecedor sem e-mail: envie o link pelo WhatsApp.') : '') };
 }
 
 function registrarNF_(ctx, p, numero, data) {

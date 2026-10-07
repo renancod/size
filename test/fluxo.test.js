@@ -170,13 +170,75 @@ test('fluxo FATURAMENTO DIRETO: financeiro paga antes; liberação bloqueada at�
   fin('pedido_pagar', { numero, forma: 'PIX', comprovante: PDF, avisar: true });
   assert.equal(t.G._enviados.length, antes + 1);
   assert.equal(t.G._enviados.at(-1).anexos, 1);
+  assert.match(t.G._enviados.at(-1).html, /fornecedor\.html\?t=/); // e-mail leva o link do portal
   p = com('pedido_detalhe', { numero }).pedido;
-  assert.equal(p.situacao, 'Liberar entrega');
-  com('pedido_liberar', { numero });
+  assert.equal(p.situacao, 'Entrega liberada'); // o comprovante já libera a entrega
+  falha(() => com('pedido_liberar', { numero }), /não está aguardando liberação/);
   est('pedido_receber', { numero, itens: { 1: 15 }, encerrar: true, obs: 'fornecedor sem estoque' });
   p = com('pedido_detalhe', { numero }).pedido;
   assert.equal(p.status, 'Concluído');
   assert.match(p.historico, /ENCERRADO com falta/);
+});
+
+test('portal do fornecedor: orçamento pelo link, prazo de entrega e NF depois da entrega', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar' }).id;
+  const com = criarUsuario(t, 'compras', 'Compras', obra);
+  const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
+  const est = criarUsuario(t, 'est', 'Estoque', obra);
+  const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
+  com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Casa', email: 'casa@x.com', condicao: '28 dias boleto' } });
+  com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Depósito sem e-mail', telefone: '51999990000' } });
+  const n = est('pedido_criar', { itens: [{ descricao: 'Cimento', qtd: 20, unidade: 'sc' }, { descricao: 'Areia', qtd: 2, unidade: 'm³' }] }).numero;
+
+  // cotação: quem não tem e-mail não trava; todos recebem link
+  const r = com('pedido_cotar', { numeros: [n], fornecedores: ['F001', 'F002'] });
+  assert.equal(r.links.length, 2);
+  assert.match(t.G._enviados.at(-1).html, /Enviar orçamento pelo portal/);
+  const tok = u => new URL(u).searchParams.get('t');
+  const casa = (acao, d = {}) => t.call(acao, { t: tok(r.links[0].url), ...d });
+  const dep = (acao, d = {}) => t.call(acao, { t: tok(r.links[1].url), ...d });
+
+  falha(() => t.call('forn_dados', { t: tok(r.links[0].url).slice(0, -3) + 'abc' }), /Link inválido/);
+  let pd = casa('forn_dados');
+  assert.equal(pd.fornecedor.nome, 'Casa');
+  assert.equal(pd.pedidos[0].etapa, 'cotacao');
+  assert.equal(pd.pedidos[0].itens.length, 2);
+  falha(() => casa('forn_orcamento', { numero: n, valor: '', prazo_entrega: '2 dias' }), /valor total/);
+  casa('forn_orcamento', { numero: n, valor: '1.200,00', prazo_entrega: '2 dias', condicao: '28 dias' });
+  casa('forn_orcamento', { numero: n, valor: '1.150,00', prazo_entrega: '2 dias', condicao: '28 dias', arquivo: PDF }); // atualiza, não duplica
+  dep('forn_orcamento', { numero: n, valor: 1300, prazo_entrega: '1 dia', condicao: 'à vista' });
+  falha(() => casa('forn_orcamento', { numero: 'PB-9999', valor: 1, prazo_entrega: 'x' }), /não faz parte/);
+  let d = com('pedido_detalhe', { numero: n });
+  assert.equal(d.orcamentos.length, 2);
+  assert.equal(d.orcamentos.find(o => o.fornecedor_cod === 'F001').valor, 1150);
+
+  // compra com a Casa (faturado 28): só a Casa vê a compra; o outro vê "outra opção"
+  com('pedido_definir', { numero: n, orcamento: d.orcamentos.find(o => o.fornecedor_cod === 'F001').id, condicao: 'Faturado', prazo_fat: 28 });
+  assert.equal(casa('forn_dados').pedidos[0].etapa, 'analise');
+  apr('pedido_aprovar', { numero: n });
+  assert.equal(dep('forn_dados').pedidos[0].etapa, 'nao_escolhido');
+  falha(() => dep('forn_entrega', { numero: n, previsao: '2026-12-01' }), /não está com você/);
+  pd = casa('forn_dados');
+  assert.equal(pd.pedidos[0].etapa, 'compra');
+  assert.equal(pd.pedidos[0].compra.liberada, false);
+
+  // liberação → fornecedor informa a data; recebe; NF chega DEPOIS da entrega e vai ao financeiro
+  com('pedido_liberar', { numero: n });
+  assert.match(t.G._enviados.at(-1).html, /fornecedor\.html\?t=/);
+  casa('forn_entrega', { numero: n, previsao: '2026-12-01' });
+  assert.equal(com('pedido_detalhe', { numero: n }).pedido.previsao.slice(0, 10), '2026-12-01');
+  est('pedido_receber', { numero: n, itens: { 1: 20, 2: 2 } });
+  d = com('pedido_detalhe', { numero: n });
+  assert.equal(d.pedido.situacao, 'Aguardando NF');
+  falha(() => casa('forn_nf', { numero: n, nf_numero: '55' }), /Anexe/);
+  casa('forn_nf', { numero: n, nf_numero: '55', nf_data: '2026-12-02', arquivo: PDF });
+  d = fin('pedido_detalhe', { numero: n });
+  assert.equal(d.pedido.situacao, 'A pagar');
+  assert.equal(d.pedido.vencimento.slice(0, 10), '2026-12-30');
+  fin('pedido_pagar', { numero: n, forma: 'Boleto', comprovante: PDF });
+  assert.equal(fin('pedido_detalhe', { numero: n }).pedido.status, 'Concluído');
+  assert.equal(com('forn_link', { fornecedor: 'F001', numeros: [n] }).nome, 'Casa');
 });
 
 test('cancelamento e devolução respeitam a etapa', () => {

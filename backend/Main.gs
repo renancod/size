@@ -31,6 +31,12 @@ function doPost(e) {
  */
 const ROTAS = {
   login: { pub: true, fn: login_ },
+  forn_dados: { pub: true, fn: fornRota_ },
+  forn_orcamento: { pub: true, fn: fornRota_ },
+  forn_entrega: { pub: true, fn: fornRota_ },
+  forn_nf: { pub: true, fn: fornRota_ },
+  forn_arquivo: { pub: true, fn: fornRota_ },
+  forn_link: { obra: true, perm: ['compras_cotar', 'compras_liberar', 'financeiro'], fn: fornLink_ },
   sessao: { fn: (q, ctx) => sessaoDe_(ctx.u) },
   trocarSenha: { lock: true, fn: trocarSenha_ },
 

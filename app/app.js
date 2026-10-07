@@ -543,6 +543,7 @@ async function vPedido(numero) {
     if (['Entrega liberada', 'Recebido parcial'].includes(p.entrega) && can('pedido_receber')) A.push(['receber', 'Receber material']);
     if (can(['financeiro', 'pedido_receber', 'compras_cotar'])) A.push(['nf', p.nf_numero ? 'Corrigir NF' : 'Registrar nota fiscal', 'sec']);
   }
+  if (!['Cancelado', 'Concluído', 'Aguardando aprovação'].includes(st) && can(['compras_cotar', 'compras_liberar', 'financeiro']) && (p.fornecedor_cod || ['Aberto', 'Em cotação'].includes(st))) A.push(['portal', 'Link do fornecedor', 'sec']);
   if (st !== 'Cancelado') A.push(['anexar', 'Anexar arquivo', 'sec']);
   if (!['Cancelado', 'Concluído'].includes(st) && can('compras_cancelar') && (st !== 'Aprovado' || admin())) A.push(['cancelar', 'Cancelar', 'perigo']);
 
@@ -603,7 +604,7 @@ async function vPedido(numero) {
   $$('[data-orc]').forEach(b => { b.onclick = () => mOrc(d, d.orcamentos.find(o => o.id === b.dataset.orc)); });
   const ACOES = {
     cotar: () => mCotar([p.numero]), orc: () => mOrc(d), definir: () => mDefinir(d), aprovar: () => mAprovar(d), devolver: () => mMotivo(d, 'pedido_devolver', 'Reprovar compra', 'Reprovar', 'A compra volta para Compras refazer a cotação. Para desistir do pedido de vez, use "Cancelar".'),
-    pagar: () => mPagar(d), liberar: () => mLiberar(d, forn), receber: () => mReceber(d), nf: () => mNF(d), anexar: () => mAnexar(d), cancelar: () => mMotivo(d, 'pedido_cancelar', 'Cancelar pedido', 'Cancelar pedido')
+    pagar: () => mPagar(d), liberar: () => mLiberar(d), receber: () => mReceber(d), nf: () => mNF(d), anexar: () => mAnexar(d), portal: () => mPortal(d), cancelar: () => mMotivo(d, 'pedido_cancelar', 'Cancelar pedido', 'Cancelar pedido')
   };
   $$('[data-acao]').forEach(b => { b.onclick = ACOES[b.dataset.acao]; });
   if ($('#capt')) $('#capt').onclick = async e => {
@@ -616,18 +617,14 @@ async function depois(r) { toast(r.msg || 'Feito.'); S.ped = null; if (DET) awai
 /* ---------- ações do pedido ---------- */
 function mCotar(nums) {
   const fs = S.dados.fornecedores.filter(f => ativo(f));
-  const ps = (S.ped || []).filter(p => nums.includes(p.numero));
-  const linhas = ps.flatMap(p => (p.itens || []).map(i => `- ${i.descricao}: ${nf(i.qtd)} ${i.unidade} (${p.numero})`));
-  const txtWa = `Olá! A Size Engenharia solicita cotação para a obra ${S.dados.obra.nome}:\n${linhas.join('\n')}\nPor favor envie preço, prazo de entrega e condição de pagamento.`;
   const f = modal(`Pedir cotação · ${plural(nums.length, 'pedido', 'pedidos')}`, `
     <div class="busca" style="margin:0">${ic('search')}<input type="search" id="bf" placeholder="Buscar fornecedor ou material…"></div>
     <div class="forn">${fs.map(x => `<div class="fi" data-t="${esc(norm(x.nome + ' ' + x.materiais))}"><label class="ck"><input type="checkbox" name="forn" value="${esc(x.codigo)}">
       <span>${esc(x.nome)}<br><small>${esc([x.materiais, x.email || 'sem e-mail'].filter(Boolean).join(' · '))}</small></span></label>
-      ${x.email ? '' : `<input type="email" class="em" data-c="${esc(x.codigo)}" placeholder="E-mail para enviar a cotação (fica salvo no cadastro)" hidden>`}
-      ${x.telefone ? `<a class="wa" href="${wa(x.telefone, txtWa)}" target="_blank" rel="noopener">Pedir também pelo WhatsApp</a>` : ''}</div>`).join('') || '<small>Nenhum fornecedor cadastrado nesta obra. Cadastre em Fornecedores.</small>'}</div>
+      ${x.email ? '' : `<input type="email" class="em" data-c="${esc(x.codigo)}" placeholder="E-mail (opcional — sem e-mail, envie o link pelo WhatsApp)" hidden>`}</div>`).join('') || '<small>Nenhum fornecedor cadastrado nesta obra. Cadastre em Fornecedores.</small>'}</div>
     <label>Responder até<input type="date" name="prazo" min="${hoje()}">${datas('prazo')}</label>
     <label>Mensagem <small>(opcional)</small><input name="msg"></label>
-    <small>O fornecedor responde o e-mail com o PDF e ele entra sozinho como orçamento no pedido.</small>`, {
+    <small>Cada fornecedor recebe um link próprio para preencher o orçamento (valor, prazo, condição e PDF). Depois do envio aparecem os botões de WhatsApp.</small>`, {
     ok: 'Enviar cotação',
     onOk: async f => {
       const fornecedores = $$('[name=forn]:checked', f).map(x => x.value);
@@ -637,11 +634,45 @@ function mCotar(nums) {
       const r = await api('pedido_cotar', { numeros: nums, fornecedores, emails, prazo: f.prazo.value, msg: f.msg.value });
       SEL.clear();
       if (DET && nums.includes(DET.pedido.numero) && location.hash.startsWith('#/pedido/')) await depois(r); else { toast(r.msg); S.ped = null; rotear(); }
+      setTimeout(() => mostrarLinks('Cotação enviada', r.msg, r.links, 'cotacao'), 50);
     }
   });
   $$('[name=forn]', f).forEach(cb => { cb.onchange = () => { const e = cb.closest('.fi').querySelector('input.em'); if (e) e.hidden = !cb.checked; }; });
   $('#bf', f).onkeydown = e => { if (e.key === 'Enter') e.preventDefault(); };
   $('#bf', f).oninput = e => { const t = norm(e.target.value); $$('.fi', f).forEach(x => { x.hidden = !x.dataset.t.includes(t); }); };
+}
+
+/* links do portal do fornecedor: WhatsApp e copiar */
+function textoPortal(tipo, url) {
+  const obra = S.dados.obra.nome;
+  return tipo === 'cotacao'
+    ? `Olá! A Size Engenharia solicita cotação para a obra ${obra}. Veja os itens e envie seu orçamento por este link:\n${url}`
+    : `Olá! Sobre o pedido da Size Engenharia para a obra ${obra}: por este link você acompanha a compra, informa a data de entrega e envia a nota fiscal:\n${url}`;
+}
+function mostrarLinks(titulo, msg, links, tipo) {
+  modal(titulo, `${msg ? `<div class="aviso ok">${esc(msg)}</div>` : ''}
+    ${links.map((l, i) => `<div class="arq"><span class="nome"><b>${esc(l.nome)}</b><br><small>${esc(l.email || 'sem e-mail')}${l.telefone ? ' · ' + esc(l.telefone) : ''}</small></span>
+      ${l.telefone ? `<a class="btn peq" href="${wa(l.telefone, textoPortal(tipo, l.url))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+      <button type="button" class="btn sec peq" data-copia="${i}">Copiar link</button></div>`).join('')}
+    <small>O link vale por 60 dias e só mostra os pedidos deste fornecedor.</small>`, { semRodape: true });
+  $$('[data-copia]').forEach(b => {
+    b.onclick = async () => {
+      const l = links[+b.dataset.copia], txt = textoPortal(tipo, l.url);
+      try { await navigator.clipboard.writeText(txt); toast('Link copiado. Cole no WhatsApp ou e-mail.'); }
+      catch (e) { prompt('Copie o texto:', txt); }
+    };
+  });
+}
+async function mPortal(d) {
+  const p = d.pedido, fs = S.dados.fornecedores.filter(f => ativo(f));
+  const gerar = async cod => {
+    const r = await api('forn_link', { fornecedor: cod, numeros: [p.numero] });
+    mostrarLinks('Link do fornecedor', '', [Object.assign({ codigo: cod, email: (fs.find(f => f.codigo === cod) || {}).email }, r)], ['Aberto', 'Em cotação'].includes(p.status) ? 'cotacao' : 'compra');
+  };
+  if (p.fornecedor_cod && !['Aberto', 'Em cotação'].includes(p.status)) return gerar(p.fornecedor_cod).catch(e => toast(e.message, 1));
+  modal('Link do fornecedor', `<label>Fornecedor<select name="forn" required><option value="">Escolha…</option>${fs.map(f => `<option value="${esc(f.codigo)}">${esc(f.nome)}</option>`).join('')}</select></label>
+    <small>Gera o link do portal para este pedido: o fornecedor vê os itens e envia o orçamento por ali.</small>`,
+  { ok: 'Gerar link', onOk: async f => { await gerar(f.forn.value); return false; } });
 }
 
 function mOrc(d, o) {
@@ -694,7 +725,7 @@ function mDefinir(d) {
     $('#lexc').hidden = !falta || !can('compras_aprovar');
     const dir = f.cond.value === 'Faturamento direto';
     $('#lprazo').hidden = dir;
-    $('#dica').textContent = dir ? 'Faturamento direto: depois de aprovada vai ao financeiro para pagar; só então a entrega pode ser liberada.'
+    $('#dica').textContent = dir ? 'Faturamento direto: depois de aprovada vai ao financeiro; o pagamento (com comprovante) já libera a entrega.'
       : 'Faturado: depois de aprovada a entrega pode ser liberada; quando a nota fiscal chegar, vai ao financeiro.';
   };
   const preenche = () => { const o = orcs.find(x => x.id === f.orc.value); if (o && o.valor !== '') f.valor.value = String(o.valor).replace('.', ','); if (o && /direto|antecipad|vista/i.test(o.condicao)) f.cond.value = 'Faturamento direto'; atualiza(); };
@@ -709,7 +740,7 @@ function mAprovar(d) {
   modal('Aprovar compra', `<dl class="kv"><dt>Fornecedor</dt><dd>${esc(p.fornecedor)}</dd><dt>Valor</dt><dd>${brl(p.valor_total)}</dd>
     <dt>Condição</dt><dd>${esc(p.condicao)}${p.prazo_fat ? ' ' + p.prazo_fat + ' dias' : ''}</dd><dt>Orçamentos</dt><dd>${d.fornecedores_orcados} (mínimo ${d.minimo})</dd></dl>
     ${p.excecao_orc ? `<div class="aviso warn">Exceção: ${esc(p.excecao_orc)}</div>` : ''}
-    <div class="aviso info">${p.condicao === 'Faturamento direto' ? 'Vai para o financeiro pagar antes da entrega.' : 'Fica pronta para liberar a entrega.'}</div>`,
+    <div class="aviso info">${p.condicao === 'Faturamento direto' ? 'Vai para o financeiro pagar; o pagamento já libera a entrega.' : 'Fica pronta para liberar a entrega.'}</div>`,
   { ok: 'Aprovar', onOk: async () => depois(await api('pedido_aprovar', { numero: p.numero })) });
 }
 
@@ -724,18 +755,30 @@ function mPagar(d) {
     <div class="g2"><label>Forma<select name="forma"><option>PIX</option><option>Boleto</option><option>TED/DOC</option><option>Cartão</option><option>Dinheiro</option><option>Outro</option></select></label>
     <label>Data do pagamento<input type="date" name="data" value="${hoje()}" required></label></div>
     ${campoArquivo('comp', 'Comprovante de pagamento', true)}
-    ${antecipado ? '<label class="ck"><input type="checkbox" name="avisar" checked> Enviar o comprovante ao fornecedor por e-mail</label><div class="aviso info">Depois do pagamento, compras poderá liberar a entrega.</div>' : ''}`,
-  { ok: 'Registrar pagamento', onOk: async f => depois(await api('pedido_pagar', { numero: p.numero, forma: f.forma.value, data: f.data.value, comprovante: await lerArquivo(f.comp), avisar: !!(f.avisar && f.avisar.checked) })) });
+    ${antecipado ? '<label class="ck"><input type="checkbox" name="avisar" checked> Enviar o comprovante ao fornecedor por e-mail</label><div class="aviso info">Faturamento direto: o pagamento <b>já libera a entrega</b>. O fornecedor recebe o comprovante e o link para informar a data de entrega e enviar a nota fiscal.</div>' : ''}`,
+  {
+    ok: 'Registrar pagamento',
+    onOk: async f => {
+      const r = await api('pedido_pagar', { numero: p.numero, forma: f.forma.value, data: f.data.value, comprovante: await lerArquivo(f.comp), avisar: !!(f.avisar && f.avisar.checked) });
+      await depois(r);
+      if (antecipado && p.fornecedor_cod) setTimeout(() => mPortal(DET), 50);
+    }
+  });
 }
 
-function mLiberar(d, forn) {
+function mLiberar(d) {
   const p = d.pedido;
-  const txt = `Olá! Está liberada a entrega do pedido ${p.numero} na obra ${S.dados.obra.nome}${S.dados.obra.endereco ? ' (' + S.dados.obra.endereco + ')' : ''}:\n${d.itens.map(i => `- ${i.descricao}: ${nf(i.qtd)} ${i.unidade}`).join('\n')}\n${p.fin === 'Aguardando NF' ? 'Por favor envie a nota fiscal. ' : ''}— Size Engenharia`;
-  modal('Liberar entrega', `<p>Envia e-mail para <b>${esc(p.fornecedor)}</b> liberando a entrega na obra${p.fin === 'Aguardando NF' ? ' e pedindo a nota fiscal' : ''}.</p>
+  modal('Liberar entrega', `<p>Envia e-mail para <b>${esc(p.fornecedor)}</b> liberando a entrega na obra, com o link do portal para ele informar a data de entrega e enviar a nota fiscal (que pode vir depois da entrega).</p>
     <label>Previsão de entrega <small>(opcional)</small><input type="date" name="previsao" min="${hoje()}" value="${p.previsao ? String(p.previsao).slice(0, 10) : ''}">${datas('previsao')}</label>
     <label>Mensagem <small>(opcional)</small><input name="msg" placeholder="ex: descarregar no portão 2, das 8h às 17h"></label>
-    ${forn && forn.telefone ? `<a class="btn sec" href="${wa(forn.telefone, txt)}" target="_blank" rel="noopener">Avisar também pelo WhatsApp</a>` : ''}`,
-  { ok: 'Liberar entrega', onOk: async f => depois(await api('pedido_liberar', { numero: p.numero, previsao: f.previsao.value, msg: f.msg.value })) });
+    <small>Depois de liberar aparece o botão para avisar também pelo WhatsApp.</small>`,
+  {
+    ok: 'Liberar entrega',
+    onOk: async f => {
+      await depois(await api('pedido_liberar', { numero: p.numero, previsao: f.previsao.value, msg: f.msg.value }));
+      if (p.fornecedor_cod) setTimeout(() => mPortal(DET), 50);
+    }
+  });
 }
 
 function mReceber(d) {
