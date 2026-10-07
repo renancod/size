@@ -42,7 +42,10 @@ function setup() {
   const C = central_('Config'), tem = C.all().map(r => String(r.chave));
   C.insertMany(CONFIG_PADRAO.filter(c => tem.indexOf(c[0]) < 0).map(c => ({ chave: c[0], valor: c[1], descricao: c[2] })));
   const P = central_('Perfis');
-  if (!P.all().length) P.insertMany(PERFIS_PADRAO.map(p => ({ perfil: p[0], permissoes: p[1], descricao: p[2] })));
+  if (!P.all().length) {
+    P.insertMany(PERFIS_PADRAO.map(p => ({ perfil: p[0], permissoes: p[1], descricao: p[2] })));
+    C.insert({ chave: 'PERFIS_V2', valor: 'Sim', descricao: 'Perfis já criados no formato atual' });
+  }
   const Un = central_('Unidades');
   if (!Un.all().length) Un.insertMany(UNIDADES_PADRAO.map(u => ({ unidade: u })));
 

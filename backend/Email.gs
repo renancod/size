@@ -60,6 +60,19 @@ function avisarFinanceiro_(ctx, p, motivo) {
   } catch (e) { /* aviso por e-mail é opcional */ }
 }
 
+function avisarAprovadores_(ctx, p) {
+  const us = central_('Usuarios').all().filter(u => sim_(u.ativo) && u.email && String(u.id) !== String(ctx.u.id) &&
+    (sim_(u.admin) || (permsDe_(u, ctx.obra.id) || []).indexOf('compras_aprovar') >= 0));
+  if (!us.length) return;
+  const c = config_();
+  const url = c.APP_URL ? String(c.APP_URL).replace(/\/?$/, '/') + '?obra=' + encodeURIComponent(ctx.obra.id) + '#/pedido/' + encodeURIComponent(p.numero) : '';
+  const intro = h_(ctx.u.nome) + ' definiu a compra abaixo e ela aguarda sua aprovação.<br>Fornecedor: <b>' + h_(p.fornecedor) + '</b> · Valor: <b>' + brl_(p.valor_total) +
+    '</b> · ' + h_(p.condicao) + (p.prazo_fat ? ' ' + p.prazo_fat + ' dias' : '') + (url ? '<br><a href="' + url + '">Abrir no app para aprovar ou reprovar</a>' : '');
+  try {
+    enviar_(us.map(u => u.email).join(','), 'Aprovação · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_('Compra aguardando aprovação', intro, linhasEmail_(ctx, [p]), true));
+  } catch (e) { /* aviso por e-mail é opcional */ }
+}
+
 /* ---------- captura automática ---------- */
 function capturarEmails() {
   const L = LockService.getScriptLock();

@@ -1,7 +1,26 @@
 /**
  * Administração: usuários, acessos por obra, obras, perfis, configurações e materiais padrão.
  */
+/**
+ * Perfis v2: Compras deixa de aprovar e nasce o perfil Aprovador.
+ * Roda uma vez (marca PERFIS_V2 em Config) e ajusta também quem já tinha o perfil Compras.
+ */
+function atualizarPerfis_() {
+  const C = central_('Config');
+  if (C.all().some(r => r.chave === 'PERFIS_V2')) return;
+  const P = central_('Perfis');
+  PERFIS_PADRAO.forEach(d => {
+    const p = P.all().find(x => norm_(x.perfil) === norm_(d[0]));
+    if (!p) P.insert({ perfil: d[0], permissoes: d[1], descricao: d[2] });
+    else if (d[0] === 'Compras') { p.permissoes = d[1]; p.descricao = d[2]; P.update(p); }
+  });
+  const A = central_('Acessos');
+  A.all().filter(a => a.perfil === 'Compras').forEach(a => { a.permissoes = PERFIS_PADRAO.find(d => d[0] === 'Compras')[1]; A.update(a); });
+  C.insert({ chave: 'PERFIS_V2', valor: 'Sim', descricao: 'Ajuste automático: Compras sem aprovação + perfil Aprovador' });
+}
+
 function adminDados_(q, ctx) {
+  atualizarPerfis_();
   return {
     usuarios: central_('Usuarios').all().map(pub_),
     acessos: central_('Acessos').all().map(a => {

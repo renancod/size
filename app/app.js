@@ -41,7 +41,8 @@ const IC = {
   refresh: 'M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9', search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
-  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6', back: 'M19 12H5M12 19l-7-7 7-7'
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6', back: 'M19 12H5M12 19l-7-7 7-7',
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'
 };
 const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${IC[n]}"/></svg>`;
 
@@ -90,6 +91,29 @@ document.addEventListener('click', e => {
   if (f && f.elements[c.dataset.campo]) { f.elements[c.dataset.campo].value = maisDias(+c.dataset.dias); f.elements[c.dataset.campo].dispatchEvent(new Event('change')); }
 });
 const wa = (tel, txt) => { let t = String(tel || '').replace(/\D/g, ''); if (!t) return ''; if (t.length <= 11) t = '55' + t; return `https://wa.me/${t}?text=${enc(txt)}`; };
+
+/* ---------- instalação (PWA): Android e PC instalam pelo botão; iPhone/iPad pelo menu Compartilhar ---------- */
+let PROMPT_INSTALAR = null;
+const instalado = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); PROMPT_INSTALAR = e; });
+addEventListener('appinstalled', () => { PROMPT_INSTALAR = null; $$('.instalar').forEach(b => b.remove()); toast('App instalado! Abra pelo ícone "Compras Size".'); });
+const botaoInstalar = cl => instalado() ? '' : `<button type="button" class="instalar ${cl}" onclick="instalar()">${ic('download')}<span>Instalar o app</span></button>`;
+async function instalar() {
+  if (PROMPT_INSTALAR) {
+    PROMPT_INSTALAR.prompt();
+    try { await PROMPT_INSTALAR.userChoice; } catch (e) { /* cancelado */ }
+    PROMPT_INSTALAR = null;
+    return;
+  }
+  const passos = ehIOS()
+    ? `<h3>iPhone / iPad</h3><ol><li>Abra este endereço no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> (o quadrado com a seta para cima ⬆️).</li>
+       <li>Role e toque em <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>. O ícone "Compras Size" aparece junto dos outros apps.</li></ol>`
+    : `<h3>Android (Chrome)</h3><ol><li>Toque no menu <b>⋮</b> no canto superior.</li><li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>).</li></ol>
+       <h3>Computador (Chrome ou Edge)</h3><ol><li>Clique no ícone de instalar na barra de endereço (monitor com seta ⬇️), ou no menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar → Instalar página como app</b> (Chrome) / <b>Aplicativos → Instalar este site como aplicativo</b> (Edge).</li></ol>
+       <h3>iPhone / iPad</h3><p>No Safari: Compartilhar ⬆️ → Adicionar à Tela de Início.</p>`;
+  modal('Instalar o app', `${passos}<small>Endereço: <b>${esc(location.origin + location.pathname)}</b></small>`, { semRodape: true });
+}
 
 /* ---------- estado e API ---------- */
 const S = { token: LS.get('cs_token'), sess: null, obraId: LS.get('cs_obra'), dados: null, ped: null, todos: false, adm: null };
@@ -170,6 +194,7 @@ function montarShell() {
       <div class="marca"><img src="icon-192.png" alt=""><div><b>Compras</b><small>Size Engenharia</small></div></div>
       <label class="obrasel">Obra<select id="obrasel"></select></label>
       <nav class="nav" id="nav"></nav>
+      ${botaoInstalar('no-menu')}
       <div class="rodape"><a href="#/conta">${ic('user')}<span>${esc(S.sess.usuario.nome)}</span></a><button id="sair" title="Sair">${ic('logout')}</button></div>
     </aside>
     <div class="scrim" id="scrim"></div>
@@ -268,7 +293,7 @@ function telaLogin(msg) {
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
-    <button class="btn full">Entrar</button></form></div>`;
+    <button class="btn full">Entrar</button>${botaoInstalar('no-login')}</form></div>`;
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, b = $('button', f);
@@ -511,7 +536,7 @@ async function vPedido(numero) {
     if (can('compras_cotar')) A.push(['cotar', 'Pedir cotação', 'sec'], ['orc', 'Registrar orçamento', d.orcamentos.length ? 'sec' : '']);
     if (can('compras_definir') && d.orcamentos.length) A.push(['definir', 'Definir compra']);
   }
-  if (st === 'Aguardando aprovação' && can('compras_aprovar')) A.push(['aprovar', 'Aprovar compra'], ['devolver', 'Devolver p/ cotação', 'sec']);
+  if (st === 'Aguardando aprovação' && can('compras_aprovar')) A.push(['aprovar', 'Aprovar compra'], ['devolver', 'Reprovar', 'perigo']);
   if (st === 'Aprovado') {
     if (['Aguardando pagamento', 'A pagar'].includes(p.fin) && can('financeiro')) A.push(['pagar', 'Registrar pagamento']);
     if (p.entrega === 'Aguardando liberação' && can('compras_liberar')) A.push(['liberar', 'Liberar entrega']);
@@ -577,7 +602,7 @@ async function vPedido(numero) {
   $$('[data-ver]').forEach(b => { b.onclick = () => verArquivo(b.dataset.ver); });
   $$('[data-orc]').forEach(b => { b.onclick = () => mOrc(d, d.orcamentos.find(o => o.id === b.dataset.orc)); });
   const ACOES = {
-    cotar: () => mCotar([p.numero]), orc: () => mOrc(d), definir: () => mDefinir(d), aprovar: () => mAprovar(d), devolver: () => mMotivo(d, 'pedido_devolver', 'Devolver para cotação', 'Devolver'),
+    cotar: () => mCotar([p.numero]), orc: () => mOrc(d), definir: () => mDefinir(d), aprovar: () => mAprovar(d), devolver: () => mMotivo(d, 'pedido_devolver', 'Reprovar compra', 'Reprovar', 'A compra volta para Compras refazer a cotação. Para desistir do pedido de vez, use "Cancelar".'),
     pagar: () => mPagar(d), liberar: () => mLiberar(d, forn), receber: () => mReceber(d), nf: () => mNF(d), anexar: () => mAnexar(d), cancelar: () => mMotivo(d, 'pedido_cancelar', 'Cancelar pedido', 'Cancelar pedido')
   };
   $$('[data-acao]').forEach(b => { b.onclick = ACOES[b.dataset.acao]; });
@@ -688,8 +713,8 @@ function mAprovar(d) {
   { ok: 'Aprovar', onOk: async () => depois(await api('pedido_aprovar', { numero: p.numero })) });
 }
 
-function mMotivo(d, acao, t, ok) {
-  modal(t, '<label>Motivo<textarea name="motivo" required></textarea></label>', { ok, onOk: async f => depois(await api(acao, { numero: d.pedido.numero, motivo: f.motivo.value })) });
+function mMotivo(d, acao, t, ok, dica) {
+  modal(t, `${dica ? `<div class="aviso info">${esc(dica)}</div>` : ''}<label>Motivo<textarea name="motivo" required></textarea></label>`, { ok, onOk: async f => depois(await api(acao, { numero: d.pedido.numero, motivo: f.motivo.value })) });
 }
 
 function mPagar(d) {

@@ -237,6 +237,7 @@ function pedidoDefinir_(q, ctx) {
     (exc ? ' · EXCEÇÃO à regra de ' + min + ' orçamentos: ' + exc : ''));
   if (q.aprovar && pode_(ctx, 'compras_aprovar')) aprovar_(ctx, p);
   salvar_(ctx, p);
+  if (p.status === 'Aguardando aprovação') avisarAprovadores_(ctx, p);
   log_(ctx, 'pedido_definir', p.numero + ' ' + p.fornecedor + ' ' + valor);
   return { msg: p.status === 'Aprovado' ? 'Compra definida e aprovada.' : 'Compra definida. Aguardando aprovação.' };
 }

@@ -69,6 +69,8 @@ test('fluxo FATURADO 30 dias: cotação → regra de orçamentos → aprovação
   const est = criarUsuario(t, 'estoque', 'Estoque', obra);
   const com = criarUsuario(t, 'compras', 'Compras', obra);
   const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
+  const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
+  t.adm('admin_usuario_salvar', { usuario: { id: t.adm('admin_dados').usuarios.find(u => u.login === 'gestor').id, nome: 'gestor', login: 'gestor', email: 'gestor@size.com', ativo: true } });
   com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Casa do Construtor', email: 'vendas@casa.com', telefone: '51999990000' } });
   com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Depósito Sul' } });
   const forn = com('obra_dados').fornecedores;
@@ -91,16 +93,22 @@ test('fluxo FATURADO 30 dias: cotação → regra de orçamentos → aprovação
   let det = com('pedido_detalhe', { numero });
   assert.equal(det.minimo, 2); // R$ 6.200 >= 5000 → 2 orçamentos
   const orc1 = det.orcamentos[0].id;
-  // 1 orçamento para R$ 6.200: bloqueia; Compras (tem aprovar) pode justificar exceção
+  // 1 orçamento para R$ 6.200: bloqueia; Compras não pode justificar exceção (só quem aprova)
   falha(() => com('pedido_definir', { numero, orcamento: orc1, condicao: 'Faturado' }), /necessários 2 orçamentos/);
+  falha(() => com('pedido_definir', { numero, orcamento: orc1, condicao: 'Faturado', excecao: 'urgente' }), /Só quem aprova/);
   com('orcamento_salvar', { pedido: numero, fornecedor_cod: forn[1].codigo, valor: '6500', arquivo: PDF });
-  com('pedido_definir', { numero, orcamento: orc1, condicao: 'Faturado', prazo_fat: 30, valores: { 1: '50', 2: '120' } });
+  const n = t.G._enviados.length;
+  com('pedido_definir', { numero, orcamento: orc1, condicao: 'Faturado', prazo_fat: 30, valores: { 1: '50', 2: '120' }, aprovar: true });
   det = com('pedido_detalhe', { numero });
-  assert.equal(det.pedido.situacao, 'Aguardando aprovação');
+  assert.equal(det.pedido.situacao, 'Aguardando aprovação'); // Compras pediu "aprovar", mas não tem permissão
   assert.equal(det.pedido.valor_total, 6200);
   assert.equal(det.itens[0].valor_unit, 50);
+  assert.equal(t.G._enviados.length, n + 1);
+  assert.match(t.G._enviados.at(-1).para, /gestor@size\.com/);
+  assert.match(t.G._enviados.at(-1).assunto, /^Aprovação · Prime Beach \[PB-0001\]/);
 
-  com('pedido_aprovar', { numero });
+  falha(() => com('pedido_aprovar', { numero }), /permissão/);
+  apr('pedido_aprovar', { numero });
   det = com('pedido_detalhe', { numero });
   assert.equal(det.pedido.situacao, 'Liberar entrega');
   assert.equal(det.pedido.fin, 'Aguardando NF');
@@ -148,11 +156,13 @@ test('fluxo FATURAMENTO DIRETO: financeiro paga antes; liberação bloqueada at�
   const com = criarUsuario(t, 'compras', 'Compras', obra);
   const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
   const est = criarUsuario(t, 'est', 'Estoque', obra);
+  const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
   com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Ferragens X', email: 'x@x.com' } });
   const { numero } = est('pedido_criar', { itens: [{ descricao: 'Vergalhão 10mm', qtd: 20, unidade: 'barra' }] });
   com('orcamento_salvar', { pedido: numero, fornecedor_cod: 'F001', valor: 900, arquivo: PDF });
   const orc = com('pedido_detalhe', { numero }).orcamentos[0].id;
-  com('pedido_definir', { numero, orcamento: orc, condicao: 'Faturamento direto', aprovar: true });
+  com('pedido_definir', { numero, orcamento: orc, condicao: 'Faturamento direto' });
+  apr('pedido_aprovar', { numero });
   let p = com('pedido_detalhe', { numero }).pedido;
   assert.equal(p.situacao, 'Aguardando pagamento');
   falha(() => com('pedido_liberar', { numero }), /financeiro precisa registrar o pagamento/);
@@ -177,13 +187,35 @@ test('cancelamento e devolução respeitam a etapa', () => {
   const n1 = com('pedido_criar', { itens: [{ descricao: 'Tinta', qtd: 2, unidade: 'lata' }] }).numero;
   com('orcamento_salvar', { pedido: n1, fornecedor_cod: 'F001', valor: 300, arquivo: PDF });
   const orc = com('pedido_detalhe', { numero: n1 }).orcamentos[0].id;
+  const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
   com('pedido_definir', { numero: n1, orcamento: orc, condicao: 'Faturado' });
-  com('pedido_devolver', { numero: n1, motivo: 'preço alto' });
+  falha(() => com('pedido_devolver', { numero: n1, motivo: 'x' }), /permissão/);
+  apr('pedido_devolver', { numero: n1, motivo: 'preço alto' });
   assert.equal(com('pedido_detalhe', { numero: n1 }).pedido.situacao, 'Em cotação');
-  com('pedido_definir', { numero: n1, orcamento: orc, condicao: 'Faturado', aprovar: true });
+  com('pedido_definir', { numero: n1, orcamento: orc, condicao: 'Faturado' });
+  apr('pedido_aprovar', { numero: n1 });
   falha(() => com('pedido_cancelar', { numero: n1, motivo: 'x' }), /só um administrador/);
   t.adm('pedido_cancelar', { obra, numero: n1, motivo: 'obra parada' });
   assert.equal(com('pedido_detalhe', { numero: n1 }).pedido.situacao, 'Cancelado');
+});
+
+test('perfis v2: instalação existente — Compras perde "aprovar" e surge o perfil Aprovador', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Obra V', sigla: 'OV' }).id;
+  // simula a instalação feita com a versão anterior
+  t.G.rodar(`(function () {
+    const C = central_('Config'); C.removeWhere(r => r.chave === 'PERFIS_V2');
+    const P = central_('Perfis'); P.removeWhere(p => p.perfil === 'Aprovador');
+    const c = P.all().find(p => p.perfil === 'Compras'); c.permissoes += ',compras_aprovar'; P.update(c);
+  })()`);
+  const antigos = t.adm('admin_dados'); // primeira abertura da administração já ajusta
+  assert.ok(antigos.perfis.some(p => p.perfil === 'Aprovador'));
+  t.G.rodar(`central_('Acessos').insert({ usuario_id: 'U999', obra_id: '${obra}', perfil: 'Compras', permissoes: 'compras_definir,compras_aprovar' })`);
+  t.G.rodar(`(function () { central_('Config').removeWhere(r => r.chave === 'PERFIS_V2'); })()`);
+  const d = t.adm('admin_dados');
+  assert.ok(!d.perfis.find(p => p.perfil === 'Compras').permissoes.includes('compras_aprovar'));
+  assert.ok(!d.acessos.find(a => a.usuario_id === 'U999').permissoes.includes('compras_aprovar'));
+  assert.equal(d.perfis.filter(p => p.perfil === 'Aprovador').length, 1);
 });
 
 test('migração da planilha antiga para Prime Beach', () => {
@@ -221,7 +253,8 @@ test('migração da planilha antiga para Prime Beach', () => {
   const r = t.call('login', { login: 'renan', senha: '789852123' });
   assert.equal(r.usuario.trocar_senha, true);
   assert.deepEqual(r.obras.map(o => o.nome), ['Prime Beach']);
-  assert.ok(r.obras[0].permissoes.includes('compras_aprovar'));
+  assert.ok(r.obras[0].permissoes.includes('compras_definir'));
+  assert.ok(!r.obras[0].permissoes.includes('compras_aprovar')); // Compras não aprova (perfis v2)
   const j = t.call('login', { login: 'jean', senha: '12345' });
   assert.deepEqual(j.obras[0].permissoes, ['pedido_abrir']);
   const meus = t.call('pedidos_listar', { token: j.token, obra }).pedidos;

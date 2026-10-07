@@ -104,7 +104,8 @@ const PERMISSOES = {
 };
 const PERFIS_PADRAO = [
   ['Admin', Object.keys(PERMISSOES).join(','), 'Tudo na obra'],
-  ['Compras', 'pedido_abrir,pedido_ver_todos,estoque_ver,compras_cotar,compras_definir,compras_aprovar,compras_liberar,compras_cancelar,cad_materiais,cad_fornecedores', 'Cotação, compra, aprovação e liberação de entrega'],
+  ['Aprovador', 'pedido_ver_todos,estoque_ver,compras_aprovar,compras_cancelar', 'Aprova ou reprova as compras definidas pelo setor de Compras'],
+  ['Compras', 'pedido_abrir,pedido_ver_todos,estoque_ver,compras_cotar,compras_definir,compras_liberar,compras_cancelar,cad_materiais,cad_fornecedores', 'Cotação, definição da compra e liberação de entrega (não aprova)'],
   ['Estoque', 'pedido_abrir,pedido_ver_todos,pedido_receber,estoque_ver,estoque_movimentar,cad_materiais,cad_frentes', 'Abre pedidos, recebe na obra e controla o estoque'],
   ['Financeiro', 'pedido_ver_todos,financeiro', 'Pagamentos e notas fiscais'],
   ['Solicitante', 'pedido_abrir', 'Só abre e acompanha os próprios pedidos']
