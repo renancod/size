@@ -275,6 +275,32 @@ test('notificações por etapa e financeiro por obra', () => {
   assert.equal(t.adm('admin_dados').obras.find(o => o.id === obra).email_financeiro, 'outro@size.com');
 });
 
+test('lembretes de vencimento: aviso diário nos últimos 5 dias, e-mail das 8h e urgência só até chegar', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', email_financeiro: 'fin@size.com' }).id;
+  const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
+  t.adm('cad_salvar', { obra, tipo: 'fornecedores', dados: { nome: 'Casa', email: 'c@x.com' } });
+  const n = t.adm('pedido_criar', { obra, prioridade: 'Urgente', itens: [{ descricao: 'Cimento', qtd: 20, unidade: 'sc' }] }).numero;
+  t.adm('orcamento_salvar', { obra, pedido: n, fornecedor_cod: 'F001', valor: 1014, arquivo: PDF });
+  t.adm('pedido_definir', { obra, numero: n, orcamento: t.adm('pedido_detalhe', { obra, numero: n }).orcamentos[0].id, condicao: 'Faturado', prazo_fat: 28, aprovar: true });
+  t.adm('pedido_liberar', { obra, numero: n });
+  const d = new Date(); d.setDate(d.getDate() - 25); // emissão há 25 dias → vence em 3 dias
+  t.adm('pedido_receber', { obra, numero: n, itens: { 1: 20 }, nf_numero: '96615', nf_data: d.toLocaleDateString('sv-SE') });
+  const it = fin('notificacoes').itens.find(i => i.etapa === 'pagar');
+  assert.match(it.texto, /^Vence em 3 dias/);
+  assert.match(it.id, new RegExp(new Date().toLocaleDateString('sv-SE') + '$')); // id do dia → aviso novo a cada dia
+  assert.equal(it.prioridade, ''); // já chegou: não é mais urgente
+  const antes = t.G._enviados.length;
+  t.G.lembretesDiarios();
+  assert.equal(t.G._enviados.length, antes + 1);
+  assert.match(t.G._enviados.at(-1).para, /fin@size\.com/);
+  assert.match(t.G._enviados.at(-1).html, /Vence em 3 dias/);
+  fin('pedido_pagar', { obra, numero: n, forma: 'Boleto', comprovante: PDF });
+  const depois = fin('notificacoes').itens;
+  assert.ok(!depois.some(i => i.etapa === 'pagar'));
+  assert.ok(depois.some(i => i.etapa === 'pago' && /Pagamento concluído/.test(i.texto)));
+});
+
 test('cancelamento e devolução respeitam a etapa', () => {
   const t = preparar();
   const obra = t.adm('admin_obra_criar', { nome: 'Obra C', sigla: 'OC' }).id;

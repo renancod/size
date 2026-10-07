@@ -165,6 +165,7 @@ function arquivoIgualNaPasta_(ctx, p, anexo) {
 
 // Rode UMA vez no editor: autoriza Gmail/Drive e agenda a captura de e-mails a cada 10 min.
 function instalarGatilho() {
-  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'capturarEmails') ScriptApp.deleteTrigger(t); });
+  ScriptApp.getProjectTriggers().forEach(t => { if (['capturarEmails', 'lembretesDiarios'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('capturarEmails').timeBased().everyMinutes(10).create();
+  ScriptApp.newTrigger('lembretesDiarios').timeBased().everyDays(1).atHour(8).create();
 }

@@ -21,6 +21,7 @@ function atualizarPerfis_() {
 
 function adminDados_(q, ctx) {
   atualizarPerfis_();
+  garantirGatilhos_();
   return {
     usuarios: central_('Usuarios').all().map(pub_),
     acessos: central_('Acessos').all().map(a => {

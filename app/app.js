@@ -153,7 +153,9 @@ const SIT_CL = {
 const badge = s => `<span class="badge ${SIT_CL[s] || ''}">${esc(s)}</span>`;
 const PRIORIDADES = ['Baixa', 'Normal', 'Alta', 'Urgente'];
 const prio = p => Math.max(0, PRIORIDADES.indexOf(p.prioridade));
-const quente = p => prio(p) >= 2;
+// urgência (Alta/Urgente) só vale até o material chegar
+const chegou = p => p.entrega === 'Recebido' || ['Concluído', 'Cancelado'].includes(p.status) || ['A pagar', 'Aguardando NF', 'Recebido'].includes(p.situacao) && !p.status;
+const quente = p => prio(p) >= 2 && !chegou(p);
 const tagPrio = p => quente(p) ? `<span class="urg">${esc(String(p.prioridade).toUpperCase())}</span>` : '';
 const P_COMPRAS = ['compras_cotar', 'compras_definir', 'compras_aprovar', 'compras_liberar'];
 const FILTROS = {
@@ -427,7 +429,8 @@ function fecharModal() { const m = $('#modal'); m.classList.remove('on'); m.inne
 /* ---------- notificações: o que cada perfil tem para fazer, em todas as obras ---------- */
 const ETAPA_NOTIF = {
   cotar: ['Para cotar', 'cart'], definir: ['Orçamentos recebidos', 'file'], aprovar: ['Aprovar compra', 'check'], liberar: ['Liberar entrega', 'truck'],
-  receber: ['Receber material', 'box'], pagar: ['Pagamentos', 'money'], meu: ['Meus pedidos', 'clock']
+  receber: ['Receber material', 'box'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
+  pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {
@@ -453,7 +456,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && S.
 function atualizarSino() {
   const b = $('#sino .sino-n');
   if (!b) return;
-  const n = NOTIF.itens.filter(i => i.etapa !== 'meu').length;
+  const n = NOTIF.itens.filter(i => !['meu', 'pago'].includes(i.etapa)).length; // avisos informativos não contam como pendência
   b.textContent = n > 99 ? '99+' : n;
   b.hidden = !n;
 }
@@ -651,7 +654,7 @@ async function vPedidos(qs) {
   const desenhar = () => {
     const t = norm($('#busca').value);
     const lista = ps.filter(FILTROS[k].f).filter(p => !t || norm([p.numero, p.frente, p.solicitante, p.fornecedor, p.situacao, ...(p.itens || []).map(i => i.descricao)].join(' ')).includes(t))
-      .sort((a, b) => prio(b) - prio(a) || String(a.necessidade || '9').localeCompare(String(b.necessidade || '9')) || String(b.numero).localeCompare(String(a.numero)));
+      .sort((a, b) => quente(b) - quente(a) || prio(b) * !chegou(b) - prio(a) * !chegou(a) || String(a.necessidade || '9').localeCompare(String(b.necessidade || '9')) || String(b.numero).localeCompare(String(a.numero)));
     $('#lista').innerHTML = lista.length ? lista.map(p => cartao(p, selecionavel && ['Aberto', 'Em cotação'].includes(p.status) ? SEL : null)).join('') : '<p class="vazio">Nenhum pedido aqui.</p>';
     ligarCartoes((n, on) => { on ? SEL.add(n) : SEL.delete(n); barra(); });
     barra();
