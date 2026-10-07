@@ -91,6 +91,7 @@ function adminSenha_(q, ctx) {
 
 function adminObraCriar_(q, ctx) {
   const o = criarObra_(q.nome, q.sigla, q.endereco);
+  if (q.email_financeiro) { o.email_financeiro = String(q.email_financeiro).trim(); central_('Obras').update(o); }
   log_(ctx, 'obra_criar', o.nome);
   return { msg: 'Obra ' + o.nome + ' criada com a planilha e a pasta no Drive.', id: o.id };
 }
@@ -102,6 +103,7 @@ function adminObraSalvar_(q, ctx) {
   if (!nome) throw new Error('Informe o nome da obra.');
   o.nome = nome;
   o.endereco = String(q.endereco || '').trim();
+  o.email_financeiro = String(q.email_financeiro || '').trim();
   o.ativa = sim_(q.ativa) ? 'Sim' : 'Não';
   O.update(o);
   return { msg: 'Obra salva.' };

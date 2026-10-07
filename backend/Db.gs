@@ -6,7 +6,7 @@ const SCHEMA_CENTRAL = {
   Config: ['chave', 'valor', 'descricao'],
   Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso'],
   Acessos: ['usuario_id', 'usuario', 'obra_id', 'obra', 'perfil', 'permissoes'],
-  Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em'],
+  Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
   MateriaisPadrao: ['codigo', 'descricao', 'unidade', 'categoria'],
   Unidades: ['unidade'],

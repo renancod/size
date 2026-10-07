@@ -43,7 +43,10 @@ const IC = {
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9', search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6', back: 'M19 12H5M12 19l-7-7 7-7',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
-  book: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z', chevron: 'M9 18l6-6-6-6'
+  book: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z', chevron: 'M9 18l6-6-6-6',
+  alert: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z', check: 'M20 6L9 17l-5-5',
+  clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2', bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
+  minus: 'M5 12h14', sliders2: 'M12 20V10M18 20V4M6 20v-4', send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z', eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'
 };
 const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${IC[n]}"/></svg>`;
 
@@ -219,6 +222,7 @@ function montarShell() {
     <div class="scrim" id="scrim"></div>
     <div class="conteudo">
       <header class="topo"><button class="icbtn hamb" id="hamb" aria-label="Menu">${ic('menu')}</button><h1 id="titulo"></h1><span class="obra" id="obranome"></span>
+        <button class="icbtn sino" id="sino" aria-label="Notificações">${ic('bell')}<span class="sino-n" hidden></span></button>
         <button class="icbtn" id="atualizar" aria-label="Atualizar">${ic('refresh')}</button></header>
       <main class="view" id="view"></main>
     </div></div>`;
@@ -229,6 +233,7 @@ function montarShell() {
   $('#sair').onclick = () => { if (confirm('Sair do app?')) sair(); };
   $('#atualizar').onclick = async () => { S.ped = null; try { await recarregarDados(); } catch (e) { toast(e.message, 1); } rotear(); };
   $('#obrasel').onchange = e => trocarObra(e.target.value);
+  $('#sino').onclick = painelNotif;
   // arrastar da borda esquerda abre o menu; para a esquerda fecha (celular)
   let x0 = null;
   addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
@@ -348,6 +353,7 @@ function telaLogin(msg) {
 }
 function sair(msg) {
   S.token = ''; S.sess = null; S.dados = null; S.ped = null; S.adm = null;
+  clearInterval(NOTIF.timer);
   LS.del('cs_token');
   fecharModal();
   telaLogin(typeof msg === 'string' ? msg : '');
@@ -379,6 +385,7 @@ async function iniciar() {
   montarShell();
   rotear();
   if (S.dados) pedidos().catch(() => {});
+  iniciarNotif();
 }
 async function boot() {
   const qs = new URLSearchParams(location.search);
@@ -416,6 +423,83 @@ function modal(tituloM, corpo, { ok = 'Confirmar', onOk, larga, semRodape } = {}
   return f;
 }
 function fecharModal() { const m = $('#modal'); m.classList.remove('on'); m.innerHTML = ''; document.body.classList.remove('travado'); }
+
+/* ---------- notificações: o que cada perfil tem para fazer, em todas as obras ---------- */
+const ETAPA_NOTIF = {
+  cotar: ['Para cotar', 'cart'], definir: ['Orçamentos recebidos', 'file'], aprovar: ['Aprovar compra', 'check'], liberar: ['Liberar entrega', 'truck'],
+  receber: ['Receber material', 'box'], pagar: ['Pagamentos', 'money'], meu: ['Meus pedidos', 'clock']
+};
+const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
+async function buscarNotif() {
+  if (!S.token || !S.sess) return;
+  let r;
+  try { r = await api('notificacoes'); } catch (e) { return; }
+  const novos = r.itens.filter(i => !NOTIF.conhecidos.has(i.id));
+  // na primeira vez que o aparelho usa o app, só registra; depois avisa tudo que for novo
+  if (novos.length && (!NOTIF.primeira || NOTIF.conhecidos.size)) avisarNovos(novos);
+  NOTIF.primeira = false;
+  NOTIF.itens = r.itens;
+  NOTIF.conhecidos = new Set(r.itens.map(i => i.id));
+  LS.set('cs_notif', JSON.stringify([...NOTIF.conhecidos]));
+  atualizarSino();
+}
+function iniciarNotif() {
+  clearInterval(NOTIF.timer);
+  NOTIF.primeira = true;
+  buscarNotif();
+  NOTIF.timer = setInterval(() => { if (!document.hidden) buscarNotif(); }, 60000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sess) buscarNotif(); });
+function atualizarSino() {
+  const b = $('#sino .sino-n');
+  if (!b) return;
+  const n = NOTIF.itens.filter(i => i.etapa !== 'meu').length;
+  b.textContent = n > 99 ? '99+' : n;
+  b.hidden = !n;
+}
+const urlNotif = i => './?obra=' + enc(i.obra) + '#/pedido/' + enc(i.numero);
+function avisarNovos(novos) {
+  const caixa = $('#avisos') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'avisos', className: 'avisos' }));
+  novos.slice(0, 3).forEach(i => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'aviso-pop';
+    el.innerHTML = `${ic((ETAPA_NOTIF[i.etapa] || [])[1] || 'bell')}<span><b>${esc(i.numero)} · ${esc((ETAPA_NOTIF[i.etapa] || [i.etapa])[0])}</b><small>${esc(i.texto)}${i.resumo ? ' — ' + esc(i.resumo) : ''}</small></span>`;
+    el.onclick = () => { el.remove(); abrirNotif(i); };
+    caixa.appendChild(el);
+    setTimeout(() => el.remove(), 12000);
+  });
+  if (novos.length > 3) toast(`+${novos.length - 3} notificações. Toque no sino para ver.`);
+  if ('Notification' in window && Notification.permission === 'granted' && document.hidden && navigator.serviceWorker) {
+    navigator.serviceWorker.ready.then(reg => novos.slice(0, 5).forEach(i => reg.showNotification(i.numero + ' · ' + ((ETAPA_NOTIF[i.etapa] || [i.etapa])[0]), {
+      body: i.texto + (i.resumo ? ' — ' + i.resumo : '') + (S.sess.obras.length > 1 ? ' (' + i.obra_nome + ')' : ''), icon: 'icon-192.png', badge: 'icon-192.png', tag: i.id, data: { url: urlNotif(i) }
+    }))).catch(() => {});
+  }
+}
+async function abrirNotif(i) {
+  fecharModal();
+  if (i.obra !== S.obraId) await trocarObra(i.obra);
+  location.hash = '#/pedido/' + enc(i.numero);
+}
+function painelNotif() {
+  const grupos = Object.keys(ETAPA_NOTIF).map(k => [k, NOTIF.itens.filter(i => i.etapa === k)]).filter(([, l]) => l.length);
+  const variasObras = new Set(NOTIF.itens.map(i => i.obra)).size > 1;
+  const perm = 'Notification' in window ? Notification.permission : 'indisponivel';
+  modal('Notificações', `${perm === 'default' ? `<button type="button" class="btn sec" id="ativarNotif">${ic('bell')} Avisar também quando o app estiver em segundo plano</button>` : ''}
+    ${perm === 'denied' ? '<small>Os avisos do aparelho estão bloqueados nas configurações do navegador para este site.</small>' : ''}
+    ${grupos.map(([k, l]) => `<div class="notif-grupo"><div class="notif-tit">${ic(ETAPA_NOTIF[k][1])}<b>${ETAPA_NOTIF[k][0]}</b><span>${l.length}</span></div>
+      ${l.sort((a, b) => String(b.quando).localeCompare(String(a.quando))).map((i, n) => `<button type="button" class="notif" data-n="${esc(i.id)}">
+        <span><b>${esc(i.numero)}</b>${quente(i) ? ' <span class="urg">' + esc(String(i.prioridade).toUpperCase()) + '</span>' : ''}${variasObras ? ` <small>${esc(i.obra_nome)}</small>` : ''}<br>
+        <small>${esc(i.texto)}${i.resumo ? ' — ' + esc(i.resumo) : ''}</small></span><small>${fdh(i.quando)}</small></button>`).join('')}</div>`).join('')
+    || '<p class="vazio">Nada pendente para você agora. 🎉</p>'}`, { semRodape: true });
+  $$('#modal .notif').forEach(b => { b.onclick = () => abrirNotif(NOTIF.itens.find(i => i.id === b.dataset.n)); });
+  if ($('#ativarNotif')) $('#ativarNotif').onclick = async () => {
+    const r = await Notification.requestPermission();
+    toast(r === 'granted' ? 'Pronto: o aparelho vai avisar das novidades.' : 'Os avisos do aparelho não foram permitidos.', r !== 'granted');
+    painelNotif();
+  };
+  buscarNotif();
+}
 
 async function verArquivo(id) {
   modal('Arquivo', '<div class="carregando"><span class="spin"></span></div>', { semRodape: true, larga: true });
@@ -468,7 +552,7 @@ function cartao(p, sel) {
   const it = p.itens || [], f = it[0];
   const prazo = p.fin === 'A pagar' && p.vencimento ? `<span class="${vencido(p.vencimento) ? 'atrasado' : ''}">vence ${fd(p.vencimento)}</span>`
     : p.necessidade && FILTROS.andamento.f(p) ? `<span class="${vencido(p.necessidade) && !['Recebido'].includes(p.situacao) ? 'atrasado' : ''}">até ${fd(p.necessidade)}</span>` : '';
-  return `<div class="ped" data-num="${esc(p.numero)}">${sel ? `<input type="checkbox" class="sel" data-sel="${esc(p.numero)}" ${sel.has(p.numero) ? 'checked' : ''}>` : ''}
+  return `<div class="ped" data-st="${SIT_CL[p.situacao] || ''}" data-num="${esc(p.numero)}">${sel ? `<input type="checkbox" class="sel" data-sel="${esc(p.numero)}" ${sel.has(p.numero) ? 'checked' : ''}>` : ''}
     <div class="corpo"><div class="l1"><b>${esc(p.numero)}</b>${badge(p.situacao)}${tagPrio(p)}<span class="dir">${brl(p.valor_total)}</span></div>
     <div class="l2">${esc(f ? f.descricao : '—')}${f ? ` <span class="mais">${nf(f.qtd)} ${esc(f.unidade)}${it.length > 1 ? ` · +${plural(it.length - 1, 'item', 'itens')}` : ''}</span>` : ''}</div>
     <div class="l3">${[p.frente, p.solicitante, p.fornecedor, p.n_orc && ['Aberto', 'Em cotação'].includes(p.status) ? plural(p.n_orc, 'orçamento', 'orçamentos') : '', prazo].filter(Boolean).join(' · ')}</div></div></div>`;
@@ -534,22 +618,36 @@ async function vNovo() {
   };
 }
 
+/* ---------- coluna de etapas à direita (no celular vira uma faixa de blocos no topo) ---------- */
+const ETAPA_IC = {
+  andamento: 'clock', urgentes: 'alert', compras: 'cart', cotar: 'cart', cotacao: 'file', aprovar: 'check', liberar: 'truck', receber: 'box',
+  nf: 'file', pagar: 'money', concluidos: 'check', cancelados: 'x', todos: 'layers', vencidos: 'alert', pagos: 'check'
+};
+function comEtapas(grupos, conteudo) {
+  return `<div class="comlado"><div class="principal">${conteudo}</div><aside class="etapas">${grupos.map(g =>
+    `${g.t ? `<div class="et-tit">${g.t}</div>` : ''}<div class="et-grupo">${g.itens.map(b => `<button type="button" class="et ${b.on ? 'on' : ''} ${b.n === 0 ? 'zero' : ''} ${b.cl || ''}" data-et="${esc(b.k)}">
+      ${ic(b.i || ETAPA_IC[b.k] || 'list')}<span>${b.t}</span>${b.n != null ? `<b>${b.n}</b>` : ''}</button>`).join('')}</div>`).join('')}</aside></div>`;
+}
+function ligarEtapas(fn) { $$('#view .et[data-et]').forEach(b => { b.onclick = () => fn(b.dataset.et, b); }); }
+
 /* ---------- lista de pedidos ---------- */
 let SEL = new Set();
 async function vPedidos(qs) {
   const q = new URLSearchParams(qs || ''), k = FILTROS[q.get('k')] ? q.get('k') : 'andamento';
-  titulo(k === 'compras' ? 'Compras' : k === 'receber' ? 'Recebimento' : 'Pedidos');
+  titulo(k === 'compras' ? 'Cotação e compra' : k === 'receber' ? 'Recebimento' : 'Pedidos');
   const ps = await pedidos();
-  const ordem = k === 'compras' ? ['compras', 'cotar', 'cotacao', 'aprovar', 'liberar', 'urgentes']
-    : ['andamento', 'urgentes', 'cotar', 'cotacao', 'aprovar', 'liberar', 'receber', 'nf', 'pagar', 'concluidos', 'cancelados', 'todos'];
-  const chips = ordem.filter(x => x === k || x === 'andamento' || x === 'todos' || x === 'compras' || conta(x));
+  const grupos = k === 'compras' || (['cotar', 'cotacao', 'aprovar', 'liberar'].includes(k) && q.get('m') === 'c')
+    ? [{ t: 'Etapas de compra', itens: ['compras', 'cotar', 'cotacao', 'aprovar', 'liberar'] }, { t: 'Atalhos', itens: ['urgentes', 'andamento'] }]
+    : [{ t: 'Situação', itens: ['andamento', 'urgentes'] }, { t: 'Etapas', itens: ['cotar', 'cotacao', 'aprovar', 'liberar', 'receber', 'nf', 'pagar'] }, { t: 'Histórico', itens: ['concluidos', 'cancelados', 'todos'] }];
+  const modo = grupos[0].t === 'Etapas de compra' ? '&m=c' : '';
   const selecionavel = ['cotar', 'cotacao', 'compras'].includes(k) && can('compras_cotar');
   SEL = new Set([...SEL].filter(n => ps.some(p => p.numero === n && ['Aberto', 'Em cotação'].includes(p.status))));
-  view(`${S.todos ? '' : '<div class="aviso info">Você vê apenas os pedidos que abriu.</div>'}
-    <div class="chips">${chips.map(x => `<button class="chip ${x === k ? 'on' : ''}" data-k="${x}">${FILTROS[x].t}<b>${conta(x)}</b></button>`).join('')}</div>
+  view(comEtapas(grupos.map(g => ({ t: g.t, itens: g.itens.map(x => ({ k: x, t: FILTROS[x].t, n: conta(x), on: x === k })) })),
+    `<div class="cab"><h2>${FILTROS[k].t}</h2><span class="contagem">${plural(ps.filter(FILTROS[k].f).length, 'pedido', 'pedidos')}</span></div>
+    ${S.todos ? '' : '<div class="aviso info">Você vê apenas os pedidos que abriu.</div>'}
     <div class="busca">${ic('search')}<input type="search" id="busca" placeholder="Buscar nº, material, fornecedor, frente…"></div>
-    <div id="lista" class="lista duas"></div><div id="barra"></div>`);
-  $$('.chip[data-k]').forEach(c => { c.onclick = () => { location.hash = '#/pedidos?k=' + c.dataset.k; }; });
+    <div id="lista" class="lista"></div><div id="barra"></div>`));
+  ligarEtapas(x => { location.hash = '#/pedidos?k=' + x + (x === 'compras' ? '' : modo); });
   const desenhar = () => {
     const t = norm($('#busca').value);
     const lista = ps.filter(FILTROS[k].f).filter(p => !t || norm([p.numero, p.frente, p.solicitante, p.fornecedor, p.situacao, ...(p.itens || []).map(i => i.descricao)].join(' ')).includes(t))
@@ -666,7 +764,7 @@ async function vPedido(numero) {
     try { await depois(await api('capturar_emails')); } catch (x) { toast(x.message, 1); e.target.disabled = false; }
   };
 }
-async function depois(r) { toast(r.msg || 'Feito.'); S.ped = null; if (DET) await vPedido(DET.pedido.numero); pedidos().catch(() => {}); }
+async function depois(r) { toast(r.msg || 'Feito.'); S.ped = null; if (DET) await vPedido(DET.pedido.numero); pedidos().catch(() => {}); buscarNotif(); }
 
 /* ---------- ações do pedido ---------- */
 function mCotar(nums) {
@@ -878,45 +976,65 @@ async function vFinanceiro(qs) {
   titulo('Financeiro');
   const aba = new URLSearchParams(qs || '').get('aba') || 'pagar';
   const ps = await pedidos();
+  const ordVenc = (a, b) => String(a.vencimento || a.aprovado_em || '').localeCompare(String(b.vencimento || b.aprovado_em || ''));
   const ABAS = {
-    pagar: { t: 'A pagar', f: FILTROS.pagar.f, ord: (a, b) => String(a.vencimento || a.aprovado_em || '').localeCompare(String(b.vencimento || b.aprovado_em || '')) },
-    nf: { t: 'Aguardando NF', f: FILTROS.nf.f, ord: (a, b) => String(a.aprovado_em).localeCompare(String(b.aprovado_em)) },
+    pagar: { t: 'A pagar', f: FILTROS.pagar.f, ord: ordVenc },
+    antecipado: { t: 'Antecipados', i: 'truck', f: p => p.status === 'Aprovado' && p.fin === 'Aguardando pagamento', ord: ordVenc, dica: 'Faturamento direto: o pagamento libera a entrega.' },
+    vencidos: { t: 'Vencidos', f: p => FILTROS.pagar.f(p) && vencido(p.vencimento), ord: ordVenc, cl: 'quente' },
+    nf: { t: 'Aguardando NF', f: FILTROS.nf.f, ord: (a, b) => String(a.aprovado_em).localeCompare(String(b.aprovado_em)), dica: 'Faturado: entra em "A pagar" quando a nota fiscal chegar.' },
     pagos: { t: 'Pagos', f: p => p.fin === 'Pago' && p.status !== 'Cancelado', ord: (a, b) => String(b.pago_em).localeCompare(String(a.pago_em)) }
   };
-  const lista = ps.filter(ABAS[aba].f).sort(ABAS[aba].ord);
+  const A = ABAS[aba] || ABAS.pagar;
+  const lista = ps.filter(A.f).sort(A.ord);
   const tot = lista.reduce((s, p) => s + num(p.valor_total), 0);
-  const venc = aba === 'pagar' ? lista.filter(p => vencido(p.vencimento)) : [];
-  view(`<div class="chips">${Object.entries(ABAS).map(([k, a]) => `<button class="chip ${k === aba ? 'on' : ''}" data-aba="${k}">${a.t}<b>${ps.filter(a.f).length}</b></button>`).join('')}</div>
-    <div class="kpis"><div class="kpi"><b>${brl(tot)}</b><span>Total · ${plural(lista.length, 'pedido', 'pedidos')}</span></div>
-    ${aba === 'pagar' ? `<div class="kpi ${venc.length ? 'quente' : 'zero'}"><b>${venc.length}</b><span>Vencidos</span></div>
-      <div class="kpi"><b>${lista.filter(p => p.fin === 'Aguardando pagamento').length}</b><span>Antecipados (liberam a entrega)</span></div>` : ''}</div>
-    <div class="lista duas">${lista.map(p => cartao(p)).join('') || '<p class="vazio">Nada por aqui.</p>'}</div>`);
-  $$('.chip[data-aba]').forEach(c => { c.onclick = () => { location.hash = '#/financeiro?aba=' + c.dataset.aba; }; });
+  const prox7 = lista.filter(p => p.vencimento && !vencido(p.vencimento) && String(p.vencimento).slice(0, 10) <= maisDias(7)).reduce((s, p) => s + num(p.valor_total), 0);
+  view(comEtapas([
+    { t: 'Pagamentos', itens: ['pagar', 'antecipado', 'vencidos'].map(k => ({ k, t: ABAS[k].t, i: ABAS[k].i, n: ps.filter(ABAS[k].f).length, on: k === aba, cl: ABAS[k].cl })) },
+    { t: 'Acompanhar', itens: ['nf', 'pagos'].map(k => ({ k, t: ABAS[k].t, n: ps.filter(ABAS[k].f).length, on: k === aba })) }
+  ], `<div class="cab"><h2>${A.t}</h2><span class="contagem">${plural(lista.length, 'pedido', 'pedidos')}</span></div>
+    ${A.dica ? `<div class="aviso info">${A.dica}</div>` : ''}
+    <div class="kpis k2"><div class="kpi destaque"><b>${brl(tot)}</b><span>Total ${A.t.toLowerCase()}</span></div>
+      ${aba === 'pagar' ? `<div class="kpi"><b>${brl(prox7)}</b><span>Vence nos próximos 7 dias</span></div>` : ''}</div>
+    <div class="lista">${lista.map(p => cartao(p)).join('') || '<p class="vazio">Nada por aqui.</p>'}</div>`));
+  ligarEtapas(k => { location.hash = '#/financeiro?aba=' + k; });
   ligarCartoes();
 }
 
 /* ---------- estoque ---------- */
+let FILTRO_EST = 'todos';
 async function vEstoque() {
   titulo('Estoque');
   const r = await api('estoque_saldo');
   const pode = can('estoque_movimentar');
-  view(`<div class="cab"><h2>${S.dados.obra.nome}</h2>${pode ? `<button class="btn" data-mov="Saída">Saída p/ frente</button><button class="btn sec" data-mov="Entrada">Entrada avulsa</button><button class="btn sec" data-mov="Ajuste">Ajuste</button>` : ''}</div>
-    <div class="busca">${ic('search')}<input type="search" id="busca" placeholder="Buscar material…"></div>
-    <label class="ck" style="margin-bottom:10px"><input type="checkbox" id="baixo"> Só abaixo do mínimo</label>
-    <div class="card" style="padding:6px 10px"><div class="rolar"><table class="tab" id="tab"></table></div></div>`);
+  const baixo = i => i.estoque_min && i.saldo < i.estoque_min;
+  const VER = {
+    todos: { t: 'Todos os materiais', i: 'layers', f: () => true },
+    baixo: { t: 'Abaixo do mínimo', i: 'alert', f: baixo, cl: 'quente' },
+    com: { t: 'Com saldo', i: 'box', f: i => i.saldo > 0 },
+    zerados: { t: 'Zerados', i: 'minus', f: i => !(i.saldo > 0) }
+  };
+  if (!VER[FILTRO_EST]) FILTRO_EST = 'todos';
+  const grupos = [{ t: 'Ver', itens: Object.entries(VER).map(([k, v]) => ({ k, t: v.t, i: v.i, cl: v.cl, n: r.itens.filter(v.f).length, on: k === FILTRO_EST })) }];
+  if (pode) grupos.push({ t: 'Movimentar', itens: [{ k: 'mov:Saída', t: 'Saída p/ frente', i: 'send', cl: 'acao' }, { k: 'mov:Entrada', t: 'Entrada avulsa', i: 'plus', cl: 'acao' }, { k: 'mov:Ajuste', t: 'Ajuste de saldo', i: 'sliders2', cl: 'acao' }] });
+  view(comEtapas(grupos, `<div class="cab"><h2>${VER[FILTRO_EST].t}</h2><span class="contagem">${esc(S.dados.obra.nome)}</span></div>
+    <div class="busca">${ic('search')}<input type="search" id="busca" placeholder="Buscar material ou categoria…"></div>
+    <div id="est" class="estoque"></div>`));
+  ligarEtapas(k => { if (k.startsWith('mov:')) return mMov(k.slice(4), r.itens); FILTRO_EST = k; vEstoque(); });
   const desenhar = () => {
-    const t = norm($('#busca').value), b = $('#baixo').checked;
-    const l = r.itens.filter(i => (!t || norm(i.descricao + ' ' + (i.categoria || '')).includes(t)) && (!b || (i.estoque_min && i.saldo < i.estoque_min)));
-    $('#tab').innerHTML = `<tr><th>Material</th><th class="n">Saldo</th><th class="n">Mín.</th><th>Último mov.</th></tr>` +
-      (l.map(i => `<tr class="click" data-ch="${esc(i.chave)}"><td>${esc(i.descricao)}${i.material_cod ? '' : ' <small>(fora do cadastro)</small>'}</td>
-        <td class="n ${i.estoque_min && i.saldo < i.estoque_min ? 'atrasado' : ''}"><b>${nf(i.saldo)}</b> ${esc(i.unidade || '')}</td><td class="n">${i.estoque_min ? nf(i.estoque_min) : ''}</td><td>${fd(i.ultimo)}</td></tr>`).join('') ||
-      '<tr><td colspan="4" class="vazio">Nenhum material em estoque. As entradas são lançadas sozinhas no recebimento dos pedidos.</td></tr>');
-    $$('#tab tr[data-ch]').forEach(tr => { tr.onclick = () => extrato(r.itens.find(i => i.chave === tr.dataset.ch)); });
+    const t = norm($('#busca').value);
+    const l = r.itens.filter(VER[FILTRO_EST].f).filter(i => !t || norm(i.descricao + ' ' + (i.categoria || '')).includes(t));
+    $('#est').innerHTML = l.map(i => {
+      const ref = Math.max(i.estoque_min * 2 || 0, i.entradas || 0, i.saldo, 1), pct = Math.max(0, Math.min(100, i.saldo / ref * 100));
+      return `<button type="button" class="est-item ${baixo(i) ? 'baixo' : ''}" data-ch="${esc(i.chave)}">
+        <span class="est-nome"><b>${esc(i.descricao)}</b><small>${esc([i.categoria, i.material_cod || 'fora do cadastro', i.ultimo ? 'últ. mov. ' + fd(i.ultimo) : ''].filter(Boolean).join(' · '))}</small></span>
+        <span class="est-saldo"><b>${nf(i.saldo)}</b><small>${esc(i.unidade || '')}</small></span>
+        <span class="nivel"><span style="width:${pct}%"></span>${i.estoque_min ? `<i style="left:${Math.min(100, i.estoque_min / ref * 100)}%" title="mínimo ${nf(i.estoque_min)}"></i>` : ''}</span>
+      </button>`;
+    }).join('') || '<p class="vazio">Nenhum material aqui. As entradas são lançadas sozinhas no recebimento dos pedidos.</p>';
+    $$('#est [data-ch]').forEach(b => { b.onclick = () => extrato(r.itens.find(i => i.chave === b.dataset.ch)); });
   };
   $('#busca').oninput = desenhar;
-  $('#baixo').onchange = desenhar;
   desenhar();
-  $$('[data-mov]').forEach(b => { b.onclick = () => mMov(b.dataset.mov, r.itens); });
 }
 async function extrato(i) {
   modal(esc(i.descricao), '<div class="carregando"><span class="spin"></span></div>', { semRodape: true, larga: true });
@@ -965,22 +1083,30 @@ async function vCad(tipo) {
   if (!C) return (location.hash = '#/inicio');
   titulo(C.t);
   const pode = can(C.perm), itens = S.dados[C.lista];
-  view(`<div class="cab"><h2>${C.t} · ${esc(S.dados.obra.nome)}</h2>${pode ? `<button class="btn" id="novo">${ic('plus')} Novo</button>` : ''}</div>
+  const inativos = itens.filter(x => !ativo(x, C.ativo)).length;
+  const ICN = { materiais: 'tag', fornecedores: 'truck', frentes: 'grid' };
+  const grupos = [{ t: 'Cadastros', itens: Object.keys(CAD).filter(k => k !== 'fornecedores' || can(['cad_fornecedores', ...P_COMPRAS, 'financeiro'])).map(k => ({ k: 'cad:' + k, t: CAD[k].t, i: ICN[k], n: S.dados[CAD[k].lista].filter(x => ativo(x, CAD[k].ativo)).length, on: k === tipo })) },
+    { t: 'Mostrar', itens: [{ k: 'ativos', t: 'Ativos', i: 'check', on: !VER_INAT }, { k: 'inativos', t: 'Desativados', i: 'eye', n: inativos, on: VER_INAT }] }];
+  if (pode) grupos.push({ t: 'Ações', itens: [{ k: 'novo', t: 'Novo cadastro', i: 'plus', cl: 'acao' }] });
+  view(comEtapas(grupos, `<div class="cab"><h2>${C.t}</h2><span class="contagem">${esc(S.dados.obra.nome)}</span></div>
     <div class="busca">${ic('search')}<input type="search" id="busca" placeholder="Buscar…"></div>
-    <label class="ck" style="margin-bottom:10px"><input type="checkbox" id="inat"> Mostrar desativados</label>
-    <div class="card" style="padding:4px 14px" id="lst"></div>`);
+    <div class="card" style="padding:4px 14px" id="lst"></div>`));
+  ligarEtapas(k => {
+    if (k === 'novo') return mCad(tipo);
+    if (k.startsWith('cad:')) { location.hash = '#/cad/' + k.slice(4); return; }
+    VER_INAT = k === 'inativos'; vCad(tipo);
+  });
   const desenhar = () => {
-    const t = norm($('#busca').value), inat = $('#inat').checked;
-    const l = itens.filter(x => (inat || ativo(x, C.ativo)) && (!t || norm(C.l1(x) + ' ' + C.l2(x)).includes(t))).sort((a, b) => String(C.l1(a)).localeCompare(String(C.l1(b))));
+    const t = norm($('#busca').value), inat = VER_INAT;
+    const l = itens.filter(x => (inat ? !ativo(x, C.ativo) : ativo(x, C.ativo)) && (!t || norm(C.l1(x) + ' ' + C.l2(x)).includes(t))).sort((a, b) => String(C.l1(a)).localeCompare(String(C.l1(b))));
     $('#lst').innerHTML = l.map(x => `<div class="arq ${pode ? 'click' : ''}" data-c="${esc(x.codigo)}" style="${pode ? 'cursor:pointer' : ''}"><span class="nome"><b>${esc(C.l1(x))}</b>${ativo(x, C.ativo) ? '' : ' <span class="badge b-canc">desativado</span>'}<br><small>${esc(C.l2(x))}</small></span>
       ${tipo === 'fornecedores' && x.telefone ? `<a class="btn sec peq" href="${wa(x.telefone, 'Olá! Aqui é da Size Engenharia.')}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>`).join('') || '<p class="vazio">Nenhum cadastro.</p>';
     if (pode) $$('#lst [data-c]').forEach(el => { el.onclick = e => { if (!e.target.closest('a')) mCad(tipo, itens.find(x => x.codigo === el.dataset.c)); }; });
   };
   $('#busca').oninput = desenhar;
-  $('#inat').onchange = desenhar;
   desenhar();
-  if (pode) $('#novo').onclick = () => mCad(tipo);
 }
+let VER_INAT = false;
 function mCad(tipo, o) {
   const C = CAD[tipo];
   const campo = ([k, t, op = {}]) => op.sel
@@ -1050,7 +1176,7 @@ function mUsuario(u) {
     <div class="g2"><label>Nome<input name="nome" required value="${esc(u?.nome || '')}"></label>
       <label>Usuário (login)<input name="login" required autocapitalize="none" autocorrect="off" value="${esc(u?.login || '')}" placeholder="ex: joao.silva"></label>
       <label>E-mail<input name="email" type="email" value="${esc(u?.email || '')}"></label><label>Telefone<input name="telefone" type="tel" value="${esc(u?.telefone || '')}"></label></div>
-    ${u ? '' : '<label>Senha provisória (mín. 6)<input name="senha" required minlength="6" autocomplete="new-password"></label><small>A pessoa troca a senha no primeiro acesso.</small>'}
+    ${u ? '' : `<label>Senha provisória (mín. 6)<input name="senha" required minlength="6" autocomplete="new-password" value="${senhaAleatoria()}"></label><small>Já sugerimos uma senha. A pessoa cria a dela no primeiro acesso. Depois de salvar, aparece o convite para enviar por WhatsApp ou e-mail.</small>`}
     <label class="ck"><input type="checkbox" name="ativo" ${!u || sim(u.ativo) ? 'checked' : ''}> Ativo</label>
     <label class="ck"><input type="checkbox" name="admin" ${u && sim(u.admin) ? 'checked' : ''}> Administrador (acesso total a todas as obras e à administração)</label>
     <div id="acessos"><h3>Acesso por obra</h3>${A.obras.map(o => {
@@ -1066,7 +1192,8 @@ function mUsuario(u) {
       const r = await api('admin_usuario_salvar', { usuario: { id: u?.id, nome: f.nome.value, login: f.login.value, email: f.email.value, telefone: f.telefone.value, admin: f.admin.checked, ativo: f.ativo.checked }, senha: f.senha?.value, acessos });
       toast(r.msg);
       if (u && u.id === S.sess.usuario.id) await recarregarSessao();
-      vUsuarios();
+      await vUsuarios();
+      if (!u) setTimeout(() => convite({ nome: f.nome.value, login: f.login.value.trim().toLowerCase(), email: f.email.value, telefone: f.telefone.value }, f.senha.value), 50);
     }
   });
   const sync = () => { $('#acessos', f).style.opacity = f.admin.checked ? .45 : 1; };
@@ -1080,10 +1207,31 @@ function mUsuario(u) {
     };
     cks.forEach(c => { c.onchange = () => { sel.value = perfilDe(cks.filter(x => x.checked).map(x => x.value)); }; });
   });
-  if (u) $('#senha').onclick = () => {
-    const s = prompt('Nova senha provisória para ' + u.nome + ' (mín. 6 caracteres):');
-    if (s) api('admin_senha', { usuario_id: u.id, senha: s }).then(r => toast(r.msg)).catch(e => toast(e.message, 1));
-  };
+  if (u) $('#senha').onclick = () => modal('Nova senha provisória', `<p>Para <b>${esc(u.nome)}</b> (@${esc(u.login)}). A pessoa cria a própria senha no próximo acesso.</p>
+    <label>Senha provisória (mín. 6)<input name="senha" required minlength="6" value="${senhaAleatoria()}"></label>`, {
+    ok: 'Definir e gerar convite',
+    onOk: async f2 => { toast((await api('admin_senha', { usuario_id: u.id, senha: f2.senha.value })).msg); setTimeout(() => convite(u, f2.senha.value), 50); }
+  });
+}
+
+/* convite de acesso: link do app + usuário + senha provisória, pronto para WhatsApp ou e-mail */
+function senhaAleatoria() {
+  const c = 'abcdefghjkmnpqrstuvwxyz23456789', a = new Uint32Array(8);
+  crypto.getRandomValues(a);
+  return 'Size' + [...a].map(x => c[x % c.length]).join('').slice(0, 6);
+}
+function convite(u, senha) {
+  const url = location.origin + location.pathname;
+  const txt = `Olá, ${u.nome.split(' ')[0]}! Seu acesso ao app da Size Engenharia está pronto.\n\nEndereço: ${url}\nUsuário: ${u.login}\nSenha provisória: ${senha}\n\nNo primeiro acesso você cria a sua senha. Para instalar no celular ou no computador, toque em "Instalar o app" na tela de entrada.`;
+  const tel = String(u.telefone || '').replace(/\D/g, '');
+  modal('Enviar acesso', `<div class="aviso ok">Acesso de <b>${esc(u.nome)}</b> pronto. Envie o convite:</div>
+    <pre class="convite">${esc(txt)}</pre>
+    <div class="acoes">
+      <a class="btn" href="${tel ? wa(tel, txt) : 'https://wa.me/?text=' + enc(txt)}" target="_blank" rel="noopener">WhatsApp${tel ? '' : ' (escolher contato)'}</a>
+      <a class="btn sec" href="mailto:${esc(u.email || '')}?subject=${enc('Seu acesso ao app da Size Engenharia')}&body=${enc(txt)}">E-mail</a>
+      <button type="button" class="btn sec" id="copiaConv">Copiar</button></div>
+    <small>A senha provisória só aparece aqui. Se perder, defina outra em Usuários e acessos.</small>`, { semRodape: true });
+  $('#copiaConv').onclick = async () => { try { await navigator.clipboard.writeText(txt); toast('Convite copiado.'); } catch (e) { prompt('Copie o convite:', txt); } };
 }
 
 async function vObras() {
@@ -1091,16 +1239,17 @@ async function vObras() {
   const A = await adm(true);
   view(`<div class="cab"><h2>${plural(A.obras.length, 'obra', 'obras')}</h2><button class="btn" id="nova">${ic('plus')} Nova obra</button></div>
     <div class="card" style="padding:4px 14px">${A.obras.map(o => `<div class="arq"><span class="nome"><b>${esc(o.nome)}</b> <span class="tipo">${esc(o.sigla)}</span>${sim(o.ativa) ? '' : ' <span class="badge b-canc">desativada</span>'}<br>
-      <small>${esc(o.endereco || 'sem endereço')} · criada ${fd(o.criada_em)}</small><br><small><a href="${esc(o.planilha_url)}" target="_blank" rel="noopener">Planilha</a> · <a href="${esc(o.pasta_url)}" target="_blank" rel="noopener">Pasta no Drive</a></small></span>
+      <small>${esc(o.endereco || 'sem endereço')} · criada ${fd(o.criada_em)}${o.email_financeiro ? ' · financeiro: ' + esc(o.email_financeiro) : ''}</small><br><small><a href="${esc(o.planilha_url)}" target="_blank" rel="noopener">Planilha</a> · <a href="${esc(o.pasta_url)}" target="_blank" rel="noopener">Pasta no Drive</a></small></span>
       <button class="btn sec peq" data-o="${esc(o.id)}">Editar</button></div>`).join('') || '<p class="vazio">Nenhuma obra. Crie a primeira.</p>'}</div>
     <p><small>Planilha central: <a href="${esc(A.central_url)}" target="_blank" rel="noopener">Size · Cadastros</a></small></p>`);
   $('#nova').onclick = () => modal('Nova obra', `<label>Nome da obra<input name="nome" required placeholder="ex: Residencial Prime Beach"></label>
     <label>Sigla (2 a 5 letras)<input name="sigla" required maxlength="5" style="text-transform:uppercase" placeholder="ex: PB"></label><small>Os pedidos da obra ficam numerados com a sigla: PB-0001, PB-0002…</small>
     <label>Endereço (vai nos e-mails aos fornecedores)<input name="endereco"></label>
+    <label>E-mail do financeiro desta obra <small>(opcional — recebe os avisos de pagamento)</small><input name="email_financeiro" placeholder="financeiro@…"></label>
     <div class="aviso info">Cria a planilha da obra (pedidos, fornecedores, materiais, estoque, frentes) já com os ${A.padrao.length} materiais padrão e as frentes padrão. Leva uns segundos.</div>`, {
     ok: 'Criar obra',
     onOk: async f => {
-      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value });
+      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value });
       toast(r.msg);
       await recarregarSessao();
       if (!S.obraId) { await trocarObra(r.id); location.hash = '#/admin/obras'; } else vObras();
@@ -1110,8 +1259,10 @@ async function vObras() {
     b.onclick = () => {
       const o = A.obras.find(x => x.id === b.dataset.o);
       modal('Editar obra', `<label>Nome<input name="nome" required value="${esc(o.nome)}"></label><label>Endereço<input name="endereco" value="${esc(o.endereco || '')}"></label>
+        <label>E-mail do financeiro desta obra <small>(se vazio, usa o geral das Configurações)</small><input name="email_financeiro" value="${esc(o.email_financeiro || '')}" placeholder="financeiro@…"></label>
+        <small>Quem tem o perfil Financeiro nesta obra (em Usuários e acessos) também recebe os avisos no e-mail do cadastro dele e as notificações no app.</small>
         <label class="ck"><input type="checkbox" name="ativa" ${sim(o.ativa) ? 'checked' : ''}> Obra ativa (desativada some para quem não é admin)</label>`, {
-        ok: 'Salvar', onOk: async f => { toast((await api('admin_obra_salvar', { id: o.id, nome: f.nome.value, endereco: f.endereco.value, ativa: f.ativa.checked })).msg); await recarregarSessao(); vObras(); }
+        ok: 'Salvar', onOk: async f => { toast((await api('admin_obra_salvar', { id: o.id, nome: f.nome.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, ativa: f.ativa.checked })).msg); await recarregarSessao(); vObras(); }
       });
     };
   });

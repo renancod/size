@@ -56,14 +56,23 @@ function emailFornecedor_(ctx, p, prefixo, titulo, intro, anexos) {
   } catch (e) { return false; } // a operação já foi gravada; o app avisa que o e-mail não saiu
 }
 
+/* destinatários do financeiro: e-mail da obra (ou o geral) + usuários com permissão de financeiro nesta obra */
+function emailsFinanceiro_(ctx) {
+  const c = config_(), lista = [];
+  String(ctx.obra.email_financeiro || c.EMAIL_FINANCEIRO || '').split(/[,;\s]+/).filter(Boolean).forEach(e => lista.push(e.toLowerCase()));
+  central_('Usuarios').all().filter(u => sim_(u.ativo) && u.email && !sim_(u.admin) && (permsDe_(u, ctx.obra.id) || []).indexOf('financeiro') >= 0)
+    .forEach(u => lista.push(String(u.email).trim().toLowerCase()));
+  return lista.filter((e, i) => lista.indexOf(e) === i);
+}
+
 function avisarFinanceiro_(ctx, p, motivo) {
-  const c = config_();
-  if (!c.EMAIL_FINANCEIRO) return;
+  const c = config_(), para = emailsFinanceiro_(ctx);
+  if (!para.length) return;
   const url = c.APP_URL ? String(c.APP_URL).replace(/\/?$/, '/') + '?obra=' + encodeURIComponent(ctx.obra.id) + '#/pedido/' + encodeURIComponent(p.numero) : '';
   const intro = '<b>' + h_(motivo) + '</b><br>Fornecedor: ' + h_(p.fornecedor) + ' · Valor: <b>' + brl_(p.valor_total) + '</b> · ' + h_(p.condicao) +
     (url ? '<br><a href="' + url + '">Abrir no app de Compras</a>' : '');
   try {
-    enviar_(c.EMAIL_FINANCEIRO, 'Financeiro · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_('Pagamento pendente', intro, linhasEmail_(ctx, [p]), true));
+    enviar_(para.join(','), 'Financeiro · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_('Pagamento pendente', intro, linhasEmail_(ctx, [p]), true));
   } catch (e) { /* aviso por e-mail é opcional */ }
 }
 

@@ -39,6 +39,7 @@ const ROTAS = {
   forn_link: { obra: true, perm: ['compras_cotar', 'compras_liberar', 'financeiro'], fn: fornLink_ },
   sessao: { fn: (q, ctx) => sessaoDe_(ctx.u) },
   trocarSenha: { lock: true, fn: trocarSenha_ },
+  notificacoes: { fn: notificacoes_ },
 
   obra_dados: { obra: true, fn: obraDados_ },
   pedidos_listar: { obra: true, fn: pedidosListar_ },

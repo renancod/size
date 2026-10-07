@@ -241,6 +241,40 @@ test('portal do fornecedor: orçamento pelo link, prazo de entrega e NF depois d
   assert.equal(com('forn_link', { fornecedor: 'F001', numeros: [n] }).nome, 'Casa');
 });
 
+test('notificações por etapa e financeiro por obra', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', email_financeiro: 'fin.pb@size.com' }).id;
+  const outra = t.adm('admin_obra_criar', { nome: 'Outra', sigla: 'OT' }).id;
+  const est = criarUsuario(t, 'est', 'Estoque', obra);
+  const com = criarUsuario(t, 'compras', 'Compras', obra);
+  const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
+  const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
+  const etapas = f => f('notificacoes').itens.filter(i => i.etapa !== 'meu').map(i => i.etapa + ':' + i.numero);
+  com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Casa', email: 'casa@x.com' } });
+  const n = est('pedido_criar', { itens: [{ descricao: 'Cimento', qtd: 5, unidade: 'sc' }] }).numero;
+  t.adm('pedido_criar', { obra: outra, itens: [{ descricao: 'Areia', qtd: 1, unidade: 'm³' }] }); // obra sem acesso: ninguém daqui vê
+  assert.deepEqual(etapas(com), ['cotar:' + n]);
+  assert.deepEqual(etapas(apr), []);
+  assert.deepEqual(etapas(fin), []);
+  assert.ok(est('notificacoes').itens.some(i => i.etapa === 'meu' && i.situacao === 'Aberto'));
+  com('orcamento_salvar', { pedido: n, fornecedor_cod: 'F001', valor: 500, arquivo: PDF });
+  assert.deepEqual(etapas(com), ['definir:' + n]);
+  com('pedido_definir', { numero: n, orcamento: com('pedido_detalhe', { numero: n }).orcamentos[0].id, condicao: 'Faturamento direto' });
+  assert.deepEqual(etapas(apr), ['aprovar:' + n]);
+  const antes = t.G._enviados.length;
+  apr('pedido_aprovar', { numero: n });
+  assert.deepEqual(etapas(fin), ['pagar:' + n]);
+  assert.equal(t.G._enviados.length, antes + 1);
+  assert.match(t.G._enviados.at(-1).para, /fin\.pb@size\.com/); // e-mail do financeiro DESTA obra
+  fin('pedido_pagar', { numero: n, forma: 'PIX', comprovante: PDF });
+  assert.deepEqual(etapas(est), ['receber:' + n]);
+  const meus = est('notificacoes').itens.filter(i => i.etapa === 'meu');
+  assert.equal(meus.length, 1);
+  assert.equal(meus[0].situacao, 'Entrega liberada'); // o id muda a cada etapa → aviso novo
+  t.adm('admin_obra_salvar', { id: obra, nome: 'Prime Beach', email_financeiro: 'outro@size.com', ativa: true });
+  assert.equal(t.adm('admin_dados').obras.find(o => o.id === obra).email_financeiro, 'outro@size.com');
+});
+
 test('cancelamento e devolução respeitam a etapa', () => {
   const t = preparar();
   const obra = t.adm('admin_obra_criar', { nome: 'Obra C', sigla: 'OC' }).id;
