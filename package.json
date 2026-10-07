@@ -1,0 +1,9 @@
+{
+  "name": "compras-size",
+  "private": true,
+  "description": "Compras · Size Engenharia — app de pedidos, compras, estoque e financeiro (Apps Script + Google Sheets)",
+  "scripts": {
+    "test": "node --test test/fluxo.test.js",
+    "demo": "node test/servidor.js"
+  }
+}
