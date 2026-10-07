@@ -126,9 +126,19 @@ function pub_(o) {
   Object.keys(o).forEach(k => { if (k !== '_l' && k !== 'senha_hash' && k !== 'salt') r[k] = fmtVal_(o[k]); });
   return r;
 }
+const APP_URL_PADRAO = 'https://renancod.github.io/size/';
+
 function config_() {
   const c = {};
-  central_('Config').all().forEach(r => { c[String(r.chave).trim()] = r.valor; });
+  const C = central_('Config');
+  C.all().forEach(r => { c[String(r.chave).trim()] = r.valor; });
+  // o app mudou de endereço (compras-size → size): corrige a configuração uma vez
+  if (/\/compras-size\/?$/.test(String(c.APP_URL || ''))) {
+    const r = C.all().find(x => String(x.chave).trim() === 'APP_URL');
+    r.valor = APP_URL_PADRAO;
+    C.update(r);
+    c.APP_URL = APP_URL_PADRAO;
+  }
   return c;
 }
 function log_(ctx, acao, detalhe) {

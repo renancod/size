@@ -8,7 +8,7 @@ const PORTAL_DIAS = 60;
 
 function linkFornecedor_(ctx, fornCod, numeros) {
   const c = Utilities.base64EncodeWebSafe(JSON.stringify({ o: String(ctx.obra.id), f: String(fornCod), n: [].concat(numeros).map(String), e: Date.now() + PORTAL_DIAS * 864e5 }), Utilities.Charset.UTF_8);
-  const base = String(config_().APP_URL || 'https://renancod.github.io/compras-size/').replace(/\/?$/, '/');
+  const base = String(config_().APP_URL || APP_URL_PADRAO).replace(/\/?$/, '/');
   return base + 'fornecedor.html?t=' + c + '.' + assinar_('forn' + c);
 }
 

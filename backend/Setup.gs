@@ -23,7 +23,7 @@ const CONFIG_PADRAO = [
   ['REGRAS_ORCAMENTO', '', 'Faixas por valor, ex: 5000:2; 20000:3 (a partir de R$ 5.000 exige 2; de R$ 20.000 exige 3)'],
   ['PRAZO_FATURADO_PADRAO', 30, 'Prazo padrão (dias) do faturamento'],
   ['EMAIL_FINANCEIRO', '', 'E-mail(s) do financeiro, separados por vírgula (aviso de pagamento pendente)'],
-  ['APP_URL', 'https://renancod.github.io/compras-size/', 'Endereço do app (ex: https://renancod.github.io/compras-size/) para links nos e-mails'],
+  ['APP_URL', 'https://renancod.github.io/size/', 'Endereço do app (ex: https://renancod.github.io/size/) para links nos e-mails'],
   ['FRENTES_PADRAO', 'Canteiro; Fundação; Estrutura; Alvenaria; Instalações elétricas; Instalações hidrossanitárias; Cobertura; Revestimentos; Pintura; Acabamento', 'Frentes de trabalho criadas em toda obra nova (separe com ;)']
 ];
 const UNIDADES_PADRAO = ['un', 'pç', 'm', 'm²', 'm³', 'kg', 't', 'sc', 'L', 'gl', 'lata', 'cx', 'rolo', 'barra', 'par', 'jg', 'vb', 'h', 'dia', 'mês'];
