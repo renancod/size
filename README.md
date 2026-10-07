@@ -1,4 +1,8 @@
-# Compras · Size Engenharia
+# Size Engenharia — sistema de gestão
+
+App único da Size organizado em **módulos** (menu lateral). Hoje: **Compras**. Próximo: **Diário de obra**.
+
+## Módulo Compras
 
 App único (PWA para Android e iPhone) para **pedidos de material, cotação, aprovação, liberação de entrega, recebimento, estoque e financeiro** das obras da Size Engenharia.
 Substitui os apps `COMPRAS-SIZE-02` (abertura de pedido) e `COMPRAS-SIZE-03` (gestão de compras).

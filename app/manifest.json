@@ -1,7 +1,7 @@
 {
-  "name": "Compras · Size Engenharia",
-  "short_name": "Compras Size",
-  "description": "Pedidos, cotações, aprovações, recebimento, estoque e financeiro das obras da Size Engenharia",
+  "name": "Size Engenharia",
+  "short_name": "Size",
+  "description": "Sistema de gestão da Size Engenharia: compras, estoque, financeiro e, em breve, diário de obra",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

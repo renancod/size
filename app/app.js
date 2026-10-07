@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
- * Compras · Size Engenharia — app único (pedido, compras, estoque, financeiro, cadastros, admin)
+ * Size Engenharia — app de gestão por módulos (hoje: Compras; próximos: Diário de obra…)
  * Dados: Google Apps Script (API_URL em config.js) → planilha central + uma planilha por obra.
  * ===================================================================== */
 
@@ -42,7 +42,8 @@ const IC = {
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9', search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6', back: 'M19 12H5M12 19l-7-7 7-7',
-  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  book: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z', chevron: 'M9 18l6-6-6-6'
 };
 const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${IC[n]}"/></svg>`;
 
@@ -97,7 +98,7 @@ let PROMPT_INSTALAR = null;
 const instalado = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); PROMPT_INSTALAR = e; });
-addEventListener('appinstalled', () => { PROMPT_INSTALAR = null; $$('.instalar').forEach(b => b.remove()); toast('App instalado! Abra pelo ícone "Compras Size".'); });
+addEventListener('appinstalled', () => { PROMPT_INSTALAR = null; $$('.instalar').forEach(b => b.remove()); toast('App instalado! Abra pelo ícone "Size".'); });
 const botaoInstalar = cl => instalado() ? '' : `<button type="button" class="instalar ${cl}" onclick="instalar()">${ic('download')}<span>Instalar o app</span></button>`;
 async function instalar() {
   if (PROMPT_INSTALAR) {
@@ -108,7 +109,7 @@ async function instalar() {
   }
   const passos = ehIOS()
     ? `<h3>iPhone / iPad</h3><ol><li>Abra este endereço no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> (o quadrado com a seta para cima ⬆️).</li>
-       <li>Role e toque em <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>. O ícone "Compras Size" aparece junto dos outros apps.</li></ol>`
+       <li>Role e toque em <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>. O ícone "Size" aparece junto dos outros apps.</li></ol>`
     : `<h3>Android (Chrome)</h3><ol><li>Toque no menu <b>⋮</b> no canto superior.</li><li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>).</li></ol>
        <h3>Computador (Chrome ou Edge)</h3><ol><li>Clique no ícone de instalar na barra de endereço (monitor com seta ⬇️), ou no menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar → Instalar página como app</b> (Chrome) / <b>Aplicativos → Instalar este site como aplicativo</b> (Edge).</li></ol>
        <h3>iPhone / iPad</h3><p>No Safari: Compartilhar ⬆️ → Adicionar à Tela de Início.</p>`;
@@ -170,28 +171,46 @@ const FILTROS = {
 const conta = k => (S.ped || []).filter(FILTROS[k].f).length;
 
 /* ---------- estrutura (menu lateral + topo) ---------- */
-const NAV = [
-  { h: '#/inicio', t: 'Início', i: 'home', ok: () => true },
-  { h: '#/novo', t: 'Novo pedido', i: 'plus', ok: () => can('pedido_abrir') },
-  { h: '#/pedidos', t: 'Pedidos', i: 'list', ok: () => true },
-  { h: '#/pedidos?k=compras', t: 'Compras', i: 'cart', ok: () => can(P_COMPRAS), c: 'compras' },
-  { h: '#/pedidos?k=receber', t: 'Recebimento', i: 'box', ok: () => can('pedido_receber'), c: 'receber' },
-  { h: '#/estoque', t: 'Estoque', i: 'layers', ok: () => can(['estoque_ver', 'estoque_movimentar', 'pedido_receber']) },
-  { h: '#/financeiro', t: 'Financeiro', i: 'money', ok: () => can('financeiro'), c: 'pagar' },
-  { sep: 'Cadastros da obra', ok: () => true },
-  { h: '#/cad/materiais', t: 'Materiais', i: 'tag', ok: () => true },
-  { h: '#/cad/fornecedores', t: 'Fornecedores', i: 'truck', ok: () => can(['cad_fornecedores', ...P_COMPRAS, 'financeiro']) },
-  { h: '#/cad/frentes', t: 'Frentes de trabalho', i: 'grid', ok: () => true },
+/* Módulos do app Size Engenharia. Cada módulo abre seus itens no menu lateral.
+ * Para criar um novo módulo: acrescente aqui (itens + rotas) e as telas correspondentes. */
+const MODULOS = [
+  {
+    id: 'compras', t: 'Compras', i: 'cart', home: '#/compras',
+    desc: 'Pedidos de material, cotação, aprovação, recebimento, estoque e pagamentos',
+    rotas: /^#\/(compras|novo|pedidos|pedido\/|estoque|financeiro|cad\/(materiais|fornecedores))/,
+    itens: [
+      { h: '#/compras', t: 'Painel', i: 'home', ok: () => true },
+      { h: '#/novo', t: 'Novo pedido', i: 'plus', ok: () => can('pedido_abrir') },
+      { h: '#/pedidos', t: 'Pedidos', i: 'list', ok: () => true },
+      { h: '#/pedidos?k=compras', t: 'Cotação e compra', i: 'cart', ok: () => can(P_COMPRAS), c: 'compras' },
+      { h: '#/pedidos?k=receber', t: 'Recebimento', i: 'box', ok: () => can('pedido_receber'), c: 'receber' },
+      { h: '#/estoque', t: 'Estoque', i: 'layers', ok: () => can(['estoque_ver', 'estoque_movimentar', 'pedido_receber']) },
+      { h: '#/financeiro', t: 'Financeiro', i: 'money', ok: () => can('financeiro'), c: 'pagar' },
+      { h: '#/cad/materiais', t: 'Materiais', i: 'tag', ok: () => true },
+      { h: '#/cad/fornecedores', t: 'Fornecedores', i: 'truck', ok: () => can(['cad_fornecedores', ...P_COMPRAS, 'financeiro']) }
+    ]
+  },
+  { id: 'diario', t: 'Diário de obra', i: 'book', breve: true, desc: 'Registro diário da obra: clima, equipe, serviços executados, fotos e ocorrências' }
+];
+const NAV_GERAL = [
+  { sep: 'Obra', ok: () => !!S.dados },
+  { h: '#/cad/frentes', t: 'Frentes de trabalho', i: 'grid', ok: () => !!S.dados },
   { sep: 'Administração', ok: admin },
   { h: '#/admin/usuarios', t: 'Usuários e acessos', i: 'users', ok: admin },
   { h: '#/admin/obras', t: 'Obras', i: 'building', ok: admin },
   { h: '#/admin/config', t: 'Configurações', i: 'sliders', ok: admin }
 ];
+/* pendências do usuário no módulo Compras (soma do que ele pode agir) */
+function pendenciasCompras() {
+  if (!S.ped) return 0;
+  return [['cotar', 'compras_cotar'], ['aprovar', 'compras_aprovar'], ['liberar', 'compras_liberar'], ['receber', 'pedido_receber'], ['pagar', 'financeiro']]
+    .filter(([, p]) => can(p)).reduce((s, [k]) => s + conta(k), 0);
+}
 
 function montarShell() {
   $('#raiz').innerHTML = `<div class="shell">
     <aside class="menu" id="menu">
-      <div class="marca"><img src="icon-192.png" alt=""><div><b>Compras</b><small>Size Engenharia</small></div></div>
+      <div class="marca"><img src="icon-192.png" alt=""><div><b>Size Engenharia</b><small>Sistema de gestão</small></div></div>
       <label class="obrasel">Obra<select id="obrasel"></select></label>
       <nav class="nav" id="nav"></nav>
       ${botaoInstalar('no-menu')}
@@ -227,23 +246,44 @@ function montarMenu() {
   const obras = S.sess.obras;
   $('#obrasel').innerHTML = obras.length ? obras.map(o => `<option value="${esc(o.id)}" ${o.id === S.obraId ? 'selected' : ''}>${esc(o.nome)}${o.ativa ? '' : ' (desativada)'}</option>`).join('') : '<option>Nenhuma obra liberada</option>';
   $('#obranome').textContent = obraAtual()?.nome || '';
-  $('#nav').innerHTML = NAV.filter(n => S.dados || n.h?.startsWith('#/admin') || n.sep === 'Administração')
-    .filter(n => n.ok()).map(n => n.sep ? `<div class="sep">${n.sep}</div>`
-      : `<a href="${n.h}" data-h="${n.h}">${ic(n.i)}<span>${n.t}</span>${n.c ? `<span class="cont" data-c="${n.c}" hidden></span>` : ''}</a>`).join('');
+  const link = n => `<a href="${n.h}" data-h="${n.h}">${ic(n.i)}<span>${n.t}</span>${n.c ? `<span class="cont" data-c="${n.c}" hidden></span>` : ''}</a>`;
+  const aberto = LS.get('cs_mod') || 'compras';
+  $('#nav').innerHTML = `<a href="#/inicio" data-h="#/inicio">${ic('home')}<span>Início</span></a>
+    <div class="sep">Módulos</div>
+    ${MODULOS.map(m => m.breve
+      ? `<div class="mod breve">${ic(m.i)}<span>${m.t}</span><small>em breve</small></div>`
+      : !S.dados ? '' : `<button type="button" class="mod" data-mod="${m.id}" aria-expanded="${aberto === m.id}">${ic(m.i)}<span>${m.t}</span><span class="cont" data-c="mod-${m.id}" hidden></span>${ic('chevron')}</button>
+        <div class="sub" data-sub="${m.id}" ${aberto === m.id ? '' : 'hidden'}>${m.itens.filter(n => n.ok()).map(link).join('')}</div>`).join('')}
+    ${NAV_GERAL.filter(n => n.ok()).map(n => n.sep ? `<div class="sep">${n.sep}</div>` : link(n)).join('')}`;
+  $$('#nav .mod[data-mod]').forEach(b => {
+    b.onclick = () => {
+      const sub = $(`#nav [data-sub="${b.dataset.mod}"]`), abrir = sub.hidden;
+      $$('#nav .sub').forEach(s => { s.hidden = true; });
+      $$('#nav .mod[data-mod]').forEach(x => x.setAttribute('aria-expanded', 'false'));
+      sub.hidden = !abrir;
+      b.setAttribute('aria-expanded', String(abrir));
+      LS.set('cs_mod', abrir ? b.dataset.mod : '-');
+    };
+  });
   marcarMenu();
   contadores();
 }
 function marcarMenu() {
   const h = location.hash || '#/inicio';
   $$('#nav a').forEach(a => a.classList.toggle('on', h === a.dataset.h || (a.dataset.h === '#/pedidos' && /^#\/pedido\//.test(h))));
+  const m = MODULOS.find(x => x.rotas && x.rotas.test(h));
+  if (m) {
+    const sub = $(`#nav [data-sub="${m.id}"]`);
+    if (sub && sub.hidden) { sub.hidden = false; $(`#nav [data-mod="${m.id}"]`).setAttribute('aria-expanded', 'true'); }
+  }
 }
 function contadores() {
   $$('#nav .cont').forEach(c => {
-    const n = S.ped ? conta(c.dataset.c) : 0;
+    const n = !S.ped ? 0 : c.dataset.c === 'mod-compras' ? pendenciasCompras() : conta(c.dataset.c);
     c.textContent = n; c.hidden = !n;
   });
 }
-function titulo(t) { $('#titulo').textContent = t; document.title = t + ' · Compras Size'; }
+function titulo(t) { $('#titulo').textContent = t; document.title = t + ' · Size Engenharia'; }
 function view(html) { $('#view').innerHTML = html; }
 function carregandoView() { view('<div class="carregando"><span class="spin"></span></div>'); }
 
@@ -258,7 +298,7 @@ async function trocarObra(id) {
 
 /* ---------- rotas ---------- */
 const ROTAS = [
-  [/^#?\/?(inicio)?$/, vInicio], [/^#\/novo$/, vNovo], [/^#\/pedidos(?:\?(.*))?$/, vPedidos], [/^#\/pedido\/(.+)$/, vPedido],
+  [/^#?\/?(inicio)?$/, vHome], [/^#\/compras$/, vInicio], [/^#\/novo$/, vNovo], [/^#\/pedidos(?:\?(.*))?$/, vPedidos], [/^#\/pedido\/(.+)$/, vPedido],
   [/^#\/estoque$/, vEstoque], [/^#\/financeiro(?:\?(.*))?$/, vFinanceiro], [/^#\/cad\/(\w+)$/, vCad], [/^#\/conta$/, vConta],
   [/^#\/admin\/usuarios$/, vUsuarios], [/^#\/admin\/obras$/, vObras], [/^#\/admin\/config$/, vConfig]
 ];
@@ -289,7 +329,7 @@ function semObra() {
 /* ---------- login ---------- */
 function telaLogin(msg) {
   $('#raiz').innerHTML = `<div class="login"><form class="card" id="f">
-    <img class="logo" src="logo.png" alt="Size Engenharia"><div class="sistema">Gestão de Compras</div>
+    <img class="logo" src="logo.png" alt="Size Engenharia"><div class="sistema">Sistema de gestão</div>
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
@@ -393,8 +433,22 @@ async function verArquivo(id) {
  * ===================================================================== */
 
 /* ---------- início ---------- */
-async function vInicio() {
+/* ---------- início: módulos ---------- */
+async function vHome() {
   titulo('Início');
+  if (S.dados) await pedidos();
+  const pend = pendenciasCompras();
+  view(`<div class="cab"><h2>Olá, ${esc(S.sess.usuario.nome.split(' ')[0])}</h2>${obraAtual() ? `<span class="badge">${esc(obraAtual().nome)}</span>` : ''}</div>
+    <div class="modulos">${MODULOS.map(m => m.breve
+      ? `<div class="modulo breve"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small><span class="badge">em breve</span></div>`
+      : `<a class="modulo" href="${m.home}"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small>
+          ${m.id === 'compras' && pend ? `<span class="badge b-apr">${plural(pend, 'pendência', 'pendências')}</span>` : ''}</a>`).join('')}</div>
+    ${can('pedido_abrir') ? `<div class="acoes" style="margin-top:16px"><a class="btn" href="#/novo">${ic('plus')} Novo pedido de material</a></div>` : ''}`);
+}
+
+/* ---------- compras: painel ---------- */
+async function vInicio() {
+  titulo('Compras');
   const ps = await pedidos();
   const cards = [
     ['cotar', 'compras_cotar'], ['cotacao', ['compras_cotar', 'compras_definir']], ['aprovar', 'compras_aprovar'], ['liberar', 'compras_liberar'],
