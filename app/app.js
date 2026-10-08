@@ -429,7 +429,7 @@ function fecharModal() { const m = $('#modal'); m.classList.remove('on'); m.inne
 /* ---------- notificações: o que cada perfil tem para fazer, em todas as obras ---------- */
 const ETAPA_NOTIF = {
   cotar: ['Para cotar', 'cart'], definir: ['Orçamentos recebidos', 'file'], aprovar: ['Aprovar compra', 'check'], liberar: ['Liberar entrega', 'truck'],
-  receber: ['Receber material', 'box'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
+  receber: ['Receber material', 'box'], entrega: ['Previsão de entrega', 'truck'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
   pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
@@ -554,6 +554,7 @@ async function vInicio() {
 function cartao(p, sel) {
   const it = p.itens || [], f = it[0];
   const prazo = p.fin === 'A pagar' && p.vencimento ? `<span class="${vencido(p.vencimento) ? 'atrasado' : ''}">vence ${fd(p.vencimento)}</span>`
+    : p.previsao && ['Entrega liberada', 'Recebido parcial'].includes(p.entrega) ? `<span class="${vencido(p.previsao) ? 'atrasado' : ''}">entrega prevista ${fd(p.previsao)}</span>`
     : p.necessidade && FILTROS.andamento.f(p) ? `<span class="${vencido(p.necessidade) && !['Recebido'].includes(p.situacao) ? 'atrasado' : ''}">até ${fd(p.necessidade)}</span>` : '';
   return `<div class="ped" data-st="${SIT_CL[p.situacao] || ''}" data-num="${esc(p.numero)}">${sel ? `<input type="checkbox" class="sel" data-sel="${esc(p.numero)}" ${sel.has(p.numero) ? 'checked' : ''}>` : ''}
     <div class="corpo"><div class="l1"><b>${esc(p.numero)}</b>${badge(p.situacao)}${tagPrio(p)}<span class="dir">${brl(p.valor_total)}</span></div>

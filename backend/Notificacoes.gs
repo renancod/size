@@ -30,8 +30,13 @@ function notificacoes_(q, ctx) {
       if (sit === 'Em cotação' && orcs[p.numero] && pode('compras_definir')) add('definir', orcs[p.numero] + ' orçamento(s) recebido(s) — definir a compra');
       if (sit === 'Aguardando aprovação' && pode('compras_aprovar')) add('aprovar', 'Aprovar compra: ' + p.fornecedor + ' ' + brl_(p.valor_total));
       if (sit === 'Liberar entrega' && pode('compras_liberar')) add('liberar', 'Compra aprovada — liberar a entrega');
-      if (p.status === 'Aprovado' && ['Entrega liberada', 'Recebido parcial'].indexOf(p.entrega) >= 0 && pode('pedido_receber'))
-        add('receber', (p.entrega === 'Recebido parcial' ? 'Restante a receber' : 'Material a caminho') + (p.previsao ? ' · previsto ' + fd(p.previsao) : ''));
+      // a data prevista entra no id: quando o fornecedor informa ou muda a data, sai um aviso novo
+      const prev = p.previsao instanceof Date ? Utilities.formatDate(p.previsao, tz_(), 'yyyy-MM-dd') : '';
+      const aCaminho = p.status === 'Aprovado' && ['Entrega liberada', 'Recebido parcial'].indexOf(p.entrega) >= 0;
+      if (aCaminho && pode('pedido_receber'))
+        add('receber', (p.entrega === 'Recebido parcial' ? 'Restante a receber' : 'Material a caminho') + (prev ? ' · entrega prevista ' + fd(p.previsao) + ' (' + p.fornecedor + ')' : ''), prev);
+      else if (aCaminho && prev && pode(['compras_liberar', 'compras_definir']))
+        add('entrega', 'Entrega prevista para ' + fd(p.previsao) + ' · ' + p.fornecedor, prev);
       if (p.status === 'Aprovado' && p.fin === 'Aguardando pagamento' && pode('financeiro')) add('pagar', 'Pagamento antecipado (libera a entrega): ' + brl_(p.valor_total));
       if (p.status === 'Aprovado' && p.fin === 'A pagar' && pode('financeiro')) {
         const dias = diasAte_(p.vencimento);
