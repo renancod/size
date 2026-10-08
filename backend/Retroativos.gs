@@ -15,6 +15,33 @@ const RETRO_BACIA02_ = [
   ['2026-10-07', 5, 'Village 06: 5 T coletores executados — rua concluída (29 un).']
 ];
 function lancarRetroativoBacia02(ctxAdmin) {
+  const r1 = lancarRetroativoBacia02Diarios_(ctxAdmin);
+  const r2 = equipeRetroativoBacia02_(ctxAdmin);
+  return r1 + ' · ' + r2;
+}
+/* equipe VN Hidráulica (3 colaboradores) nos mesmos 8 dias */
+function equipeRetroativoBacia02_(ctxAdmin) {
+  const C = central_('Config');
+  if (C.all().some(r => r.chave === 'RETRO_BACIA02_EQ')) return 'equipe já lançada';
+  if (!C.all().some(r => r.chave === 'RETRO_BACIA02')) return 'aguardando diários';
+  const o = central_('Obras').all().find(x => String(x.sigla).toUpperCase() === 'PB');
+  const u = (ctxAdmin && ctxAdmin.u) || central_('Usuarios').all().find(x => norm_(x.login) === 'renan');
+  const ctx = { u: u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
+  const L = LockService.getScriptLock();
+  L.waitLock(30000);
+  try {
+    if (C.all().some(r => r.chave === 'RETRO_BACIA02_EQ')) return 'equipe já lançada';
+    const T = obraTab_(ctx, 'Equipes');
+    if (!T.all().some(e => norm_(e.nome) === norm_('VN Hidráulica'))) execEquipeSalvar_({ nome: 'VN Hidráulica', pessoas: 3 }, ctx);
+    RETRO_BACIA02_.forEach(r => execDiarioSalvar_({
+      data: r[0], motivo: 'Lançamento retroativo — equipe VN Hidráulica (3 colaboradores)',
+      etapas: ['ET001'], equipes: [{ etapa: 'ET001', equipe: 'VN Hidráulica', pessoas: 3 }]
+    }, ctx));
+    C.insert({ chave: 'RETRO_BACIA02_EQ', valor: 'Sim', descricao: 'Equipe VN Hidráulica (3) lançada nos diários retroativos da Bacia 02 em ' + hoje_() });
+  } finally { L.releaseLock(); }
+  return 'equipe lançada';
+}
+function lancarRetroativoBacia02Diarios_(ctxAdmin) {
   const C = central_('Config');
   if (C.all().some(r => r.chave === 'RETRO_BACIA02')) return 'já lançado';
   const o = central_('Obras').all().find(x => String(x.sigla).toUpperCase() === 'PB');

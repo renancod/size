@@ -201,6 +201,14 @@ test('retroativo Bacia 02 (Prime Beach): 8 diários, 75 T coletores, uma vez só
   assert.ok(d.diarios.every(x => x.status === 'Enviado'));
   assert.equal(adm('exec_diario', { obra, data: '2026-10-07' }).lancamentos[0].qtd, 5);
   assert.match(adm('exec_diario', { obra, data: '2026-10-02' }).diario.obs, /2 não foram executadas/);
+  assert.equal(d.equipes[0].nome, 'VN Hidráulica');
+  assert.equal(d.equipes[0].pessoas, 3);
+  assert.equal(tee.homem_dia, 24);              // 8 dias × 3 colaboradores
+  assert.equal(tee.prod_hd, 3.13);              // 75 un ÷ 24 homens-dia
+  assert.equal(adm('exec_diario', { obra, data: '2026-09-28' }).equipes[0].equipe, 'VN Hidráulica');
   adm('exec_dados', { obra }); // abrir de novo não lança outra vez
-  assert.equal(adm('exec_dados', { obra }).etapas[0].itens[0].executado, 75);
+  const d2 = adm('exec_dados', { obra });
+  assert.equal(d2.etapas[0].itens[0].executado, 75);
+  assert.equal(d2.equipes.length, 1);
+  assert.equal(d2.etapas[0].itens[0].homem_dia, 24);
 });
