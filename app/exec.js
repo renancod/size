@@ -7,7 +7,7 @@
 Object.assign(IC, {
   chart: 'M3 3v18h18M7 16l4-4 3 3 6-6', camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   cloud: 'M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z', printer: 'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
-  left: 'M15 18l-6-6 6-6', right: 'M9 18l6-6-6-6', wifi: 'M5 12.6a10 10 0 0 1 14 0M1.4 9a15 15 0 0 1 21.2 0M8.5 16.1a5 5 0 0 1 7 0M12 20h.01', edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'
+  left: 'M15 18l-6-6 6-6', calendar: 'M3 4h18v18H3zM16 2v4M8 2v4M3 10h18', right: 'M9 18l6-6-6-6', wifi: 'M5 12.6a10 10 0 0 1 14 0M1.4 9a15 15 0 0 1 21.2 0M8.5 16.1a5 5 0 0 1 7 0M12 20h.01', edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'
 });
 const DSEM = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const SX = {
@@ -318,15 +318,39 @@ function pegarGPS(espera = 12000) {
     navigator.geolocation.getCurrentPosition(p => { GPS = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), em: Date.now() }; ok(GPS); }, () => ok(null), { enableHighAccuracy: true, timeout: espera, maximumAge: 120000 });
   });
 }
-async function vDiario(data) {
-  const dia = data && /^\d{4}-\d{2}-\d{2}$/.test(data) && data <= hoje() ? data : hoje();
-  titulo('Diário de obra');
-  const D = await carregarExec();
-  let srv = null;
-  try { srv = await api('exec_diario', { data: dia }); } catch (e) {
+/* troca de dia: só o conteúdo muda (o topo com a data fica); dias já abertos vêm da memória */
+const DIAS = {};
+let DIA_SEQ = 0;
+async function buscarDia(dia) {
+  const k = S.obraId + '|' + dia, c = DIAS[k];
+  if (c && Date.now() - c.em < 90000) return c.srv;
+  try { const srv = await api('exec_diario', { data: dia }); DIAS[k] = { srv, em: Date.now() }; return srv; } catch (e) {
     if (!e.rede) throw e;
-    srv = { data: dia, util: util(dia), feriado: feriado(dia), diario: null, lancamentos: [], equipes: [], fotos: [], pode_editar: true, offline: true };
+    return { data: dia, util: util(dia), feriado: feriado(dia), diario: null, lancamentos: [], equipes: [], fotos: [], pode_editar: true, offline: true };
   }
+}
+const esquecerDia = d => { delete DIAS[S.obraId + '|' + d]; };
+async function vDiario(data) {
+  titulo('Diário de obra');
+  await carregarExec();
+  await carregarDia(data);
+}
+function irDia(d) {
+  if (!d) return;
+  if (d > hoje()) d = hoje();
+  if (DIA && d === DIA.data) return;
+  history.replaceState(null, '', '#/diario/' + d);
+  carregarDia(d).catch(e => toast(e.message, 1));
+}
+async function carregarDia(data) {
+  const dia = data && /^\d{4}-\d{2}-\d{2}$/.test(data) && data <= hoje() ? data : hoje(), seq = ++DIA_SEQ, D = EX.d;
+  marcarNav(dia);
+  const corpo = $('#diaCorpo');
+  if (corpo) corpo.classList.add('trocando');
+  const srv = await buscarDia(dia);
+  if (seq !== DIA_SEQ) return; // o usuário já foi para outro dia
+  // pré-carrega o dia anterior para a seta responder na hora
+  setTimeout(() => { if (seq === DIA_SEQ && !DIAS[S.obraId + '|' + addD(dia, -1)]) buscarDia(addD(dia, -1)).catch(() => {}); }, 400);
   const eu = S.sess.usuario.id, eng = can('exec_planejar'), lancar = can(['exec_lancar', 'exec_planejar']);
   // estado do formulário: do servidor + rascunho guardado no aparelho (se houver)
   DIA = { data: dia, srv, etapas: [], lanc: {}, eq: {}, condicao: srv.diario?.condicao || '', ocorrencias: srv.diario?.ocorrencias || '', obs: srv.diario?.obs || '', motivo: '' };
@@ -398,15 +422,41 @@ function salvarRascunho() {
   LS.set(chaveRasc(DIA.data), JSON.stringify({ etapas: DIA.etapas, lanc: DIA.lanc, eq: DIA.eq, condicao: DIA.condicao, ocorrencias: DIA.ocorrencias, obs: DIA.obs }));
   DIA.rasc = true;
 }
+/* topo do diário: ◀ data ▶ + botão de calendário (abre o seletor do aparelho) */
+function marcarNav(dia) {
+  const n = $('#diaNav');
+  if (!n) return;
+  $('#dTxt', n).innerHTML = `<b>${fd(dia)}</b> ${dsem(dia)}${dia === hoje() ? ' <small class="hoje-tag">hoje</small>' : ''}`;
+  $('#dData', n).value = dia;
+  $('#dData', n).max = hoje();
+  $('#dProx', n).disabled = dia >= hoje();
+  $('#dHoje', n).hidden = dia === hoje();
+}
+function ligarNav() {
+  const n = $('#diaNav');
+  n.innerHTML = `<button class="icbtn" id="dAnt" aria-label="Dia anterior">${ic('left')}</button>
+    <button type="button" class="dia-data" id="dTxt" aria-label="Escolher a data"></button>
+    <span class="cal"><button type="button" class="icbtn" id="dCal" aria-label="Abrir calendário">${ic('calendar')}</button><input type="date" id="dData" tabindex="-1" aria-hidden="true"></span>
+    <button class="icbtn" id="dProx" aria-label="Próximo dia">${ic('right')}</button>
+    <button type="button" class="chip" id="dHoje">Hoje</button>`;
+  const inp = $('#dData', n);
+  const abrir = () => { try { inp.showPicker(); } catch (e) { inp.focus(); inp.click(); } };
+  $('#dCal', n).onclick = abrir;
+  $('#dTxt', n).onclick = abrir;
+  inp.onchange = () => irDia(inp.value);
+  $('#dAnt', n).onclick = () => irDia(addD(DIA ? DIA.data : hoje(), -1));
+  $('#dProx', n).onclick = () => irDia(addD(DIA ? DIA.data : hoje(), 1));
+  $('#dHoje', n).onclick = () => irDia(hoje());
+}
 function desenharDiario() {
   const D = EX.d, s = DIA.srv, d = s.diario, dia = DIA.data, eng = can('exec_planejar');
   const antigo = dia < addD(hoje(), -1);
   const outras = D.etapas.filter(e => e.ativa && !DIA.etapas.includes(e.codigo) && e.situacao !== 'concluido');
   const avisos = D.avisos.filter(a => a.status === 'Aberto');
-  view(`<div class="dia-nav"><button class="icbtn" id="dAnt" aria-label="Dia anterior">${ic('left')}</button>
-      <label class="dia-data"><input type="date" id="dData" value="${dia}" max="${hoje()}"><span><b>${fd(dia)}</b> ${dsem(dia)}</span></label>
-      <button class="icbtn" id="dProx" aria-label="Próximo dia" ${dia >= hoje() ? 'disabled' : ''}>${ic('right')}</button></div>
-    <div class="cab"><h2>${d ? rdoN(d.numero) : 'Novo diário'}</h2>${d ? `<span class="badge ${d.status === 'Revisado' ? 'b-ok' : d.status === 'Enviado' ? 'b-lib' : 'b-apr'}">${esc(d.status)}</span>` : ''}
+  if (!$('#diaNav')) { view(`<div class="dia-nav" id="diaNav"></div><div id="diaCorpo"></div>`); ligarNav(); marcarNav(dia); }
+  const corpo = $('#diaCorpo');
+  corpo.classList.remove('trocando');
+  corpo.innerHTML = `<div class="cab"><h2>${d ? rdoN(d.numero) : 'Novo diário'}</h2>${d ? `<span class="badge ${d.status === 'Revisado' ? 'b-ok' : d.status === 'Enviado' ? 'b-lib' : 'b-apr'}">${esc(d.status)}</span>` : ''}
       ${!s.util ? `<span class="badge exc">${s.feriado ? 'Feriado' : dsem(dia)} · aditivo especial</span>` : ''}${DIA.rasc ? '<span class="badge">rascunho no aparelho</span>' : ''}</div>
     ${filaInfo()}${s.offline ? '<div class="aviso warn">Sem sinal: o diário fica guardado no aparelho e envia sozinho quando a internet voltar.</div>' : ''}
     ${!DIA.editavel ? `<div class="aviso info">${d?.status === 'Revisado' ? 'Diário revisado pelo engenheiro (' + esc(d.revisado_por) + '). Só ele pode corrigir.' : 'Somente leitura: lançamentos de dias anteriores são feitos pelo engenheiro.'}</div>` : ''}
@@ -423,7 +473,7 @@ function desenharDiario() {
     <div class="barra-acoes"><div class="acoes">
       ${DIA.editavel ? `<button class="btn sec" id="dSalvar">Salvar rascunho</button>${!d || d.status === 'Rascunho' ? '<button class="btn" id="dEnviar">' + ic('send') + ' Enviar diário</button>' : '<button class="btn" id="dEnviar">Salvar alterações</button>'}` : ''}
       ${eng && d && d.status === 'Enviado' ? '<button class="btn navy" id="dRev">' + ic('check') + ' Marcar revisado</button>' : ''}
-      ${d ? `<button class="btn sec" id="dRdo">${ic('printer')} RDO (PDF)</button>` : ''}</div></div>`);
+      ${d ? `<button class="btn sec" id="dRdo">${ic('printer')} RDO (PDF)</button>` : ''}</div></div>`;
   desenharClima();
   ligarDiario();
   ligarAvisos();
@@ -466,10 +516,6 @@ function desenharClima() {
   $$('#clima [data-cond]').forEach(b => { b.onclick = () => { DIA.condicao = b.dataset.cond; salvarRascunho(); desenharClima(); }; });
 }
 function ligarDiario() {
-  const ir = d => { location.hash = '#/diario/' + d; };
-  $('#dAnt').onclick = () => ir(addD(DIA.data, -1));
-  $('#dProx').onclick = () => { if (DIA.data < hoje()) ir(addD(DIA.data, 1)); };
-  $('#dData').onchange = e => { if (e.target.value) ir(e.target.value > hoje() ? hoje() : e.target.value); };
   if ($('#addEt')) $('#addEt').onchange = e => { if (!e.target.value) return; DIA.etapas.push(e.target.value); if (!DIA.eq[e.target.value]) DIA.eq[e.target.value] = [{ equipe: '', pessoas: '' }]; salvarRascunho(); redesenharEtapas(); };
   ligarEtapasDia();
   const ocorr = $('#ocorr'), obsD = $('#obsD');
@@ -478,7 +524,7 @@ function ligarDiario() {
   $$('[data-foto]').forEach(inp => { inp.onchange = () => { const f = inp.files[0]; inp.value = ''; if (f) tirarFoto(f, inp.dataset.foto); }; });
   if ($('#dSalvar')) $('#dSalvar').onclick = () => enviarDiario(false);
   if ($('#dEnviar')) $('#dEnviar').onclick = () => enviarDiario(true);
-  if ($('#dRev')) $('#dRev').onclick = async () => { try { toast((await api('exec_revisar', { data: DIA.data })).msg); await carregarExec(true); vDiario(DIA.data); } catch (e) { toast(e.message, 1); } };
+  if ($('#dRev')) $('#dRev').onclick = async () => { try { toast((await api('exec_revisar', { data: DIA.data })).msg); esquecerDia(DIA.data); await carregarExec(true); vDiario(DIA.data); } catch (e) { toast(e.message, 1); } };
   if ($('#dRdo')) $('#dRdo').onclick = () => imprimirRdo(DIA.data);
 }
 function redesenharEtapas() {
@@ -552,6 +598,7 @@ async function enviarDiario(enviar) {
       if (b) { b.disabled = false; b.textContent = enviar ? 'Enviar diário' : 'Salvar rascunho'; }
       return;
     }
+    esquecerDia(DIA.data);
     await carregarExec(true);
     vDiario(DIA.data);
   } catch (e) { toast(e.message, 1); if (b) { b.disabled = false; b.textContent = enviar ? 'Enviar diário' : 'Salvar rascunho'; } }
@@ -597,7 +644,7 @@ async function tirarFoto(file, etapa) {
     const r = await enviarExec('exec_foto', op);
     const l = DIA.locais.find(x => x.id === op.cliente_id);
     l.envio = r.offline ? 'guardada no aparelho' : 'enviada';
-    if (!r.offline) EX.fotos[op.cliente_id] = op.mini.b64;
+    if (!r.offline) { EX.fotos[op.cliente_id] = op.mini.b64; esquecerDia(op.data); }
     toast(r.msg);
   } catch (x) { toast(x.message, 1); DIA.locais = DIA.locais.filter(l => l.id !== op.cliente_id); }
   $('#fotos').innerHTML = fotosHtml(); carregarMinis();
