@@ -181,3 +181,26 @@ test('avisos do engenheiro, fotos (sem duplicar), revisão e RDO', () => {
   assert.ok(rdo.fotos[0].b64);
   assert.equal(rdo.diario.ocorrencias, 'Caminhão atrasou 1h');
 });
+
+test('retroativo Bacia 02 (Prime Beach): 8 diários, 75 T coletores, uma vez só, quando o admin abre o painel', () => {
+  const G = criarGAS();
+  G.setup();
+  const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
+  const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
+  const tk = call('login', { login: 'admin', senha }).token;
+  const adm = (acao, d = {}) => call(acao, { token: tk, ...d });
+  const obra = adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  adm('exec_etapa_salvar', { obra, nome: 'Bacia 02 - Regularização Cloacal', itens: [
+    { servico: 'Tee Coletor Predial 110mm Ocre', unidade: 'un', qtd_prevista: 102, inicio: '2026-09-28', termino: '2026-10-28' },
+    { servico: 'Impermeabilização - PV', unidade: 'un', qtd_prevista: 4, inicio: '2026-10-16', termino: '2026-10-28' }] });
+  const d = adm('exec_dados', { obra });
+  const tee = d.etapas[0].itens[0];
+  assert.equal(tee.executado, 75);
+  assert.equal(d.etapas[0].itens[1].executado, 0);
+  assert.equal(d.diarios.length, 8);
+  assert.ok(d.diarios.every(x => x.status === 'Enviado'));
+  assert.equal(adm('exec_diario', { obra, data: '2026-10-07' }).lancamentos[0].qtd, 5);
+  assert.match(adm('exec_diario', { obra, data: '2026-10-02' }).diario.obs, /2 não foram executadas/);
+  adm('exec_dados', { obra }); // abrir de novo não lança outra vez
+  assert.equal(adm('exec_dados', { obra }).etapas[0].itens[0].executado, 75);
+});

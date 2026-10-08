@@ -225,6 +225,9 @@ function fmtBr_(s) { return s ? String(s).slice(8, 10) + '/' + String(s).slice(5
 function dataTxt_(s) { return s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : ''; }
 
 function execDados_(q, ctx) {
+  if (ctx.admin && String(ctx.obra.sigla).toUpperCase() === 'PB' && typeof lancarRetroativoBacia02 === 'function') {
+    try { lancarRetroativoBacia02(ctx); } catch (e) { log_(ctx, 'exec_retroativo_erro', e.message); }
+  }
   const cat = garantirCatalogo_();
   const c = calcExec_(ctx), y = +c.hoje.slice(0, 4);
   return {
