@@ -52,6 +52,10 @@ function notificacoes_(q, ctx) {
       if (String(p.solicitante_id) === String(ctx.u.id) && quando instanceof Date && quando.getTime() >= limiteMeus)
         add('meu', 'Seu pedido está em: ' + sit);
     });
+    // módulo Execução: avisos do engenheiro, diário do dia, alertas de produção e diários para revisar
+    try {
+      notifExec_(c, x => itens.push(Object.assign({ obra: String(o.id), obra_nome: o.nome, resumo: '', situacao: '', prioridade: '' }, x, { id: o.id + '|' + x.id })));
+    } catch (e) { /* execução não derruba os avisos de compras */ }
   });
   return { itens: itens, agora: fmtVal_(new Date()) };
 }

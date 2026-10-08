@@ -129,10 +129,14 @@ async function api(acao, d = {}) {
   let r;
   try {
     r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: S.token, obra: S.obraId, ...d }) });
-  } catch (e) { throw new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.'); }
+  } catch (e) { const x = new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.'); x.rede = true; throw x; }
   const t = await r.text();
   let j;
-  try { j = JSON.parse(t); } catch (e) { throw new Error('A API não respondeu corretamente. Confira a URL em config.js e a implantação do Apps Script (acesso "Qualquer pessoa").'); }
+  try { j = JSON.parse(t); } catch (e) {
+    // sem sinal de verdade, alguns celulares devolvem uma página de erro do provedor em vez de falhar
+    const x = new Error(navigator.onLine === false ? 'Sem conexão com o servidor.' : 'A API não respondeu corretamente. Confira a URL em config.js e a implantação do Apps Script (acesso "Qualquer pessoa").');
+    x.rede = navigator.onLine === false; throw x;
+  }
   if (!j.ok) {
     if (/^Sess[aã]o/.test(j.erro || '')) { sair(j.erro); }
     throw new Error(j.erro || 'Erro na API');
@@ -143,7 +147,15 @@ async function pedidos(forcar) {
   if (!S.ped || forcar) { const r = await api('pedidos_listar'); S.ped = r.pedidos; S.todos = r.todos; contadores(); }
   return S.ped;
 }
-async function recarregarDados() { S.dados = await api('obra_dados'); }
+async function recarregarDados() {
+  // guarda no aparelho para o app abrir sem sinal (diário de obra em campo)
+  try { S.dados = await api('obra_dados'); LS.set('cs_dados_' + S.obraId, JSON.stringify(S.dados)); }
+  catch (e) {
+    const c = e.rede && LS.get('cs_dados_' + S.obraId);
+    if (!c) throw e;
+    S.dados = JSON.parse(c); S.offline = true;
+  }
+}
 
 /* ---------- situações e filtros ---------- */
 const SIT_CL = {
@@ -195,8 +207,19 @@ const MODULOS = [
       { h: '#/cad/fornecedores', t: 'Fornecedores', i: 'truck', ok: () => can(['cad_fornecedores', ...P_COMPRAS, 'financeiro']) }
     ]
   },
-  { id: 'diario', t: 'Diário de obra', i: 'book', breve: true, desc: 'Registro diário da obra: clima, equipe, serviços executados, fotos e ocorrências' }
+  {
+    id: 'execucao', t: 'Execução', i: 'book', home: '#/exec',
+    desc: 'Etapas da obra, diário de obra (RDO) com quantidades, equipes, clima e fotos, e o acompanhamento da produção',
+    rotas: /^#\/(exec|diario|diarios)/,
+    itens: [
+      { h: '#/exec', t: 'Painel da execução', i: 'chart', ok: () => can(['exec_ver', 'exec_planejar']), c: 'exec-alertas' },
+      { h: '#/diario', t: 'Diário de obra', i: 'book', ok: () => can(['exec_lancar', 'exec_planejar']), c: 'exec-fila' },
+      { h: '#/diarios', t: 'Diários (RDO)', i: 'file', ok: () => can(['exec_ver', 'exec_lancar', 'exec_planejar']), c: 'exec-revisar' },
+      { h: '#/exec/equipes', t: 'Equipes', i: 'users', ok: () => can(['exec_lancar', 'exec_planejar']) }
+    ]
+  }
 ];
+const modOk = m => !m.itens || m.itens.some(n => n.ok());
 const NAV_GERAL = [
   { sep: 'Obra', ok: () => !!S.dados },
   { h: '#/cad/frentes', t: 'Frentes de trabalho', i: 'grid', ok: () => !!S.dados },
@@ -257,7 +280,7 @@ function montarMenu() {
   const aberto = LS.get('cs_mod') || 'compras';
   $('#nav').innerHTML = `<a href="#/inicio" data-h="#/inicio">${ic('home')}<span>Início</span></a>
     <div class="sep">Módulos</div>
-    ${MODULOS.map(m => m.breve
+    ${MODULOS.filter(modOk).map(m => m.breve
       ? `<div class="mod breve">${ic(m.i)}<span>${m.t}</span><small>em breve</small></div>`
       : !S.dados ? '' : `<button type="button" class="mod" data-mod="${m.id}" aria-expanded="${aberto === m.id}">${ic(m.i)}<span>${m.t}</span><span class="cont" data-c="mod-${m.id}" hidden></span>${ic('chevron')}</button>
         <div class="sub" data-sub="${m.id}" ${aberto === m.id ? '' : 'hidden'}>${m.itens.filter(n => n.ok()).map(link).join('')}</div>`).join('')}
@@ -286,7 +309,8 @@ function marcarMenu() {
 }
 function contadores() {
   $$('#nav .cont').forEach(c => {
-    const n = !S.ped ? 0 : c.dataset.c === 'mod-compras' ? pendenciasCompras() : conta(c.dataset.c);
+    const k = c.dataset.c;
+    const n = /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
     c.textContent = n; c.hidden = !n;
   });
 }
@@ -348,7 +372,7 @@ function telaLogin(msg) {
     try {
       const d = await api('login', { login: f.login.value, senha: f.senha.value });
       S.token = d.token; LS.set('cs_token', d.token);
-      S.sess = d;
+      S.sess = d; LS.set('cs_sess', JSON.stringify(d));
       iniciar();
     } catch (x) { toast(x.message, 1); b.disabled = false; b.textContent = 'Entrar'; }
   };
@@ -356,7 +380,7 @@ function telaLogin(msg) {
 function sair(msg) {
   S.token = ''; S.sess = null; S.dados = null; S.ped = null; S.adm = null;
   clearInterval(NOTIF.timer);
-  LS.del('cs_token');
+  LS.del('cs_token'); LS.del('cs_sess');
   fecharModal();
   telaLogin(typeof msg === 'string' ? msg : '');
 }
@@ -386,8 +410,9 @@ async function iniciar() {
   if (S.obraId) { try { await recarregarDados(); } catch (e) { toast(e.message, 1); } }
   montarShell();
   rotear();
-  if (S.dados) pedidos().catch(() => {});
+  if (S.dados && !S.offline) pedidos().catch(() => {});
   iniciarNotif();
+  if (typeof iniciarExec === 'function') iniciarExec();
 }
 async function boot() {
   const qs = new URLSearchParams(location.search);
@@ -397,7 +422,11 @@ async function boot() {
     return;
   }
   if (!S.token) return telaLogin();
-  try { S.sess = await api('sessao'); } catch (e) { if (S.token) $('#raiz').innerHTML = `<div class="login"><div class="card"><div class="aviso erro">${esc(e.message)}</div><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>`; return; }
+  try { S.sess = await api('sessao'); LS.set('cs_sess', JSON.stringify(S.sess)); } catch (e) {
+    // sem sinal: abre com a última sessão guardada (o diário funciona offline)
+    const c = e.rede && LS.get('cs_sess');
+    if (c) { S.sess = JSON.parse(c); S.offline = true; return iniciar(); }
+    if (S.token) $('#raiz').innerHTML = `<div class="login"><div class="card"><div class="aviso erro">${esc(e.message)}</div><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>`; return; }
   iniciar();
 }
 
@@ -430,7 +459,8 @@ function fecharModal() { const m = $('#modal'); m.classList.remove('on'); m.inne
 const ETAPA_NOTIF = {
   cotar: ['Para cotar', 'cart'], definir: ['Orçamentos recebidos', 'file'], aprovar: ['Aprovar compra', 'check'], liberar: ['Liberar entrega', 'truck'],
   receber: ['Receber material', 'box'], entrega: ['Previsão de entrega', 'truck'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
-  pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock']
+  pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'],
+  exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {
@@ -505,7 +535,7 @@ function tocarAviso(urgente) {
 async function abrirNotif(i) {
   fecharModal();
   if (i.obra !== S.obraId) await trocarObra(i.obra);
-  location.hash = '#/pedido/' + enc(i.numero);
+  location.hash = i.rota || '#/pedido/' + enc(i.numero);
 }
 function painelNotif() {
   const grupos = Object.keys(ETAPA_NOTIF).map(k => [k, NOTIF.itens.filter(i => i.etapa === k)]).filter(([, l]) => l.length);
@@ -546,13 +576,16 @@ async function verArquivo(id) {
 /* ---------- início: módulos ---------- */
 async function vHome() {
   titulo('Início');
-  if (S.dados) await pedidos();
+  if (S.dados && !S.offline) await pedidos().catch(() => {});
+  if (S.dados && typeof carregarExec === 'function' && can(['exec_ver', 'exec_lancar', 'exec_planejar'])) await carregarExec().catch(() => {});
   const pend = pendenciasCompras();
   view(`<div class="cab"><h2>Olá, ${esc(S.sess.usuario.nome.split(' ')[0])}</h2>${obraAtual() ? `<span class="badge">${esc(obraAtual().nome)}</span>` : ''}</div>
-    <div class="modulos">${MODULOS.map(m => m.breve
+    ${S.offline ? '<div class="aviso warn">Sem sinal: mostrando os dados guardados no aparelho. O diário de obra funciona e envia sozinho quando o sinal voltar.</div>' : ''}
+    <div class="modulos">${MODULOS.filter(modOk).map(m => m.breve
       ? `<div class="modulo breve"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small><span class="badge">em breve</span></div>`
       : `<a class="modulo" href="${m.home}"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small>
-          ${m.id === 'compras' && pend ? `<span class="badge b-apr">${plural(pend, 'pendência', 'pendências')}</span>` : ''}</a>`).join('')}</div>
+          ${m.id === 'compras' && pend ? `<span class="badge b-apr">${plural(pend, 'pendência', 'pendências')}</span>` : ''}
+          ${m.id === 'execucao' && typeof contExec === 'function' && contExec('mod-execucao') ? `<span class="badge b-apr">${plural(contExec('mod-execucao'), 'pendência', 'pendências')}</span>` : ''}</a>`).join('')}</div>
     ${can('pedido_abrir') ? `<div class="acoes" style="margin-top:16px"><a class="btn" href="#/novo">${ic('plus')} Novo pedido de material</a></div>` : ''}`);
 }
 
@@ -1288,9 +1321,21 @@ async function vObras() {
       modal('Editar obra', `<label>Nome<input name="nome" required value="${esc(o.nome)}"></label><label>Endereço<input name="endereco" value="${esc(o.endereco || '')}"></label>
         <label>E-mail do financeiro desta obra <small>(se vazio, usa o geral das Configurações)</small><input name="email_financeiro" value="${esc(o.email_financeiro || '')}" placeholder="financeiro@…"></label>
         <small>Quem tem o perfil Financeiro nesta obra (em Usuários e acessos) também recebe os avisos no e-mail do cadastro dele e as notificações no app.</small>
+        <h3 style="margin:8px 0 0">Diário de obra</h3>
+        <div class="g2"><label>Latitude <small>(clima automático)</small><input name="lat" inputmode="decimal" value="${esc(o.lat ?? '')}" placeholder="-27.5954"></label>
+        <label>Longitude<input name="lng" inputmode="decimal" value="${esc(o.lng ?? '')}" placeholder="-48.5480"></label></div>
+        <button type="button" class="btn sec peq" id="gpsObra">Usar a minha localização agora</button>
+        <small>Se ficar vazio, o primeiro diário lançado na obra com o GPS ligado preenche sozinho.</small>
+        <label>Feriados municipais <small>(dd/mm todo ano ou dd/mm/aaaa, separados por ;)</small><input name="feriados" value="${esc(o.feriados || '')}" placeholder="ex: 23/03; 15/08"></label>
+        <small>Os feriados nacionais (inclusive Carnaval, Sexta-feira Santa e Corpus Christi) já são considerados.</small>
         <label class="ck"><input type="checkbox" name="ativa" ${sim(o.ativa) ? 'checked' : ''}> Obra ativa (desativada some para quem não é admin)</label>`, {
-        ok: 'Salvar', onOk: async f => { toast((await api('admin_obra_salvar', { id: o.id, nome: f.nome.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, ativa: f.ativa.checked })).msg); await recarregarSessao(); vObras(); }
+        ok: 'Salvar', onOk: async f => { toast((await api('admin_obra_salvar', { id: o.id, nome: f.nome.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, lat: f.lat.value.replace(',', '.'), lng: f.lng.value.replace(',', '.'), feriados: f.feriados.value, ativa: f.ativa.checked })).msg); await recarregarSessao(); vObras(); }
       });
+      $('#gpsObra').onclick = () => {
+        if (!navigator.geolocation) return toast('Este aparelho não informa a localização.', 1);
+        navigator.geolocation.getCurrentPosition(p => { const f = $('#modal form'); f.lat.value = p.coords.latitude.toFixed(5); f.lng.value = p.coords.longitude.toFixed(5); },
+          () => toast('Não consegui a localização (permita o GPS para este site).', 1), { enableHighAccuracy: true, timeout: 15000 });
+      };
     };
   });
 }
@@ -1305,17 +1350,21 @@ async function vConfig() {
       <label>E-mail do financeiro <small>(avisos de pagamento)</small><input name="EMAIL_FINANCEIRO" value="${esc(c('EMAIL_FINANCEIRO'))}"></label>
       <label>Endereço do app <small>(para links nos e-mails)</small><input name="APP_URL" value="${esc(c('APP_URL') || location.origin + location.pathname)}"></label>
       <label>Nome da empresa<input name="EMPRESA" value="${esc(c('EMPRESA'))}"></label>
+      <label>Chuva que para a obra <small>(mm entre 7h e 17h — o diário sugere "Parado por chuva")</small><input name="CHUVA_LIMITE_MM" type="number" step="0.5" min="0" value="${esc(c('CHUVA_LIMITE_MM') || 5)}"></label>
       <label>Frentes padrão das obras novas <small>(separe com ;)</small><textarea name="FRENTES_PADRAO">${esc(c('FRENTES_PADRAO'))}</textarea></label>
       <label>Unidades <small>(separe com vírgula)</small><textarea name="unidades">${esc(A.unidades.join(', '))}</textarea></label>
       <button class="btn">Salvar configurações</button></form>
     <div class="card"><div class="cab"><h3 style="flex:1;margin:0">Materiais padrão (${A.padrao.length})</h3><button class="btn sec peq" id="novoMat">${ic('plus')} Adicionar</button></div>
       <small>Toda obra nova já nasce com estes materiais.</small>
       <div class="busca" style="margin-top:10px">${ic('search')}<input type="search" id="bm" placeholder="Buscar…"></div><div id="lm"></div></div>
+    <div class="card"><div class="cab"><h3 style="flex:1;margin:0">Catálogo de serviços · Execução (${(A.servicos || []).length})</h3><button class="btn sec peq" id="novoSrv">${ic('plus')} Adicionar</button></div>
+      <small>Serviços usados nas etapas de todas as obras (a unidade vem daqui). Mesmo nome em todas as obras = produtividade comparável.</small>
+      <div class="busca" style="margin-top:10px">${ic('search')}<input type="search" id="bs" placeholder="Buscar serviço ou grupo…"></div><div id="ls"></div></div>
     <div class="card"><h3>Perfis de acesso</h3><small>Modelos usados ao liberar acesso. Mudar um perfil não altera quem já tem acesso.</small><div id="perfis"></div></div>`);
   $('#fc').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, config = {};
-    ['MIN_ORCAMENTOS', 'PRAZO_FATURADO_PADRAO', 'REGRAS_ORCAMENTO', 'EMAIL_FINANCEIRO', 'APP_URL', 'EMPRESA', 'FRENTES_PADRAO'].forEach(k => { config[k] = f[k].value; });
+    ['MIN_ORCAMENTOS', 'PRAZO_FATURADO_PADRAO', 'REGRAS_ORCAMENTO', 'EMAIL_FINANCEIRO', 'APP_URL', 'EMPRESA', 'FRENTES_PADRAO', 'CHUVA_LIMITE_MM'].forEach(k => { config[k] = f[k].value; });
     try { toast((await api('admin_config_salvar', { config, unidades: f.unidades.value.split(',').map(s => s.trim()).filter(Boolean) })).msg); if (S.obraId) await recarregarDados(); } catch (x) { toast(x.message, 1); }
   };
   const lm = () => {
@@ -1326,6 +1375,15 @@ async function vConfig() {
   };
   $('#bm').oninput = lm;
   lm();
+  const ls = () => {
+    const t = norm($('#bs').value);
+    $('#ls').innerHTML = (A.servicos || []).filter(s => !t || norm(s.servico + ' ' + s.grupo).includes(t)).sort((a, b) => (a.grupo + a.servico).localeCompare(b.grupo + b.servico))
+      .map(s => `<div class="arq"><span class="nome">${esc(s.servico)}${ativo(s) ? '' : ' <span class="badge b-canc">inativo</span>'}<br><small>${esc([s.codigo, s.grupo, s.unidade].filter(Boolean).join(' · '))}</small></span><button class="btn sec peq" data-sv="${esc(s.codigo)}">Editar</button></div>`).join('') || '<p class="vazio">Nenhum serviço.</p>';
+    $$('[data-sv]').forEach(b => { b.onclick = () => mServico(A.servicos.find(s => s.codigo === b.dataset.sv)); });
+  };
+  $('#bs').oninput = ls;
+  ls();
+  $('#novoSrv').onclick = () => mServico();
   $('#novoMat').onclick = () => mPadrao();
   $('#perfis').innerHTML = A.perfis.map((p, i) => `<details class="acesso"><summary><b>${esc(p.perfil)}</b> <small>${esc(p.descricao || '')}</small></summary>
     <div class="perms">${Object.entries(A.permissoes).map(([k, t]) => `<label class="ck"><input type="checkbox" value="${k}" ${p.permissoes.includes(k) ? 'checked' : ''}> ${esc(t)}</label>`).join('')}</div>
@@ -1335,6 +1393,18 @@ async function vConfig() {
       const p = A.perfis[+b.dataset.pf], box = b.closest('details');
       try { toast((await api('admin_perfil_salvar', { perfil: p.perfil, descricao: p.descricao, permissoes: $$('input:checked', box).map(x => x.value) })).msg); } catch (x) { toast(x.message, 1); }
     };
+  });
+}
+function mServico(s) {
+  const grupos = [...new Set((S.adm.servicos || []).map(x => x.grupo).filter(Boolean))];
+  modal(s ? 'Serviço do catálogo' : 'Novo serviço', `<label>Serviço<input name="servico" required value="${esc(s?.servico || '')}" placeholder="ex: Tubulação PEAD DN 200"></label>
+    <div class="g2"><label>Unidade<input name="unidade" required list="dl-un" value="${esc(s?.unidade || '')}" placeholder="m, m², m³, un, kg…"></label>
+    <label>Grupo<input name="grupo" list="dl-gr" value="${esc(s?.grupo || '')}" placeholder="ex: Drenagem pluvial"></label></div>
+    <datalist id="dl-un">${['m', 'm²', 'm³', 'un', 'kg', 't', 'vb', 'pt'].map(u => `<option value="${u}">`).join('')}</datalist>
+    <datalist id="dl-gr">${grupos.map(g => `<option value="${esc(g)}">`).join('')}</datalist>
+    ${s ? `<label class="ck"><input type="checkbox" name="ativo" ${ativo(s) ? 'checked' : ''}> Ativo (inativo some da lista ao criar etapas)</label>` : ''}
+    <small>Mudar o nome ou a unidade aqui não altera etapas já criadas.</small>`, {
+    ok: 'Salvar', onOk: async f => { toast((await api('admin_servico_salvar', { codigo: s?.codigo, servico: f.servico.value, unidade: f.unidade.value, grupo: f.grupo.value, ativo: f.ativo ? f.ativo.checked : true })).msg); vConfig(); }
   });
 }
 function mPadrao(m) {
@@ -1348,4 +1418,5 @@ function mPadrao(m) {
   if (m) $('#exc').onclick = async () => { if (!confirm('Remover ' + m.descricao + ' da lista padrão? (Obras já criadas não mudam.)')) return; try { toast((await api('admin_padrao_excluir', { codigo: m.codigo })).msg); fecharModal(); vConfig(); } catch (e) { toast(e.message, 1); } };
 }
 
-boot();
+// exec.js (módulo Execução) carrega depois deste arquivo; o app começa quando os dois estiverem prontos
+addEventListener('DOMContentLoaded', boot);

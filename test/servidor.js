@@ -70,6 +70,38 @@ est('pedido_receber', { numero: p6, itens: { 1: 12 }, nf_numero: '4521', nf_data
 call('pedido_detalhe', { token: tk, obra, numero: p6 });
 est('cad_salvar', { tipo: 'materiais', dados: { codigo: 'M0003', descricao: 'Brita 1', unidade: 'm³', categoria: 'Agregados', estoque_min: 20 } });
 est('estoque_movimentar', { tipo: 'Saída', material_cod: 'M0001', qtd: 25, frente: 'Fundação' });
+// ---- execução / diário de obra (login: eng · mestre / senha123) ----
+adm('admin_obra_salvar', { id: obra, nome: 'Prime Beach', endereco: 'Av. Beira-Mar, 1000 — Capão da Canoa/RS', ativa: true, lat: '-29.746', lng: '-50.009' });
+const eng = usuario('eng', 'Ernesto Engenheiro', 'Engenheiro');
+const mestre = usuario('mestre', 'Marcos Encarregado', 'Encarregado');
+eng('exec_equipe_salvar', { nome: 'Equipe Pavimentação', pessoas: 8, encarregado: 'Marcos' });
+eng('exec_equipe_salvar', { nome: 'Equipe Drenagem', pessoas: 6 });
+const e1 = eng('exec_etapa_salvar', { nome: 'Pavimentação · Rua A', local: 'Rua A, estaca 0 a 30', frente: 'Canteiro', itens: [
+  { servico: 'Base', qtd_prevista: 600, inicio: d(-12), termino: d(6) },
+  { servico: 'Asfalto (CBUQ)', qtd_prevista: 600, inicio: d(-4), termino: d(12) },
+  { servico: 'Meio-fio', qtd_prevista: 300, inicio: d(-12), termino: d(4) }] }).codigo;
+const e2 = eng('exec_etapa_salvar', { nome: 'Drenagem pluvial · Rua B', local: 'Rua B', itens: [
+  { servico: 'Tubulação de concreto DN 600', qtd_prevista: 200, inicio: d(-15), termino: d(2) },
+  { servico: 'Poço de visita', qtd_prevista: 8, inicio: d(-15), termino: d(4) },
+  { servico: 'Boca de lobo', qtd_prevista: 10, inicio: d(-6), termino: d(8) }] }).codigo;
+const it = Object.fromEntries(eng('exec_dados').etapas.flatMap(e => e.itens).map(i => [i.servico, i.id]));
+const clima = mm => ({ manha: { mm: mm * .7, codigo: mm ? 63 : 1, desc: mm ? 'Chuva moderada' : 'Predomínio de sol', tmin: 17, tmax: 23 }, tarde: { mm: mm * .3, codigo: mm ? 61 : 2, desc: mm ? 'Chuva fraca' : 'Parcialmente nublado', tmin: 21, tmax: 26 }, mm_trabalho: mm, mm_dia: mm + 1, tmin: 16, tmax: 26, vento: 14 });
+let choveu = false;
+for (let n = -12; n <= -1; n++) {
+  const dia = d(n), w = new Date(dia + 'T12:00').getDay();
+  if (w === 0 || w === 6) continue;
+  if (n >= -7 && !choveu) { choveu = true; eng('exec_diario_salvar', { data: dia, motivo: 'dados de exemplo', enviar: true, clima: clima(14), ocorrencias: 'Chuva forte a manhã toda, equipe liberada às 11h.' }); continue; }
+  const lanc = [{ item_id: it['Base'], qtd: 38 + (n % 3) * 4 }, { item_id: it['Meio-fio'], qtd: 16 }, { item_id: it['Tubulação de concreto DN 600'], qtd: 11 }];
+  if (n % 3 === 0) lanc.push({ item_id: it['Poço de visita'], qtd: 1 });
+  if (n >= -4) lanc.push({ item_id: it['Asfalto (CBUQ)'], qtd: 70 });
+  if (n >= -6 && n % 2) lanc.push({ item_id: it['Boca de lobo'], qtd: 1 });
+  eng('exec_diario_salvar', { data: dia, motivo: 'dados de exemplo', enviar: true, clima: clima(n === -2 ? 1.5 : 0), lancamentos: lanc, ocorrencias: n === -2 ? 'Usina atrasou a entrega do CBUQ em 1h30.' : '',
+    equipes: [{ etapa: e1, equipe: 'Equipe Pavimentação', pessoas: 8 }, { etapa: e2, equipe: 'Equipe Drenagem', pessoas: n === -3 ? 4 : 6 }] });
+  if (n < -2) eng('exec_revisar', { data: dia });
+}
+eng('exec_aviso_salvar', { etapa: e2, tipo: 'Rendimento baixo', texto: 'Tubulação abaixo do ritmo: precisamos de 15 m/dia para fechar até o prazo.' });
+console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diarios.length);
+
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');
 console.log('Portal (cotação PB-0002):', local(com('forn_link', { fornecedor: 'F003', numeros: [p2] }).url));
 console.log('Portal (compra PB-0005):', local(com('forn_link', { fornecedor: 'F001', numeros: [p5] }).url));

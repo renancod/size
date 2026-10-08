@@ -24,7 +24,8 @@ const CONFIG_PADRAO = [
   ['PRAZO_FATURADO_PADRAO', 30, 'Prazo padrão (dias) do faturamento'],
   ['EMAIL_FINANCEIRO', '', 'E-mail(s) do financeiro, separados por vírgula (aviso de pagamento pendente)'],
   ['APP_URL', 'https://renancod.github.io/size/', 'Endereço do app (ex: https://renancod.github.io/size/) para links nos e-mails'],
-  ['FRENTES_PADRAO', 'Canteiro; Fundação; Estrutura; Alvenaria; Instalações elétricas; Instalações hidrossanitárias; Cobertura; Revestimentos; Pintura; Acabamento', 'Frentes de trabalho criadas em toda obra nova (separe com ;)']
+  ['CHUVA_LIMITE_MM', 5, 'Chuva (mm entre 7h e 17h) a partir da qual o diário sugere "Parado por chuva"'],
+  ['FRENTES_PADRAO','Canteiro; Fundação; Estrutura; Alvenaria; Instalações elétricas; Instalações hidrossanitárias; Cobertura; Revestimentos; Pintura; Acabamento', 'Frentes de trabalho criadas em toda obra nova (separe com ;)']
 ];
 const UNIDADES_PADRAO = ['un', 'pç', 'm', 'm²', 'm³', 'kg', 't', 'sc', 'L', 'gl', 'lata', 'cx', 'rolo', 'barra', 'par', 'jg', 'vb', 'h', 'dia', 'mês'];
 
@@ -45,6 +46,7 @@ function setup() {
   if (!P.all().length) {
     P.insertMany(PERFIS_PADRAO.map(p => ({ perfil: p[0], permissoes: p[1], descricao: p[2] })));
     C.insert({ chave: 'PERFIS_V2', valor: 'Sim', descricao: 'Perfis já criados no formato atual' });
+    C.insert({ chave: 'PERFIS_V3', valor: 'Sim', descricao: 'Perfis já criados no formato atual' });
   }
   const Un = central_('Unidades');
   if (!Un.all().length) Un.insertMany(UNIDADES_PADRAO.map(u => ({ unidade: u })));

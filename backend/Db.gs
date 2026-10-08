@@ -6,9 +6,10 @@ const SCHEMA_CENTRAL = {
   Config: ['chave', 'valor', 'descricao'],
   Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso'],
   Acessos: ['usuario_id', 'usuario', 'obra_id', 'obra', 'perfil', 'permissoes'],
-  Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro'],
+  Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro', 'lat', 'lng', 'feriados'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
   MateriaisPadrao: ['codigo', 'descricao', 'unidade', 'categoria'],
+  ServicosPadrao: ['codigo', 'grupo', 'servico', 'unidade', 'ativo'],
   Unidades: ['unidade'],
   Log: ['data', 'usuario', 'obra', 'acao', 'detalhe']
 };
@@ -24,7 +25,18 @@ const SCHEMA_OBRA = {
   Frentes: ['codigo', 'nome', 'descricao', 'ativa'],
   Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs'],
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
-  Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem']
+  Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],
+  // módulo Execução / Diário de obra
+  Etapas: ['codigo', 'nome', 'local', 'frente', 'responsavel', 'obs', 'ativa', 'criado_em', 'criado_por'],
+  EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo'],
+  Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa'],
+  Diarios: ['numero', 'data', 'status', 'condicao', 'aditivo', 'responsavel_id', 'responsavel', 'chuva_manha', 'chuva_tarde', 'chuva_trabalho', 'chuva_dia',
+    'tmin', 'tmax', 'vento', 'sugestao', 'ocorrencias', 'obs', 'enviado_por', 'enviado_em', 'revisado_por', 'revisado_em', 'clima_final', 'clima_json', 'criado_em', 'atualizado_em'],
+  Producao: ['id', 'diario', 'data', 'etapa', 'item_id', 'servico', 'unidade', 'qtd', 'obs', 'usuario_id', 'usuario', 'lancado_em', 'atualizado_em', 'cliente_id'],
+  EquipesDia: ['diario', 'data', 'etapa', 'equipe', 'pessoas', 'usuario'],
+  FotosExec: ['id', 'diario', 'data', 'etapa', 'legenda', 'tirada_em', 'lat', 'lng', 'usuario', 'nome', 'file_id', 'mini_id', 'enviada_em', 'cliente_id'],
+  AlteracoesExec: ['data', 'usuario', 'tipo', 'ref', 'etapa', 'campo', 'de', 'para', 'motivo'],
+  AvisosExec: ['id', 'data', 'etapa', 'etapa_nome', 'tipo', 'texto', 'autor', 'status', 'ciente_por', 'ciente_em']
 };
 
 let _central = null;

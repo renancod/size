@@ -61,6 +61,7 @@ function criarGAS() {
   Folder.prototype.getId = function () { return this.id; };
   Folder.prototype.getUrl = function () { return 'https://drive.google.com/drive/folders/' + this.id; };
   Folder.prototype.createFolder = function (n) { return new Folder(n, this.id); };
+  Folder.prototype.getFoldersByName = function (n) { return iter(Object.values(pastas).filter(f => f.pai === this.id && f.nome === n)); };
   Folder.prototype.createFile = function (blob) { const f = new File(blob, this.id); return f; };
   Folder.prototype.getFiles = function () { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.blob); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
   Folder.prototype.getFilesByName = function (n) { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.nome === n); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
@@ -121,7 +122,7 @@ function criarGAS() {
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());

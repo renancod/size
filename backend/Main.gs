@@ -66,6 +66,21 @@ const ROTAS = {
 
   cad_salvar: { obra: true, lock: true, fn: cadSalvar_ },
 
+  exec_dados: { obra: true, perm: ['exec_ver', 'exec_lancar', 'exec_planejar'], fn: execDados_ },
+  exec_etapa: { obra: true, perm: ['exec_ver', 'exec_lancar', 'exec_planejar'], fn: execEtapa_ },
+  exec_diario: { obra: true, perm: ['exec_ver', 'exec_lancar', 'exec_planejar'], fn: execDiario_ },
+  exec_clima_salvar: { obra: true, perm: ['exec_lancar', 'exec_planejar'], lock: true, fn: execClimaSalvar_ },
+  exec_rdo: { obra: true, perm: ['exec_ver', 'exec_lancar', 'exec_planejar'], fn: execRdo_ },
+  exec_foto_ver: { obra: true, perm: ['exec_ver', 'exec_lancar', 'exec_planejar'], fn: execFotoVer_ },
+  exec_diario_salvar: { obra: true, perm: ['exec_lancar', 'exec_planejar'], lock: true, fn: execDiarioSalvar_ },
+  exec_foto: { obra: true, perm: ['exec_lancar', 'exec_planejar'], lock: true, fn: execFoto_ },
+  exec_equipe_salvar: { obra: true, perm: ['exec_lancar', 'exec_planejar'], lock: true, fn: execEquipeSalvar_ },
+  exec_aviso_ciente: { obra: true, perm: ['exec_ver', 'exec_lancar', 'exec_planejar'], lock: true, fn: execAvisoCiente_ },
+  exec_etapa_salvar: { obra: true, perm: 'exec_planejar', lock: true, fn: execEtapaSalvar_ },
+  exec_item_alterar: { obra: true, perm: 'exec_planejar', lock: true, fn: execItemAlterar_ },
+  exec_aviso_salvar: { obra: true, perm: 'exec_planejar', lock: true, fn: execAvisoSalvar_ },
+  exec_revisar: { obra: true, perm: 'exec_planejar', lock: true, fn: execRevisar_ },
+
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },
   admin_senha: { admin: true, lock: true, fn: adminSenha_ },
@@ -74,7 +89,8 @@ const ROTAS = {
   admin_config_salvar: { admin: true, lock: true, fn: adminConfigSalvar_ },
   admin_perfil_salvar: { admin: true, lock: true, fn: adminPerfilSalvar_ },
   admin_padrao_salvar: { admin: true, lock: true, fn: adminPadraoSalvar_ },
-  admin_padrao_excluir: { admin: true, lock: true, fn: adminPadraoExcluir_ }
+  admin_padrao_excluir: { admin: true, lock: true, fn: adminPadraoExcluir_ },
+  admin_servico_salvar: { admin: true, lock: true, fn: adminServicoSalvar_ }
 };
 
 function rota_(q) {
@@ -107,7 +123,10 @@ const PERMISSOES = {
   financeiro: 'Financeiro (pagamentos e notas fiscais)',
   cad_materiais: 'Cadastrar materiais',
   cad_fornecedores: 'Cadastrar fornecedores',
-  cad_frentes: 'Cadastrar frentes de trabalho'
+  cad_frentes: 'Cadastrar frentes de trabalho',
+  exec_ver: 'Execução: ver etapas, painel e diários',
+  exec_lancar: 'Execução: lançar diário de obra (quantidades, equipes, fotos)',
+  exec_planejar: 'Execução: planejar etapas, alterar previsto, corrigir lançamentos e avisar a equipe'
 };
 const PERFIS_PADRAO = [
   ['Admin', Object.keys(PERMISSOES).join(','), 'Tudo na obra'],
@@ -115,7 +134,9 @@ const PERFIS_PADRAO = [
   ['Compras', 'pedido_abrir,pedido_ver_todos,estoque_ver,compras_cotar,compras_definir,compras_liberar,compras_cancelar,cad_materiais,cad_fornecedores', 'Cotação, definição da compra e liberação de entrega (não aprova)'],
   ['Estoque', 'pedido_abrir,pedido_ver_todos,pedido_receber,estoque_ver,estoque_movimentar,cad_materiais,cad_frentes', 'Abre pedidos, recebe na obra e controla o estoque'],
   ['Financeiro', 'pedido_ver_todos,financeiro', 'Pagamentos e notas fiscais'],
-  ['Solicitante', 'pedido_abrir', 'Só abre e acompanha os próprios pedidos']
+  ['Solicitante', 'pedido_abrir', 'Só abre e acompanha os próprios pedidos'],
+  ['Encarregado', 'exec_ver,exec_lancar,pedido_abrir', 'Lança o diário de obra (quantidades, equipes, fotos) e abre pedidos de material'],
+  ['Engenheiro', 'exec_ver,exec_lancar,exec_planejar,pedido_abrir,pedido_ver_todos,estoque_ver', 'Planeja as etapas, acompanha a produção, revisa os diários e avisa a equipe']
 ];
 
 function permsDe_(u, obraId) {

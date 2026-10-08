@@ -7,6 +7,19 @@
  */
 function atualizarPerfis_() {
   const C = central_('Config');
+  // v3: módulo Execução → perfis Encarregado e Engenheiro e o Admin com as permissões novas
+  if (!C.all().some(r => r.chave === 'PERFIS_V3')) {
+    const P = central_('Perfis');
+    PERFIS_PADRAO.filter(d => ['Admin', 'Encarregado', 'Engenheiro'].indexOf(d[0]) >= 0).forEach(d => {
+      const p = P.all().find(x => norm_(x.perfil) === norm_(d[0]));
+      if (!p) P.insert({ perfil: d[0], permissoes: d[1], descricao: d[2] });
+      else if (d[0] === 'Admin') { p.permissoes = d[1]; P.update(p); }
+    });
+    const A = central_('Acessos'), todas = Object.keys(PERMISSOES).join(',');
+    A.all().filter(a => a.perfil === 'Admin').forEach(a => { a.permissoes = todas; A.update(a); });
+    C.insert({ chave: 'PERFIS_V3', valor: 'Sim', descricao: 'Ajuste automático: módulo Execução (perfis Encarregado e Engenheiro)' });
+    if (!C.all().some(r => r.chave === 'CHUVA_LIMITE_MM')) C.insert({ chave: 'CHUVA_LIMITE_MM', valor: 5, descricao: 'Chuva (mm entre 7h e 17h) a partir da qual o diário sugere "Parado por chuva"' });
+  }
   if (C.all().some(r => r.chave === 'PERFIS_V2')) return;
   const P = central_('Perfis');
   PERFIS_PADRAO.forEach(d => {
@@ -38,6 +51,7 @@ function adminDados_(q, ctx) {
     perfis: central_('Perfis').all().map(p => ({ perfil: p.perfil, descricao: p.descricao, permissoes: String(p.permissoes || '').split(',').map(s => s.trim()).filter(Boolean) })),
     config: central_('Config').all().map(pub_),
     padrao: central_('MateriaisPadrao').all().map(pub_),
+    servicos: garantirCatalogo_().all().map(pub_),
     unidades: central_('Unidades').all().map(r => String(r.unidade).trim()).filter(Boolean),
     permissoes: PERMISSOES,
     central_url: centralSS_().getUrl()
@@ -105,6 +119,12 @@ function adminObraSalvar_(q, ctx) {
   o.nome = nome;
   o.endereco = String(q.endereco || '').trim();
   o.email_financeiro = String(q.email_financeiro || '').trim();
+  if (q.lat !== undefined) {
+    const lat = String(q.lat || '').trim(), lng = String(q.lng || '').trim();
+    if ((lat || lng) && !(Math.abs(num_(lat)) <= 90 && Math.abs(num_(lng)) <= 180 && num_(lat) && num_(lng))) throw new Error('Latitude/longitude inválidas (ex: -27.59, -48.55).');
+    o.lat = lat ? num_(lat) : ''; o.lng = lng ? num_(lng) : '';
+  }
+  if (q.feriados !== undefined) o.feriados = String(q.feriados || '').trim();
   o.ativa = sim_(q.ativa) ? 'Sim' : 'Não';
   O.update(o);
   return { msg: 'Obra salva.' };
