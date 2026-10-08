@@ -475,9 +475,32 @@ function avisarNovos(novos) {
   if (novos.length > 3) toast(`+${novos.length - 3} notificações. Toque no sino para ver.`);
   if ('Notification' in window && Notification.permission === 'granted' && document.hidden && navigator.serviceWorker) {
     navigator.serviceWorker.ready.then(reg => novos.slice(0, 5).forEach(i => reg.showNotification(i.numero + ' · ' + ((ETAPA_NOTIF[i.etapa] || [i.etapa])[0]), {
-      body: i.texto + (i.resumo ? ' — ' + i.resumo : '') + (S.sess.obras.length > 1 ? ' (' + i.obra_nome + ')' : ''), icon: 'icon-192.png', badge: 'icon-192.png', tag: i.id, data: { url: urlNotif(i) }
+      body: i.texto + (i.resumo ? ' — ' + i.resumo : '') + (S.sess.obras.length > 1 ? ' (' + i.obra_nome + ')' : ''), icon: 'icon-192.png', badge: 'icon-192.png', tag: i.id, data: { url: urlNotif(i) },
+      vibrate: [200, 100, 200], silent: false, renotify: true
     }))).catch(() => {});
-  }
+  } else { tocarAviso(novos.some(i => prio(i) >= 2)); }
+}
+/* som + vibração dos avisos. O navegador só libera o som depois do primeiro toque na tela, então o áudio é "destravado" aí. */
+const SOM = { ctx: null };
+function destravarSom() {
+  try {
+    if (!SOM.ctx) SOM.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (SOM.ctx.state === 'suspended') SOM.ctx.resume();
+  } catch (e) { /* sem áudio neste aparelho */ }
+}
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, destravarSom, { passive: true }));
+function tocarAviso(urgente) {
+  try { if (navigator.vibrate) navigator.vibrate(urgente ? [300, 120, 300, 120, 300] : [200, 100, 200]); } catch (e) { }
+  const c = SOM.ctx;
+  if (!c || c.state !== 'running') return;
+  // "plim-plom" curto; urgente toca duas vezes
+  const notas = urgente ? [880, 660, 880, 660] : [880, 660];
+  notas.forEach((f, k) => {
+    const t = c.currentTime + k * 0.18, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.17);
+  });
 }
 async function abrirNotif(i) {
   fecharModal();
@@ -725,7 +748,7 @@ async function vPedido(numero) {
 
     ${p.fornecedor ? `<div class="card"><h3>Compra</h3><dl class="kv">
       <dt>Fornecedor</dt><dd>${esc(p.fornecedor)}${forn && forn.telefone ? ` · <a href="${wa(forn.telefone, `Olá! Sobre o pedido ${p.numero} da obra ${S.dados.obra.nome} — Size Engenharia.`)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</dd>
-      <dt>Valor</dt><dd>${brl(p.valor_total)}</dd>
+      ${d.valores !== false ? `<dt>Valor</dt><dd>${brl(p.valor_total)}</dd>` : ''}
       <dt>Condição</dt><dd>${esc(p.condicao)}${p.prazo_fat ? ' ' + esc(p.prazo_fat) + ' dias' : ''}</dd>
       ${p.previsao ? `<dt>Previsão</dt><dd>${fd(p.previsao)}</dd>` : ''}
       ${p.aprovado_por ? `<dt>Aprovado</dt><dd>${esc(p.aprovado_por)} · ${fdh(p.aprovado_em)}</dd>` : ''}
@@ -736,7 +759,7 @@ async function vPedido(numero) {
       ${p.fin ? `<dt>Financeiro</dt><dd>${esc(p.fin)}${p.pago_em ? ' em ' + fd(p.pago_em) + (p.forma_pagto ? ' · ' + esc(p.forma_pagto) : '') : ''}</dd>` : ''}
     </dl></div>` : ''}
 
-    <div class="card"><h3>Orçamentos</h3>
+    ${d.valores === false ? '' : `<div class="card"><h3>Orçamentos</h3>
       <div class="meta ${minOk ? 'aviso ok' : 'aviso warn'}"><span>${plural(d.fornecedores_orcados, 'fornecedor', 'fornecedores')} com orçamento · mínimo exigido: ${d.minimo}</span>${minOk ? '✓' : ''}</div>
       ${p.cotado_a ? `<small>Cotação enviada a: ${esc(p.cotado_a)}</small>` : ''}
       ${['Aberto', 'Em cotação'].includes(st) && can('compras_cotar') && p.cotado_a ? '<p><button class="linkbtn" id="capt">Buscar respostas no e-mail agora</button></p>' : ''}
@@ -744,7 +767,7 @@ async function vPedido(numero) {
         <br><small>${[o.prazo_entrega && 'entrega ' + o.prazo_entrega, o.condicao, o.origem === 'e-mail' ? 'recebido por e-mail' : '', fdh(o.recebido_em)].filter(Boolean).map(esc).join(' · ')}</small></div>
         ${o.arquivo_id ? `<button class="btn sec peq" data-ver="${esc(o.arquivo_id)}">Ver</button>` : ''}
         ${['Aberto', 'Em cotação'].includes(st) && can('compras_cotar') ? `<button class="btn sec peq" data-orc="${esc(o.id)}">Editar</button>` : ''}</div>`).join('') || '<p class="vazio" style="padding:10px">Nenhum orçamento ainda.</p>'}
-    </div>
+    </div>`}
 
     ${d.recebimentos.length ? `<div class="card"><h3>Recebimentos</h3><div class="rolar"><table class="tab"><tr><th>Data</th><th>Material</th><th class="n">Qtd</th><th>Por</th></tr>
       ${d.recebimentos.map(r => `<tr><td>${fdh(r.data)}</td><td>${esc(r.descricao)}</td><td class="n">${nf(r.qtd)} ${esc(r.unidade)}</td><td>${esc(r.usuario)}${r.nf ? '<br><small>NF ' + esc(r.nf) + '</small>' : ''}</td></tr>`).join('')}</table></div></div>` : ''}

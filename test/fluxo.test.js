@@ -124,7 +124,8 @@ test('fluxo FATURADO 30 dias: cotação → regra de orçamentos → aprovação
   falha(() => est('pedido_receber', { numero, itens: { 1: 41 } }), /faltam só 40/);
   assert.equal(est('estoque_saldo').itens.find(i => i.descricao.startsWith('Cimento')).saldo, 60);
   est('pedido_receber', { numero, itens: { 1: 40, 2: 10 }, nf_numero: '12345', nf_data: '2026-10-16', nf: PDF });
-  det = est('pedido_detalhe', { numero });
+  assert.equal(est('pedido_detalhe', { numero }).pedido.fin, ''); // estoque não vê o financeiro
+  det = com('pedido_detalhe', { numero });
   assert.equal(det.pedido.entrega, 'Recebido');
   assert.equal(det.pedido.fin, 'A pagar');
   assert.equal(det.pedido.vencimento.slice(0, 10), '2026-11-15');
@@ -299,6 +300,30 @@ test('lembretes de vencimento: aviso diário nos últimos 5 dias, e-mail das 8h 
   const depois = fin('notificacoes').itens;
   assert.ok(!depois.some(i => i.etapa === 'pagar'));
   assert.ok(depois.some(i => i.etapa === 'pago' && /Pagamento concluído/.test(i.texto)));
+});
+
+test('almoxarife (Estoque) não vê valores nem pedidos já recebidos', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const alm = criarUsuario(t, 'jean', 'Estoque', obra);
+  t.adm('cad_salvar', { obra, tipo: 'fornecedores', dados: { nome: 'Casa', email: 'c@x.com' } });
+  const n = t.adm('pedido_criar', { obra, itens: [{ descricao: 'Cimento', qtd: 20, unidade: 'sc' }] }).numero;
+  const n2 = t.adm('pedido_criar', { obra, itens: [{ descricao: 'Areia', qtd: 5, unidade: 'm³' }] }).numero;
+  t.adm('orcamento_salvar', { obra, pedido: n, fornecedor_cod: 'F001', valor: 1014, arquivo: PDF });
+  t.adm('pedido_definir', { obra, numero: n, orcamento: t.adm('pedido_detalhe', { obra, numero: n }).orcamentos[0].id, condicao: 'Faturado', prazo_fat: 28, aprovar: true });
+  t.adm('pedido_liberar', { obra, numero: n });
+  const d = alm('pedido_detalhe', { obra, numero: n });
+  assert.equal(d.valores, false);
+  assert.equal(d.pedido.valor_total, '');
+  assert.equal(d.orcamentos.length, 0);
+  assert.ok(!d.arquivos.some(a => a.tipo === 'ORC'));
+  assert.ok(!/1\.014|1014/.test(d.pedido.historico));
+  assert.throws(() => alm('arquivo_ver', { obra, id: t.adm('pedido_detalhe', { obra, numero: n }).arquivos.find(a => a.tipo === 'ORC').file_id }));
+  assert.equal(alm('pedidos_listar', { obra }).pedidos.find(p => p.numero === n).valor_total, '');
+  alm('pedido_receber', { obra, numero: n, itens: { 1: 20 } });
+  const lista = alm('pedidos_listar', { obra }).pedidos.map(p => p.numero);
+  assert.ok(!lista.includes(n) && lista.includes(n2)); // recebido some para o estoque
+  assert.ok(t.adm('pedidos_listar', { obra }).pedidos.some(p => p.numero === n)); // admin continua vendo
 });
 
 test('cancelamento e devolução respeitam a etapa', () => {

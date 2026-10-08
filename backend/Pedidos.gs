@@ -47,6 +47,20 @@ function achar_(ctx, numero) {
 function veTodos_(ctx) {
   return pode_(ctx, ['pedido_ver_todos', 'financeiro', 'compras_cotar', 'compras_definir', 'compras_aprovar', 'compras_liberar', 'pedido_receber']);
 }
+/* quem só cuida do material (almoxarife/estoque, solicitante) não vê valores nem pedidos já recebidos */
+function veValores_(ctx) {
+  return pode_(ctx, ['financeiro', 'compras_cotar', 'compras_definir', 'compras_aprovar', 'compras_liberar']);
+}
+const CAMPOS_VALOR_ = ['valor_total', 'prazo_fat', 'vencimento', 'forma_pagto', 'pago_em', 'excecao_orc'];
+const ARQ_VALOR_ = ['ORC', 'COMPROVANTE'];
+function semValores_(o) {
+  CAMPOS_VALOR_.forEach(k => { if (k in o) o[k] = ''; });
+  if (o.historico) o.historico = String(o.historico).replace(/R\$\s?-?[\d.,]+/g, 'R$ •••');
+  return o;
+}
+function encerradoParaEstoque_(p) {
+  return p.entrega === 'Recebido' || p.status === 'Concluído' || p.status === 'Cancelado';
+}
 function itensDe_(ctx, numero) {
   return obraTab_(ctx, 'Itens').all().filter(i => String(i.pedido) === String(numero)).sort((a, b) => a.item - b.item);
 }
@@ -76,12 +90,15 @@ function pedidosListar_(q, ctx) {
   const its = {}, orcs = {};
   obraTab_(ctx, 'Itens').all().forEach(i => { (its[i.pedido] = its[i.pedido] || []).push(i); });
   obraTab_(ctx, 'Orcamentos').all().forEach(o => { (orcs[o.pedido] = orcs[o.pedido] || {})[o.fornecedor_cod || o.fornecedor] = 1; });
-  const ps = obraTab_(ctx, 'Pedidos').all().filter(p => todos || String(p.solicitante_id) === String(ctx.u.id));
+  const valores = veValores_(ctx);
+  const ps = obraTab_(ctx, 'Pedidos').all().filter(p => (todos || String(p.solicitante_id) === String(ctx.u.id)) && (valores || !encerradoParaEstoque_(p)));
   return {
     todos: todos,
+    valores: valores,
     pedidos: ps.slice(-2000).reverse().map(p => {
       const o = pub_(p);
       delete o.historico;
+      if (!valores) { semValores_(o); o.fin = ''; }
       o.situacao = situacao_(p);
       o.n_orc = Object.keys(orcs[p.numero] || {}).length;
       o.itens = (its[p.numero] || []).sort((a, b) => a.item - b.item)
@@ -94,16 +111,19 @@ function pedidosListar_(q, ctx) {
 function pedidoDetalhe_(q, ctx) {
   const p = achar_(ctx, q.numero);
   if (!veTodos_(ctx) && String(p.solicitante_id) !== String(ctx.u.id)) throw new Error('Você só pode ver os seus pedidos.');
+  const valores = veValores_(ctx);
   const o = pub_(p);
   o.situacao = situacao_(p);
+  if (!valores) { semValores_(o); o.fin = ''; }
   const orcs = obraTab_(ctx, 'Orcamentos').all().filter(x => x.pedido === p.numero);
   return {
+    valores: valores,
     pedido: o,
-    itens: itensDe_(ctx, p.numero).map(pub_),
-    orcamentos: orcs.map(pub_),
+    itens: itensDe_(ctx, p.numero).map(i => { const r = pub_(i); if (!valores) r.valor_unit = ''; return r; }),
+    orcamentos: valores ? orcs.map(pub_) : [],
     fornecedores_orcados: Object.keys(orcs.reduce((a, x) => { a[x.fornecedor_cod || x.fornecedor] = 1; return a; }, {})).length,
     minimo: minOrc_(p.valor_total || Math.max.apply(null, [0].concat(orcs.map(x => num_(x.valor))))),
-    arquivos: obraTab_(ctx, 'Arquivos').all().filter(x => x.pedido === p.numero).map(pub_).reverse(),
+    arquivos: obraTab_(ctx, 'Arquivos').all().filter(x => x.pedido === p.numero && (valores || ARQ_VALOR_.indexOf(x.tipo) < 0)).map(pub_).reverse(),
     recebimentos: obraTab_(ctx, 'Recebimentos').all().filter(x => x.pedido === p.numero).map(pub_).reverse()
   };
 }
@@ -423,6 +443,7 @@ function arquivoVer_(q, ctx) {
   if (!a) throw new Error('Arquivo não pertence a esta obra.');
   const p = achar_(ctx, a.pedido);
   if (!veTodos_(ctx) && String(p.solicitante_id) !== String(ctx.u.id)) throw new Error('Sem acesso a este arquivo.');
+  if (!veValores_(ctx) && ARQ_VALOR_.indexOf(a.tipo) >= 0) throw new Error('Sem acesso a este arquivo.');
   const f = DriveApp.getFileById(a.file_id);
   return { nome: a.nome || f.getName(), mime: f.getMimeType(), b64: Utilities.base64Encode(f.getBlob().getBytes()) };
 }
