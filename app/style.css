@@ -328,7 +328,13 @@ details summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:.85re
 .badge.sx-atrasado{background:var(--err-l);color:var(--err)}.badge.sx-atencao{background:var(--warn-l);color:var(--warn)}
 .badge.sx-no_ritmo{background:var(--ok-l);color:var(--ok)}.badge.sx-concluido{background:var(--teal-l);color:var(--teal)}
 .badge.exc{background:#EFE7FB;color:#5B2FB5}
-.etapa-card{display:grid;gap:4px;text-decoration:none;color:inherit;border-left:4px solid var(--teal)}
+.exec-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;align-items:start}
+.exec-lista>.card{margin-bottom:0}
+.etapa-card{display:grid;gap:6px;padding:12px 14px;text-decoration:none;color:inherit;border-left:4px solid var(--teal)}
+.etapa-card .l1 b{font-size:.95rem}
+.item-ex{margin-bottom:18px}
+.det-cab{margin-bottom:20px;gap:10px}
+.kv3{gap:10px 16px}
 .etapa-card .l1,.item-ex .l1,.dia-et .l1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .etapa-card .l1 b,.dia-et .l1 b{color:var(--navy);font-size:1rem}
 .etapa-card .dir,.item-ex .dir,.dia-et .dir{margin-left:auto;font-weight:800;color:var(--navy)}

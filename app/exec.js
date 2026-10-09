@@ -184,7 +184,7 @@ function cartaoEtapa(e) {
     <small>${esc([e.local, e.frente, e.inicio && fd(e.inicio) + ' → ' + fd(e.termino)].filter(Boolean).join(' · '))}</small>
     ${barra(e)}
     <div class="its">${e.itens.map(i => `<div class="it"><span class="n">${esc(i.servico)}</span>${barra(i)}
-      <small>${nf(i.executado)} / ${nf(i.prevista)} ${esc(i.unidade)} · ${i.media ? 'média ' + nf(i.media) + '/dia' : 'sem produção'}${i.saldo > 0 && i.ritmo ? ' · precisa ' + nf(i.ritmo) + '/dia' : ''}${i.projecao && i.saldo > 0 ? ' · fim ~' + fd(i.projecao) : ''}</small></div>`).join('')}</div></a>`;
+      <small>${nf(i.executado)} / ${nf(i.prevista)} ${esc(i.unidade)}${i.media ? ' · média ' + nf(i.media) + '/dia' : ''}</small></div>`).join('')}</div></a>`;
 }
 const avisoHtml = a => `<div class="aviso-ex ${a.status === 'Aberto' ? '' : 'lido'}"><span><b>${esc(a.tipo)}</b> · ${esc(a.etapa_nome || 'Obra toda')}${a.texto ? '<br>' + esc(a.texto) : ''}
   <br><small>${esc(a.autor)} · ${fdh(a.data)}${a.ciente_por ? ' · ciente: ' + esc(a.ciente_por) + ' ' + fdh(a.ciente_em) : ''}</small></span>
