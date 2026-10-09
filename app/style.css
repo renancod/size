@@ -426,6 +426,20 @@ details summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:.85re
 .rdo-fotos figcaption{font-size:9px}
 .rdo-ass{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px;break-inside:avoid}
 .rdo-ass div{display:grid;text-align:center;gap:2px}.rdo-ass span{border-top:1px solid #333;margin-bottom:2px}.rdo-ass small{color:#666}
+/* prévia em tela estreita (celular): sem estourar a largura, tabelas compactas */
+.rdo-folha{overflow-wrap:anywhere}
+@media screen and (max-width:700px){
+  #rdo{padding:8px}
+  .rdo-folha{padding:10px;font-size:10px}
+  .rdo-t,.rdo-t>thead,.rdo-t>tbody,.rdo-t>tfoot,.rdo-t>*>tr,.rdo-t>*>tr>td{display:block;width:100%;min-width:0}
+  .rdo-cab{flex-wrap:wrap;gap:8px}
+  .rdo-cab img{height:30px}
+  .rdo-g td,.rdo-g th{padding:3px 4px;font-size:9.5px}
+  .rdo-g .n{white-space:normal}
+  .rdo-fotos{grid-template-columns:repeat(2,1fr)}
+  .rdo-ass{gap:16px;margin-top:28px}
+  .rdo-rod{flex-direction:column;gap:2px}
+}
 @page{size:A4;margin:10mm;@bottom-right{content:"Página " counter(page) " de " counter(pages);font-size:9px;color:#555}}
 @media print{
   body.com-rdo>*:not(#rdo){display:none!important}

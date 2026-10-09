@@ -1,5 +1,5 @@
 // Cache do app para abrir rápido e funcionar com sinal fraco na obra (os dados sempre vêm da API).
-const CACHE = 'size-v13';
+const CACHE = 'size-v14';
 const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png', './fornecedor.html', './forn.js'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS))); self.skipWaiting(); });

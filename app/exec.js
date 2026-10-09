@@ -749,7 +749,7 @@ async function imprimirRdo(data) {
       <h4>Ocorrências</h4><p class="rdo-txt">${esc(d.ocorrencias || 'Nenhuma.')}</p>
       ${d.obs ? `<h4>Observações</h4><p class="rdo-txt">${esc(d.obs)}</p>` : ''}
       ${r.avisos.length ? `<h4>Avisos da engenharia</h4>${r.avisos.map(a => `<p class="rdo-txt"><b>${esc(a.tipo)}</b> · ${esc(a.etapa_nome)}: ${esc(a.texto)} <small>(${esc(a.autor)}, ${fd(a.data)}${a.ciente_por ? ' · ciente ' + esc(a.ciente_por) : ''})</small></p>`).join('')}` : ''}
-      ${r.fotos.length ? `<h4>Registro fotográfico</h4><div class="rdo-fotos">${r.fotos.filter(f => f.b64).map(f => `<figure><img src="data:image/jpeg;base64,${f.b64}" alt=""><figcaption>${esc(f.legenda || '')} <small>${esc(String(f.tirada_em || ''))}${f.lat ? ' · ' + Number(f.lat).toFixed(5) + ', ' + Number(f.lng).toFixed(5) : ''}</small></figcaption></figure>`).join('')}</div>` : ''}
+      ${r.fotos.length ? `<h4>Registro fotográfico</h4><div class="rdo-fotos">${r.fotos.filter(f => f.b64).map(f => `<figure><img src="data:image/jpeg;base64,${f.b64}" alt=""><figcaption>${esc(f.legenda || '')} <small>${f.tirada_em ? new Date(f.tirada_em).toLocaleString('pt-BR') : ''}${f.lat ? ' · ' + Number(f.lat).toFixed(5) + ', ' + Number(f.lng).toFixed(5) : ''}</small></figcaption></figure>`).join('')}</div>` : ''}
       <div class="rdo-ass"><div><span></span>${esc(d.responsavel || 'Encarregado')}<small>Encarregado / responsável pelo diário</small></div><div><span></span>${esc(d.revisado_por || '')}<small>Engenheiro responsável</small></div></div>
     </td></tr></tbody></table></div>`;
   document.body.appendChild(el);
