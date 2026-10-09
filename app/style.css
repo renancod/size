@@ -330,6 +330,8 @@ details summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:.85re
 .badge.exc{background:#EFE7FB;color:#5B2FB5}
 .exec-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;align-items:start}
 .exec-lista>.card{margin-bottom:0}
+.exec-lista{margin-bottom:22px}
+.bloco-t{margin:6px 0 10px;font-size:.95rem;color:var(--navy);display:flex;gap:8px;align-items:center}
 .etapa-card{display:grid;gap:6px;padding:12px 14px;text-decoration:none;color:inherit;border-left:4px solid var(--teal)}
 .etapa-card .l1 b{font-size:.95rem}
 .item-ex{margin-bottom:18px}

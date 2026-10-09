@@ -145,18 +145,27 @@ let FX = 'todas';
 async function vExec() {
   titulo('Execução');
   const D = await carregarExec(true);
-  const ets = D.etapas.filter(e => e.ativa);
+  const todas = D.etapas.filter(e => e.ativa);
+  const ets = todas.filter(e => e.situacao !== 'concluido'); // concluídas só pelo filtro "Concluídas"
   const F = {
-    todas: ['Todas as etapas', 'layers', () => true], atrasado: ['Atrasadas', 'alert', e => e.situacao === 'atrasado'], atencao: ['Atenção', 'clock', e => e.situacao === 'atencao'],
+    todas: ['Em aberto', 'layers', () => true], atrasado: ['Atrasadas', 'alert', e => e.situacao === 'atrasado'], atencao: ['Atenção', 'clock', e => e.situacao === 'atencao'],
     no_ritmo: ['No ritmo', 'check', e => e.situacao === 'no_ritmo'], nao_iniciado: ['Não iniciadas', 'minus', e => e.situacao === 'nao_iniciado'], concluido: ['Concluídas', 'check', e => e.situacao === 'concluido']
   };
-  const grupos = [{ t: 'Situação', itens: Object.entries(F).map(([k, v]) => ({ k, t: v[0], i: v[1], n: ets.filter(v[2]).length, on: k === FX, cl: k === 'atrasado' ? 'quente' : '' })) }];
+  const grupos = [{ t: 'Situação', itens: Object.entries(F).map(([k, v]) => ({ k, t: v[0], i: v[1], n: (k === 'todas' ? ets : todas).filter(v[2]).length, on: k === FX, cl: k === 'atrasado' ? 'quente' : '' })) }];
   const acoes = [];
   if (can(['exec_lancar', 'exec_planejar'])) acoes.push({ k: 'a:diario', t: 'Diário de hoje', i: 'book', cl: 'acao' });
   if (can('exec_planejar')) acoes.push({ k: 'a:etapa', t: 'Nova etapa', i: 'plus', cl: 'acao' }, { k: 'a:aviso', t: 'Avisar a equipe', i: 'alert', cl: 'acao' });
   acoes.push({ k: 'a:diarios', t: 'Diários (RDO)', i: 'file', cl: 'acao' });
   grupos.push({ t: 'Ações', itens: acoes });
-  const lista = ets.filter(F[FX][2]);
+  const lista = (FX === 'todas' ? ets : todas).filter(F[FX][2]);
+  // visão semanal: em andamento · começam nesta semana · próximas
+  const dom = new Date(hoje() + 'T12:00'); dom.setDate(dom.getDate() + (7 - dom.getDay()) % 7);
+  const fimSem = dom.toLocaleDateString('sv-SE'), ini = e => String(e.inicio || '').slice(0, 10);
+  const blocos = FX !== 'todas' ? [[null, lista]] : [
+    ['Em andamento', lista.filter(e => e.situacao !== 'nao_iniciado')],
+    ['Começam nesta semana', lista.filter(e => e.situacao === 'nao_iniciado' && ini(e) && ini(e) <= fimSem)],
+    ['Próximas', lista.filter(e => e.situacao === 'nao_iniciado' && (!ini(e) || ini(e) > fimSem))]];
+  const listaHtml = blocos.filter(b => b[1].length).map(([t, l]) => `${t ? `<h3 class="bloco-t">${t} <span class="contagem">${l.length}</span></h3>` : ''}<div class="exec-lista">${l.map(cartaoEtapa).join('')}</div>`).join('');
   const geral = ets.length ? ets.reduce((t, e) => t + Math.min(100, e.pct), 0) / ets.length : 0;
   const revisar = D.diarios.filter(d => d.status === 'Enviado');
   view(comEtapas(grupos, `<div class="cab"><h2>${F[FX][0]}</h2><span class="contagem">${esc(S.dados.obra.nome)}</span></div>
@@ -167,7 +176,7 @@ async function vExec() {
       <div class="kpi ${ets.length ? '' : 'zero'}"><b>${ets.length}</b><span>Etapas ativas</span></div></div>
     ${D.alertas.length && can('exec_planejar') ? `<div class="card"><h3>${ic('alert')} Alertas</h3>${D.alertas.slice(0, 12).map(a => `<a class="alerta al-${a.tipo}" href="#/exec/etapa/${enc(a.etapa)}"><b>${esc(etapaDe(a.etapa)?.nome || a.etapa)}</b><small>${esc(a.texto)}</small></a>`).join('')}</div>` : ''}
     ${D.avisos.filter(a => a.status === 'Aberto').length ? `<div class="card"><h3>${ic('bell')} Avisos para a equipe</h3>${D.avisos.filter(a => a.status === 'Aberto').map(avisoHtml).join('')}</div>` : ''}
-    <div class="exec-lista">${lista.map(cartaoEtapa).join('') || `<div class="card vazio"><p>${ets.length ? 'Nenhuma etapa nesta situação.' : 'Nenhuma etapa cadastrada ainda.'}</p>${can('exec_planejar') && !ets.length ? '<button class="btn" id="primeira">Cadastrar a primeira etapa</button>' : ''}</div>`}</div>`));
+    ${listaHtml || `<div class="card vazio"><p>${todas.length ? (FX === 'todas' ? 'Nenhuma etapa em aberto. As concluídas ficam no filtro "Concluídas".' : 'Nenhuma etapa nesta situação.') : 'Nenhuma etapa cadastrada ainda.'}</p>${can('exec_planejar') && !todas.length ? '<button class="btn" id="primeira">Cadastrar a primeira etapa</button>' : ''}</div>`}`));
   ligarEtapas(k => {
     if (k === 'a:diario') { location.hash = '#/diario'; return; }
     if (k === 'a:diarios') { location.hash = '#/diarios'; return; }
