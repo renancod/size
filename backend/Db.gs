@@ -9,7 +9,8 @@ const SCHEMA_CENTRAL = {
   Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro', 'lat', 'lng', 'feriados'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
   MateriaisPadrao: ['codigo', 'descricao', 'unidade', 'categoria'],
-  ServicosPadrao: ['codigo', 'grupo', 'servico', 'unidade', 'ativo'],
+  ServicosPadrao: ['codigo', 'grupo', 'servico', 'unidade', 'ativo', 'fvs_modelo'],
+  FvsModelos: ['codigo', 'nome', 'categoria', 'tipo', 'revisao', 'data_rev', 'blocos_json', 'ativo', 'revisar', 'nota'],
   Unidades: ['unidade'],
   Log: ['data', 'usuario', 'obra', 'acao', 'detalhe']
 };
@@ -36,7 +37,10 @@ const SCHEMA_OBRA = {
   EquipesDia: ['diario', 'data', 'etapa', 'equipe', 'pessoas', 'usuario'],
   FotosExec: ['id', 'diario', 'data', 'etapa', 'legenda', 'tirada_em', 'lat', 'lng', 'usuario', 'nome', 'file_id', 'mini_id', 'enviada_em', 'cliente_id'],
   AlteracoesExec: ['data', 'usuario', 'tipo', 'ref', 'etapa', 'campo', 'de', 'para', 'motivo'],
-  AvisosExec: ['id', 'data', 'etapa', 'etapa_nome', 'tipo', 'texto', 'autor', 'status', 'ciente_por', 'ciente_em']
+  AvisosExec: ['id', 'data', 'etapa', 'etapa_nome', 'tipo', 'texto', 'autor', 'status', 'ciente_por', 'ciente_em'],
+  // FVS (ficha de verificação de serviço): uma por serviço da frente de trabalho
+  Fvs: ['id', 'numero', 'modelo', 'modelo_nome', 'modelo_rev', 'categoria', 'tipo', 'modelo_json', 'etapa', 'item_id', 'servico', 'status', 'vistoria', 'checklist_json', 'nc_json', 'alteracao_sim', 'alteracao', 'alteracao_aut',
+    'anexos_json', 'vistorias_json', 'historico_json', 'preenchido_por', 'enviado_em', 'enviado_por', 'aprovado_por', 'aprovado_em', 'motivo', 'hash', 'pasta_id', 'pdf_id', 'auto_aprovada', 'criado_em', 'criado_por', 'atualizado_em']
 };
 
 let _central = null;

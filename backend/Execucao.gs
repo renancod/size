@@ -138,6 +138,7 @@ function adminServicoSalvar_(q, ctx) {
   const novo = !s;
   if (novo) s = { codigo: T.proxCodigo('codigo', 'S', 4) };
   s.servico = nome; s.grupo = String(q.grupo || '').trim(); s.unidade = String(q.unidade).trim();
+  if (q.fvs_modelo !== undefined) s.fvs_modelo = String(q.fvs_modelo || '').trim();
   s.ativo = q.ativo === false ? 'Não' : 'Sim';
   if (novo) T.insert(s); else T.update(s);
   return { msg: 'Serviço salvo no catálogo (' + s.codigo + ').' };
@@ -233,7 +234,9 @@ function execDados_(q, ctx) {
   return {
     hoje: c.hoje, etapas: c.etapas, alertas: c.alertas,
     equipes: obraTab_(ctx, 'Equipes').all().map(pub_),
-    catalogo: cat.all().filter(s => !/^n/i.test(String(s.ativo))).map(pub_),
+    catalogo: (() => { const mods = {}; garantirFvsModelos_().all().forEach(m => { if (!/^n/i.test(String(m.ativo))) mods[m.codigo] = m; }); return cat.all().filter(s => !/^n/i.test(String(s.ativo))).map(s => Object.assign(pub_(s), { fvs_sugerido: fvsSugerido_(s, mods) })); })(),
+    fvs_modelos: garantirFvsModelos_().all().filter(m => !/^n/i.test(String(m.ativo))).map(m => ({ codigo: m.codigo, nome: m.nome, categoria: m.categoria, tipo: m.tipo, revisao: m.revisao })),
+    fvs: obraTab_(ctx, 'Fvs').all().filter(f => f.status !== FVS_ST_.canc).map(f => ({ id: f.id, item_id: f.item_id, etapa: f.etapa, status: f.status, modelo: f.modelo, tipo: f.tipo, numero_txt: f.numero === '' ? '' : numFvs_(num_(f.numero)) })),
     avisos: obraTab_(ctx, 'AvisosExec').all().filter(a => a.status !== 'Encerrado').map(pub_).reverse(),
     diarios: obraTab_(ctx, 'Diarios').all().map(d => ({
       numero: d.numero, data: ymd_(d.data), status: d.status, condicao: d.condicao, aditivo: d.aditivo, responsavel: d.responsavel,
@@ -280,9 +283,11 @@ function execEtapaSalvar_(q, ctx) {
   });
   if (nova) E.insert(e); else E.update(e);
   I.insertMany(linhas);
+  const fvsAbertas = fvsAbrirParaItens_(ctx, e, linhas.map((l, i) => ({ item: l, modelo: novos[i].fvs_modelo })));
   if (!nova) linhas.forEach(l => alteracao_(ctx, 'item', l.id, 'incluído', '', l.servico + ' ' + l.qtd_prevista + ' ' + l.unidade, q.motivo));
   log_(ctx, nova ? 'exec_etapa_criar' : 'exec_etapa_editar', e.codigo + ' ' + e.nome);
-  return { msg: nova ? 'Etapa ' + e.nome + ' criada com ' + linhas.length + ' serviço(s).' : 'Etapa salva.', codigo: e.codigo };
+  const txtFvs = fvsAbertas ? ' ' + (fvsAbertas === 1 ? '1 FVS aberta.' : fvsAbertas + ' FVS abertas.') : '';
+  return { msg: (nova ? 'Etapa ' + e.nome + ' criada com ' + linhas.length + ' serviço(s).' : 'Etapa salva.') + txtFvs, codigo: e.codigo };
 }
 function execItemAlterar_(q, ctx) {
   const I = obraTab_(ctx, 'EtapaItens'), i = I.all().find(x => String(x.id) === String(q.id));
@@ -633,6 +638,7 @@ function execRelatorioEmail_(q, ctx) {
 
 /* ---------- avisos na tela (sino) para o módulo Execução ---------- */
 function notifExec_(c, add) {
+  try { notifFvs_(c, add); } catch (e) { /* aviso de FVS nunca derruba o sino */ }
   const pode = p => pode_(c, p);
   if (!pode(['exec_ver', 'exec_lancar', 'exec_planejar'])) return;
   if (!obraTab_(c, 'Etapas').all().length) return;

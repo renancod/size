@@ -66,3 +66,11 @@ Logins da demo: `admin`/`Admin#Size26`, `compras`, `estoque`, `fin`, `joao` (sen
 - **Sessão:** 14 dias. Trocar a senha encerra as sessões abertas nos outros aparelhos (a do aparelho atual recebe um token novo).
 - **Navegador:** o `index.html` e o `fornecedor.html` trazem uma política de segurança (CSP) que só deixa o app carregar scripts dele e do `cdnjs.cloudflare.com` (usado só para gerar PDF) e só falar com o Apps Script e a Open-Meteo. Por isso não use `onclick="..."` nem `<script>` inline: use `data-acao` (veja `app.js`) ou um arquivo `.js`.
 - **Backup:** todo dia às 3h o script copia a planilha central e as das obras para `Compras Size / Backups` no Drive (`AAAA-MM-DD · nome`), guardando `BACKUP_DIAS` dias (padrão 14). O gatilho é criado sozinho quando um administrador abre a administração; Administração → Configurações tem o botão "Fazer backup agora". Fotos e PDFs não são duplicados.
+
+## FVS (ficha de verificação de serviço)
+
+- **Modelos** (Execução → FVS → Modelos de FVS): 45 fichas importadas do Drive da qualidade (`backend/FvsPadrao.gs`), por categoria → tipo. Mudar os itens sobe a revisão; as fichas já emitidas guardam a revisão usada.
+- **Abertura:** ao criar uma frente de trabalho (etapa), cada serviço recebe uma FVS (o catálogo sugere o modelo; "Sem FVS" é uma escolha explícita). Dá para abrir depois pela tela da etapa.
+- **Ficha:** O / X / ⊗ (reinspeção, até 3 vistorias) / N/A, alteração em relação ao projeto (com quem autorizou), não conformidades, **croqui base** e **croqui de execução** (obrigatórios), outros anexos e os **RDOs vinculados** (vêm dos lançamentos do serviço).
+- **Aprovação:** quem tem a permissão `fvs_aprovar` (Engenheiro e Admin) aprova ou devolve. Ao aprovar, a FVS ganha o número em sequência (FVS 001…), é travada com um código de verificação e vai para `Drive → obra → FVS → AAAA-MM → "FVS 001 · …"` com o PDF, os croquis e os anexos.
+- Permissões novas: `fvs_ver`, `fvs_preencher`, `fvs_aprovar` (migração automática para Admin/Engenheiro/Encarregado no primeiro acesso).

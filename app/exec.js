@@ -206,6 +206,31 @@ function ligarAvisos() {
   $$('[data-encerra]').forEach(b => { b.onclick = async () => { try { toast((await api('exec_aviso_ciente', { id: b.dataset.encerra, encerrar: true })).msg); await carregarExec(true); rotear(); } catch (e) { toast(e.message, 1); } }; });
 }
 
+/* ---------- FVS (ficha de verificação) ligada ao serviço ---------- */
+function fvsOpcoes() {
+  const grp = {};
+  (EX.d.fvs_modelos || []).forEach(m => { (grp[m.categoria + ' · ' + m.tipo] = grp[m.categoria + ' · ' + m.tipo] || []).push(m); });
+  return '<option value="">— escolha a FVS —</option><option value="-">Sem FVS para este serviço</option>' + Object.keys(grp).sort().map(g =>
+    `<optgroup label="${esc(g)}">${grp[g].map(m => `<option value="${esc(m.codigo)}">${esc(m.codigo)} · ${esc(m.nome)}</option>`).join('')}</optgroup>`).join('');
+}
+function fvsDoItem(i) {
+  const l = (EX.d.fvs || []).filter(f => f.item_id === i.id);
+  const chips = l.map(f => `<a class="fv-chip fvs-${({ 'Em execução': 'exec', 'Em preenchimento': 'prep', 'Aguardando aprovação': 'aprov', 'Aprovada': 'ok', 'Devolvida': 'dev' })[f.status] || 'exec'}" href="#/fvs/${esc(f.id)}">${ic('clip')} ${esc(f.numero_txt || 'FVS')} · ${esc(f.tipo)} <small>${esc(f.status)}</small></a>`).join('');
+  const abrir = !l.length && can(['fvs_preencher', 'exec_planejar']) ? `<button type="button" class="btn sec peq" data-fvs-abrir="${esc(i.id)}">${ic('plus')} Abrir FVS</button>` : '';
+  return chips || abrir ? `<div class="fv-chips">${chips}${abrir}</div>` : '';
+}
+function mAbrirFvs(i) {
+  modal('Abrir FVS · ' + esc(i.servico), `<label>Modelo de FVS<select name="m" required>${fvsOpcoes().replace('<option value="-">Sem FVS para este serviço</option>', '')}</select></label>
+    <small>A FVS fica vinculada aos diários de obra deste serviço e é preenchida pelo engenheiro.</small>`, {
+    ok: 'Abrir FVS',
+    onOk: async f => {
+      if (!f.m.value) throw new Error('Escolha o modelo.');
+      toast((await api('fvs_criar', { item_id: i.id, modelo: f.m.value })).msg);
+      await carregarExec(true); rotear();
+    }
+  });
+}
+
 /* ---------- nova etapa / incluir serviços ---------- */
 function mEtapa(e) {
   const D = EX.d, frentes = (S.dados.frentes || []).filter(x => ativo(x, 'ativa'));
@@ -223,8 +248,10 @@ function mEtapa(e) {
     <datalist id="dl-srv">${cat.map(s => `<option value="${esc(s.servico)}">${esc(s.grupo)} · ${esc(s.unidade)}</option>`).join('')}</datalist>`, {
     larga: true, ok: e ? 'Salvar' : 'Criar etapa',
     onOk: async f => {
-      const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value }))
+      const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value }))
         .filter(x => x.servico || x.qtd_prevista);
+      const semFvs = itens.find(x => !x.fvs_modelo);
+      if (semFvs) throw new Error('Escolha a FVS de ' + (semFvs.servico || 'cada serviço') + ' (ou marque "Sem FVS para este serviço").');
       const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, itens, motivo: f.motivo?.value });
       toast(r.msg); await carregarExec(true);
       location.hash = '#/exec/etapa/' + enc(r.codigo); if (e) rotear();
@@ -235,9 +262,11 @@ function mEtapa(e) {
     d.className = 'srv';
     d.innerHTML = `<label class="s">Serviço<input name="s" list="dl-srv" autocomplete="off" placeholder="Digite para buscar no catálogo"></label>
       <label>Qtd prevista<input name="q" type="number" step="any" min="0" inputmode="decimal"></label><label>Unid.<input name="u" placeholder="m²"></label>
-      <label>Início<input type="date" name="i"></label><label>Término<input type="date" name="t"></label><button type="button" class="rm" aria-label="Remover">${ic('x')}</button>`;
+      <label>Início<input type="date" name="i"></label><label>Término<input type="date" name="t"></label>
+      <label class="fvl">FVS deste serviço <small>(ficha de verificação — obrigatória)</small><select name="f">${fvsOpcoes()}</select></label><button type="button" class="rm" aria-label="Remover">${ic('x')}</button>`;
     const s = $('[name=s]', d), u = $('[name=u]', d);
-    s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); u.value = c ? c.unidade : u.value; u.readOnly = !!c; d.classList.toggle('avulso', !c && !!s.value); };
+    const fsel = $('[name=f]', d);
+    s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); u.value = c ? c.unidade : u.value; u.readOnly = !!c; d.classList.toggle('avulso', !c && !!s.value); if (c && c.fvs_sugerido && !fsel.value) fsel.value = c.fvs_sugerido; };
     $('.rm', d).onclick = () => d.remove();
     $('#srvs', f).appendChild(d);
     return s;
@@ -279,6 +308,7 @@ async function vEtapa(cod) {
         <dt>Precisa</dt><dd>${i.saldo <= 0 ? '—' : i.ritmo == null ? '<span class="atrasado">prazo acabou</span>' : nf(i.ritmo) + ' ' + esc(i.unidade) + '/dia até o término'}</dd>
         <dt>Término</dt><dd class="${i.situacao === 'atrasado' ? 'atrasado' : ''}">${i.saldo <= 0 ? 'concluído ' + fd(i.ultimo) : i.projecao ? 'projetado ' + fd(i.projecao) : 'sem produção para projetar'}</dd>
         <dt>Produtividade</dt><dd>${i.prod_hd != null ? nf(i.prod_hd) + ' ' + esc(i.unidade) + '/homem-dia' : '—'}${i.prod_ed != null ? ' · ' + nf(i.prod_ed) + ' ' + esc(i.unidade) + '/equipe-dia' : ''}</dd></dl>
+      <div class="fv-linha">${fvsDoItem(i)}</div>
       ${eng ? `<div class="acoes"><button class="btn sec peq" data-alt="${esc(i.id)}">${ic('edit')} Alterar</button></div>` : ''}</div>`).join('')}
     <div class="card"><h3>Produção por dia</h3>${Object.keys(dias).sort().reverse().map(s => `<div class="dia-prod"><a href="#/diario/${s}"><b>${fd(s)}</b> <small>${dsem(s)}${util(s) ? '' : ' · aditivo'}</small></a>
       <small>${(eqDia[s] || []).map(x => esc(x.equipe) + ' (' + x.pessoas + ')').join(', ')}</small>
@@ -288,6 +318,7 @@ async function vEtapa(cod) {
   if ($('#edE')) $('#edE').onclick = () => mEtapa(e);
   if ($('#avE')) $('#avE').onclick = () => mAviso(e.codigo);
   $$('[data-alt]').forEach(b => { b.onclick = () => mAlterar(e.itens.find(i => i.id === b.dataset.alt)); });
+  $$('[data-fvs-abrir]').forEach(b => { b.onclick = () => mAbrirFvs(e.itens.find(i => i.id === b.dataset.fvsAbrir)); });
   if (eng) $$('[data-l]').forEach(el => { el.onclick = () => mCorrigir(r.lancamentos.find(l => l.id === el.dataset.l)); });
   ligarAvisos();
 }

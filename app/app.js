@@ -218,12 +218,13 @@ const MODULOS = [
   {
     id: 'execucao', t: 'Execução', i: 'book', home: '#/exec',
     desc: 'Etapas da obra, diário de obra (RDO) com quantidades, equipes, clima e fotos, e o acompanhamento da produção',
-    rotas: /^#\/(exec|diario|diarios)/,
+    rotas: /^#\/(exec|diario|diarios|fvs)/,
     itens: [
       { h: '#/exec', t: 'Painel da execução', i: 'chart', ok: () => can(['exec_ver', 'exec_planejar']), c: 'exec-alertas' },
       { h: '#/diario', t: 'Diário de obra', i: 'book', ok: () => can(['exec_lancar', 'exec_planejar']), c: 'exec-fila' },
       { h: '#/diarios', t: 'Diários (RDO)', i: 'file', ok: () => can(['exec_ver', 'exec_lancar', 'exec_planejar']), c: 'exec-revisar' },
       { h: '#/exec/relatorio', t: 'Relatórios', i: 'send', ok: () => can('exec_planejar') },
+      { h: '#/fvs', t: 'FVS · Qualidade', i: 'clip', ok: () => can(['fvs_ver', 'fvs_preencher', 'fvs_aprovar']) },
       { h: '#/exec/equipes', t: 'Equipes', i: 'users', ok: () => can(['exec_lancar', 'exec_planejar']) }
     ]
   }
@@ -469,7 +470,8 @@ const ETAPA_NOTIF = {
   cotar: ['Para cotar', 'cart'], definir: ['Orçamentos recebidos', 'file'], aprovar: ['Aprovar compra', 'check'], liberar: ['Liberar entrega', 'truck'],
   receber: ['Receber material', 'box'], entrega: ['Previsão de entrega', 'truck'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
   pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'],
-  exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file']
+  exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file'],
+  fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {

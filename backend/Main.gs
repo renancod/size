@@ -82,6 +82,22 @@ const ROTAS = {
   exec_aviso_salvar: { obra: true, perm: 'exec_planejar', lock: true, fn: execAvisoSalvar_ },
   exec_revisar: { obra: true, perm: 'exec_planejar', lock: true, fn: execRevisar_ },
   exec_relatorio: { obra: true, perm: 'exec_planejar', fn: execRelatorio_ },
+  fvs_modelos: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar', 'exec_planejar'], fn: fvsModelos_ },
+  fvs_modelo_salvar: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsModeloSalvar_ },
+  fvs_listar: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar'], fn: fvsListar_ },
+  fvs_detalhe: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar'], fn: fvsDetalhe_ },
+  fvs_criar: { obra: true, perm: ['fvs_preencher', 'exec_planejar'], lock: true, fn: fvsCriar_ },
+  fvs_salvar: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsSalvar_ },
+  fvs_nova_vistoria: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsNovaVistoria_ },
+  fvs_anexo: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsAnexo_ },
+  fvs_anexo_remover: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsAnexoRemover_ },
+  fvs_pdf: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar'], fn: fvsPdfVer_ },
+  fvs_anexo_ver: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar'], fn: fvsAnexoVer_ },
+  fvs_enviar: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsEnviar_ },
+  fvs_devolver: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsDevolver_ },
+  fvs_aprovar: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsAprovar_ },
+  fvs_reabrir: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsReabrir_ },
+  fvs_cancelar: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsCancelar_ },
   exec_relatorio_email: { obra: true, perm: 'exec_planejar', fn: execRelatorioEmail_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
@@ -130,7 +146,10 @@ const PERMISSOES = {
   cad_frentes: 'Cadastrar frentes de trabalho',
   exec_ver: 'Execução: ver etapas, painel e diários',
   exec_lancar: 'Execução: lançar diário de obra (quantidades, equipes, fotos)',
-  exec_planejar: 'Execução: planejar etapas, alterar previsto, corrigir lançamentos e avisar a equipe'
+  exec_planejar: 'Execução: planejar etapas, alterar previsto, corrigir lançamentos e avisar a equipe',
+  fvs_ver: 'FVS (qualidade): consultar as fichas',
+  fvs_preencher: 'FVS (qualidade): abrir, preencher, anexar croquis e enviar para aprovação',
+  fvs_aprovar: 'FVS (qualidade): aprovar ou devolver fichas e editar os modelos'
 };
 const PERFIS_PADRAO = [
   ['Admin', Object.keys(PERMISSOES).join(','), 'Tudo na obra'],
@@ -139,8 +158,8 @@ const PERFIS_PADRAO = [
   ['Estoque', 'pedido_abrir,pedido_ver_todos,pedido_receber,estoque_ver,estoque_movimentar,cad_materiais,cad_frentes', 'Abre pedidos, recebe na obra e controla o estoque'],
   ['Financeiro', 'pedido_ver_todos,financeiro', 'Pagamentos e notas fiscais'],
   ['Solicitante', 'pedido_abrir', 'Só abre e acompanha os próprios pedidos'],
-  ['Encarregado', 'exec_ver,exec_lancar,pedido_abrir', 'Lança o diário de obra (quantidades, equipes, fotos) e abre pedidos de material'],
-  ['Engenheiro', 'exec_ver,exec_lancar,exec_planejar,pedido_abrir,pedido_ver_todos,estoque_ver', 'Planeja as etapas, acompanha a produção, revisa os diários e avisa a equipe']
+  ['Encarregado', 'exec_ver,exec_lancar,pedido_abrir,fvs_ver', 'Lança o diário de obra (quantidades, equipes, fotos) e abre pedidos de material'],
+  ['Engenheiro', 'exec_ver,exec_lancar,exec_planejar,pedido_abrir,pedido_ver_todos,estoque_ver,fvs_ver,fvs_preencher,fvs_aprovar', 'Planeja as etapas, acompanha a produção, revisa os diários e avisa a equipe']
 ];
 
 function permsDe_(u, obraId) {
@@ -225,6 +244,7 @@ function login_(q) {
     throw new Error('Usuário ou senha incorretos.');
   }
   cache.remove(kf);
+  try { atualizarPerfisFvs_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
   u.ultimo_acesso = new Date();
   T.update(u);
   return Object.assign({ token: token_(u) }, sessaoDe_(u));

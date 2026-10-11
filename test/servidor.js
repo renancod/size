@@ -77,13 +77,13 @@ const mestre = usuario('mestre', 'Marcos Encarregado', 'Encarregado');
 eng('exec_equipe_salvar', { nome: 'Equipe Pavimentação', pessoas: 8, encarregado: 'Marcos' });
 eng('exec_equipe_salvar', { nome: 'Equipe Drenagem', pessoas: 6 });
 const e1 = eng('exec_etapa_salvar', { nome: 'Pavimentação · Rua A', local: 'Rua A, estaca 0 a 30', frente: 'Canteiro', itens: [
-  { servico: 'Base', qtd_prevista: 600, inicio: d(-12), termino: d(6) },
-  { servico: 'Asfalto (CBUQ)', qtd_prevista: 600, inicio: d(-4), termino: d(12) },
-  { servico: 'Meio-fio', qtd_prevista: 300, inicio: d(-12), termino: d(4) }] }).codigo;
+  { servico: 'Base', qtd_prevista: 600, inicio: d(-12), termino: d(6), fvs_modelo: 'FVS.05' },
+  { servico: 'Asfalto (CBUQ)', qtd_prevista: 600, inicio: d(-4), termino: d(12), fvs_modelo: '-' },
+  { servico: 'Meio-fio', qtd_prevista: 300, inicio: d(-12), termino: d(4), fvs_modelo: 'FVS.18.1' }] }).codigo;
 const e2 = eng('exec_etapa_salvar', { nome: 'Drenagem pluvial · Rua B', local: 'Rua B', itens: [
-  { servico: 'Tubulação de concreto DN 600', qtd_prevista: 200, inicio: d(-15), termino: d(2) },
-  { servico: 'Poço de visita', qtd_prevista: 8, inicio: d(-15), termino: d(4) },
-  { servico: 'Boca de lobo', qtd_prevista: 10, inicio: d(-6), termino: d(8) }] }).codigo;
+  { servico: 'Tubulação de concreto DN 600', qtd_prevista: 200, inicio: d(-15), termino: d(2), fvs_modelo: 'FVS.03' },
+  { servico: 'Poço de visita', qtd_prevista: 8, inicio: d(-15), termino: d(4), fvs_modelo: 'FVS.03' },
+  { servico: 'Boca de lobo', qtd_prevista: 10, inicio: d(-6), termino: d(8), fvs_modelo: '-' }] }).codigo;
 const it = Object.fromEntries(eng('exec_dados').etapas.flatMap(e => e.itens).map(i => [i.servico, i.id]));
 const clima = mm => ({ manha: { mm: mm * .7, codigo: mm ? 63 : 1, desc: mm ? 'Chuva moderada' : 'Predomínio de sol', tmin: 17, tmax: 23 }, tarde: { mm: mm * .3, codigo: mm ? 61 : 2, desc: mm ? 'Chuva fraca' : 'Parcialmente nublado', tmin: 21, tmax: 26 }, mm_trabalho: mm, mm_dia: mm + 1, tmin: 16, tmax: 26, vento: 14 });
 let choveu = false;

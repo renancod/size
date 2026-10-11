@@ -288,12 +288,13 @@ async function relLibs() {
 }
 const relNome = () => `Relatorio_${REL_ARQ[REL.tipo]}_${REL.dados.obra.sigla || 'obra'}_${REL.dados.de}_a_${REL.dados.ate}.pdf`;
 function imgCarregar(src) { return new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; }); }
-async function relGerarPdf() {
-  if (REL.pdf) return REL.pdf;
+/* gerador de PDF compartilhado (relatórios e FVS): recebe o HTML da folha (600px de largura, classes .rl-*) e devolve o PDF A4 com
+ * cabeçalho curto nas páginas seguintes, rodapé com paginação e a logo como marca d'água */
+async function pdfDeFolha(html, { cab = '', rod = '' } = {}) {
   await relLibs();
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-10000px;top:0;width:600px;background:#fff';
-  host.innerHTML = relFolha(REL.dados);
+  host.innerHTML = html;
   document.body.appendChild(host);
   try {
     const folha = host.firstElementChild;
@@ -322,15 +323,18 @@ async function relGerarPdf() {
       pdf.addImage(pc.toDataURL('image/jpeg', 0.93), 'JPEG', 10, topo, 190, (b - a) * MM);
       if (marca) { try { pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity: 0.05 })); pdf.addImage(marca.d, 'PNG', 35, 100, 140, 140 * marca.r); pdf.restoreGraphicsState(); } catch (e) { /* sem transparência */ } }
       pdf.setFontSize(8); pdf.setTextColor(110);
-      if (k) pdf.text(`${REL_TITULO[REL.tipo]} - ${REL.dados.obra.nome}`, 10, 8);
-      pdf.text(`${REL.dados.empresa} - ${REL.dados.obra.nome}`, 10, 291);
+      if (k && cab) pdf.text(cab, 10, 8);
+      if (rod) pdf.text(rod, 10, 291);
       pdf.text(`Página ${k + 1} de ${paginas.length}`, 200, 291, { align: 'right' });
     });
-    REL.pdf = pdf.output('blob');
-    return REL.pdf;
+    return pdf.output('blob');
   } finally { host.remove(); }
 }
-async function comPdf(botao, fn) {
+async function relGerarPdf() {
+  if (REL.pdf) return REL.pdf;
+  REL.pdf = await pdfDeFolha(relFolha(REL.dados), { cab: `${REL_TITULO[REL.tipo]} - ${REL.dados.obra.nome}`, rod: `${REL.dados.empresa} - ${REL.dados.obra.nome}` });
+  return REL.pdf;
+}async function comPdf(botao, fn) {
   if (!REL.dados || REL.gerando) return;
   REL.gerando = true;
   const t = botao.innerHTML; botao.disabled = true; botao.innerHTML = '<span class="spin peq"></span> Gerando PDF…';

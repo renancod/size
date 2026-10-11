@@ -59,6 +59,9 @@ function criarGAS() {
 
   function Folder(nome, pai) { this.id = novoId('fo'); this.nome = nome; this.pai = pai; pastas[this.id] = this; }
   Folder.prototype.getId = function () { return this.id; };
+  Folder.prototype.getName = function () { return this.nome; };
+  Folder.prototype.setName = function (n) { this.nome = n; return this; };
+  Folder.prototype.moveTo = function (dest) { this.pai = dest.id; return this; };
   Folder.prototype.getUrl = function () { return 'https://drive.google.com/drive/folders/' + this.id; };
   Folder.prototype.createFolder = function (n) { return new Folder(n, this.id); };
   Folder.prototype.getFoldersByName = function (n) { return iter(Object.values(pastas).filter(f => f.pai === this.id && f.nome === n)); };
@@ -119,13 +122,13 @@ function criarGAS() {
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ s, setMimeType() { return this; }, getContent() { return this.s; } }) },
     ScriptApp: { getProjectTriggers: () => [], deleteTrigger: () => {}, newTrigger: () => { const b = { timeBased: () => b, everyMinutes: () => b, everyDays: () => b, atHour: () => b, create: () => {} }; return b; } },
     Logger: { log: (...a) => G._logs.push(a.join(' ')) },
-    _logs: [], _cache: cache, _enviados: enviados, _threads: threads, _planilhas: planilhas, _arquivos: arquivos, Blob
+    _logs: [], _pastas: pastas, _cache: cache, _enviados: enviados, _threads: threads, _planilhas: planilhas, _arquivos: arquivos, Blob
   };
   G.console = console;
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());
