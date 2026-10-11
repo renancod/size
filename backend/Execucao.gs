@@ -543,8 +543,9 @@ function execRelatorio_(q, ctx) {
       const dias = {};
       ls.forEach(p => { const s = ymd_(p.data); if (noPer(s)) dias[s] = (dias[s] || 0) + num_(p.qtd); });
       const periodo = Object.keys(dias).reduce((t, s) => t + dias[s], 0), nd = Object.keys(dias).filter(s => dias[s] > 0).length;
-      const acum = ls.filter(p => ymd_(p.data) <= ate).reduce((t, p) => t + num_(p.qtd), 0);
-      return { id: i.id, servico: i.servico, unidade: i.unidade, periodo: r2_(periodo), acumulado: r2_(acum), previsto: i.prevista, pct: i.prevista ? r2_(acum / i.prevista * 100) : 0, dias: nd, media: nd ? r2_(periodo / nd) : 0 };
+      const acum = ls.filter(p => ymd_(p.data) <= ate).reduce((t, p) => t + num_(p.qtd), 0), qd = {};
+      Object.keys(dias).forEach(s => { qd[s] = r2_(dias[s]); });
+      return { id: i.id, servico: i.servico, unidade: i.unidade, periodo: r2_(periodo), acumulado: r2_(acum), previsto: i.prevista, pct: i.prevista ? r2_(acum / i.prevista * 100) : 0, dias: nd, media: nd ? r2_(periodo / nd) : 0, dias_qtd: qd };
     });
     if (!itens.some(i => i.periodo > 0)) return;
     const eq = {};
@@ -573,7 +574,16 @@ function execRelatorio_(q, ctx) {
       const dRitmo = a <= ate ? uteis(a, ate) : 0;
       const meta = i.ritmo === null ? null : r2_(Math.min(i.saldo, i.ritmo * dMeta));
       const iniciou = !!i.primeiro && i.media7 > 0;
+      // plano dia a dia (em % do serviço): o que falta, espalhado pelos dias úteis até o término (prazo vencido: no ritmo atual)
+      const uso = i.ritmo !== null ? i.ritmo : (i.media7 || 0), fimJan = i.ritmo !== null && i.termino < ate ? i.termino : ate, plano = [];
+      let acum = Math.min(100, i.pct);
+      if (uso > 0 && i.prevista > 0) for (let s = a; s <= fimJan && acum < 99.99; s = addDias_(s, 1)) {
+        if (!util(s)) continue;
+        const p = Math.min(uso / i.prevista * 100, 100 - acum);
+        acum += p; plano.push({ data: s, pct: r2_(p) });
+      }
       return {
+        plano: plano, pct_antes: r2_(Math.min(100, i.pct)), pct_depois: r2_(acum), inicia: !i.primeiro && plano.length > 0, conclui: acum >= 99.99 && plano.length > 0,
         id: i.id, servico: i.servico, unidade: i.unidade, saldo: i.saldo, executado: i.executado, prevista: i.prevista, pct: i.pct,
         inicio: i.inicio, termino: i.termino, termino_original: i.termino_original, projecao: i.projecao, situacao: i.situacao,
         meta: meta, ritmo_atual: iniciou ? i.media7 : null, proj_periodo: iniciou ? r2_(Math.min(i.saldo, i.media7 * dRitmo)) : null, dias_meta: dMeta

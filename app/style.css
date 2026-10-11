@@ -563,3 +563,21 @@ button.rel-chip{cursor:pointer}button.rel-chip:hover{background:rgba(255,255,255
 .rl-t small.atrasado{color:#C0392B;font-weight:700}.rl-t small.atencao{color:#B26A00;font-weight:700}.rl-venc{color:#C0392B;font-weight:700;font-size:11px}
 .rl-vazio{color:#5B6B82;padding:10px 0}
 .rl-nota{margin:16px 26px 0;padding-top:10px;border-top:1px solid #E3E9EC;font-size:10px;color:#6B7A90;line-height:1.4}
+
+/* relatório simplificado (leitura leiga): semana em colunas, % por dia */
+.rl-sem{table-layout:fixed}
+.rl-sem th.sv,.rl-sem td.sv{width:30%;text-align:left}
+.rl-sem td.sv{font-weight:600;color:#0E2A6B;font-size:12px}.rl-sem td.sv small{font-weight:400}
+.rl-sem th.d,.rl-sem td.d{text-align:center;padding:7px 2px;line-height:1.25}
+.rl-sem th.d{font-size:9.5px;text-transform:none;letter-spacing:0;color:#33425B;font-weight:700}
+.rl-sem th.d i{display:block;font-style:normal;font-size:8.5px;color:#1F5FBF;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.rl-sem td.d b{font-size:12.5px;color:#0E2A6B}
+.rl-sem .nd{color:#B4BFCE}
+.rl-sem .chv{background:#EAF1FD}
+.rl-sem th.fim,.rl-sem td.fim{width:17%;background:#F2F8F8;border-left:1px solid #D5E5E3}
+.rl-sem td.fim b{color:#04857A;font-size:13px;display:block}
+.rl-sem td.fim .rl-bar{display:block;margin:3px auto 0;width:80%}
+.rl-sem small.tg{display:block;margin-top:2px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#04857A}
+.rl-chuva{margin:14px 26px 0;padding:10px 14px;border-radius:12px;background:#EAF1FD;border-left:4px solid #1F5FBF;display:grid;gap:2px}
+.rl-chuva b{color:#1F5FBF;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.rl-chuva span{color:#1A2433}
+.rl-leg{margin:4px 26px 0;font-size:10px;color:#6B7A90;line-height:1.4}

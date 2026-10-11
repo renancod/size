@@ -202,6 +202,8 @@ test('relatório de execução/projeção: executado no período, chuva, meta ×
   assert.equal(it.periodo, 24);
   assert.equal(it.acumulado, 24);
   assert.equal(it.dias, 2);
+  assert.equal(it.dias_qtd['2026-03-02'], 10);
+  assert.equal(it.dias_qtd['2026-03-03'], 14);
   assert.equal(r.executado[0].equipes[0].equipe, 'Empreiteiro A');
   assert.equal(r.executado[0].equipes[0].pessoas, 6);           // média de 5 e 7
   // um período sem produção não traz a etapa no "executado"
@@ -218,6 +220,11 @@ test('relatório de execução/projeção: executado no período, chuva, meta ×
   assert.ok(p.meta > 0 && p.meta <= p.saldo);
   assert.equal(p.termino, fim);
   assert.equal(p.termino_original, '2026-03-13');
+  // plano dia a dia em % do serviço: só dias úteis, soma = avanço previsto no período
+  assert.ok(p.plano.length > 0 && p.plano.every(x => x.data >= hoje && x.data <= dia(7) && x.pct > 0));
+  assert.equal(p.pct_antes, 24);
+  assert.ok(Math.abs(p.pct_depois - p.pct_antes - p.plano.reduce((t, x) => t + x.pct, 0)) < 0.1);
+  assert.equal(p.conclui, false);
 
   // e-mail com PDF em anexo
   const pdf = { nome: 'Relatorio semanal.pdf', b64: Buffer.from('%PDF-1.4 teste').toString('base64') };

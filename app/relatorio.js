@@ -21,7 +21,6 @@ const fc = s => s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) : '';
 const dsemC = s => DSEM[new Date(s + 'T12:00').getDay()].slice(0, 3);
 const segDa = s => addD(s, -((new Date(s + 'T12:00').getDay() + 6) % 7));
 const mesNome = ym => { const [y, m] = ym.split('-').map(Number); const t = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); };
-const SIT_REL = { no_ritmo: 'No prazo', atencao: 'Atenção', atrasado: 'Atrasado', nao_iniciado: 'A iniciar', concluido: 'Concluído' };
 
 /* o que o calendário sabe: dias com diário, parados por chuva e até onde vai a previsão cadastrada */
 function relCal() {
@@ -156,67 +155,82 @@ async function relCarregar() {
   relPrevDesenhar(); relPer();
 }
 
-/* texto que abre o relatório: executado, chuva, meta da semana e reprogramações com o motivo */
+/* texto que abre o relatório, em linguagem simples (o engenheiro pode editar) */
+const fmtP = n => { n = Number(n) || 0; return (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString('pt-BR'); };
 function textoAuto(r) {
-  const p = [], tipo = REL.tipo, per = `${fc(r.de)} a ${fc(r.ate)}`, h = hoje();
+  const p = [], tipo = REL.tipo, h = hoje(), per = `${fc(r.de)} a ${fc(r.ate)}`;
   if (tipo !== 'previsao') {
     const lst = r.executado.flatMap(e => e.itens.filter(i => i.periodo > 0).map(i => `${i.servico} (${nf(i.periodo)} ${i.unidade})`));
-    if (lst.length) p.push(`No período de ${per} foram executados: ${lst.join('; ')}.`);
-    else if (r.de <= h) p.push(`No período de ${per} não houve produção registrada.`);
-    if (r.parados.length) p.push(`A execução foi paralisada por chuva em ${plural(r.parados.length, 'dia', 'dias')} (${r.parados.map(x => fc(x.data) + (x.mm ? ' · ' + nf(x.mm) + ' mm' : '')).join('; ')}), o que impactou o andamento dos serviços.`);
+    if (lst.length) p.push(`De ${per} foram executados: ${lst.join('; ')}.`);
+    else if (r.de <= h) p.push(`De ${per} não houve execução registrada.`);
+    if (r.parados.length) p.push(`Houve chuva em ${plural(r.parados.length, 'dia', 'dias')} (${r.parados.map(x => dsemC(x.data) + ' ' + fc(x.data)).join(', ')}) e a obra ficou parada.`);
   }
   if (tipo !== 'executado' && r.ate >= h) {
-    const its = r.previsto.flatMap(e => e.itens), meta = its.filter(i => i.meta > 0), pv = `${fc(r.prev_de)} a ${fc(r.ate)}`;
-    if (meta.length) p.push(`Previsão para ${pv}, para cumprir o prazo: ${meta.map(i => `${i.servico} ${nf(i.meta)} ${i.unidade}`).join('; ')}.`);
-    else if (!its.length) p.push(`Não há serviços previstos para ${pv}.`);
-    const risco = its.filter(i => i.situacao === 'atrasado' || i.situacao === 'atencao');
-    if (risco.length) p.push(`Atenção ao prazo: ${risco.map(i => i.servico + (i.projecao ? ' (término projetado ' + fd(i.projecao) + ')' : '')).join('; ')}.`);
+    const its = r.previsto.flatMap(e => e.itens).filter(i => i.plano.length);
+    const ini = its.filter(i => i.inicia), cont = its.filter(i => !i.inicia);
+    if (ini.length) p.push(`Início previsto de ${fc(r.prev_de)} a ${fc(r.ate)}: ${ini.map(i => `${i.servico} (${fc(i.plano[0].data)})`).join('; ')}.`);
+    if (cont.length) p.push(`Seguem em andamento: ${cont.map(i => i.servico).join(', ')}.`);
+    if (!its.length) p.push(`Não há serviços previstos para ${fc(r.prev_de)} a ${fc(r.ate)}.`);
   }
-  r.reprogramacoes.forEach(x => p.push(`${x.servico}: ${x.campo} reprogramado de ${fmtAlt(x.de)} para ${fmtAlt(x.para)}${x.motivo ? ' — ' + x.motivo : ''}.`));
   return p.join('\n\n');
 }
 
 /* ---------- a folha do relatório (a mesma na prévia e no PDF) ---------- */
+/* colunas: um dia por coluna (só dias úteis ou com produção); se forem muitos dias, uma coluna por semana */
+function relColunas(de, ate, extra, parados) {
+  const dias = [];
+  for (let s = de; s <= ate; s = addD(s, 1)) if (util(s) || extra[s] || parados[s]) dias.push(s);
+  const mk = (ini, fim, tit) => ({ ini, fim, tit, chuva: Object.keys(parados).some(d => d >= ini && d <= fim) });
+  if (dias.length <= 8) return dias.map(s => mk(s, s, `${dsemC(s)}<br>${fc(s)}`));
+  const cols = [];
+  for (let seg = segDa(de); seg <= ate; seg = addD(seg, 7)) {
+    const ds = dias.filter(s => s >= seg && s <= addD(seg, 6));
+    if (ds.length) cols.push(mk(ds[0], ds[ds.length - 1], `${fc(ds[0])}<br>a ${fc(ds[ds.length - 1])}`));
+  }
+  return cols;
+}
 function relFolha(r) {
-  const tipo = REL.tipo, h = hoje(), C = relCal();
-  let ut = 0; for (let s = r.de; s <= (r.ate < h ? r.ate : h); s = addD(s, 1)) if (util(s)) ut++;
-  const its = r.previsto.flatMap(e => e.itens), risco = its.filter(i => i.situacao === 'atrasado' || i.situacao === 'atencao').length;
-  const kp = (v, t, cl = '') => `<div class="rl-kpi ${cl}"><b>${v}</b><span>${t}</span></div>`;
-  const kpis = [];
-  if (tipo !== 'previsao') kpis.push(kp(`${r.resumo.dias_trabalhados}<small>/${ut}</small>`, 'dias trabalhados'), kp(r.resumo.dias_parados, 'paradas por chuva', r.resumo.dias_parados ? 'chuva' : ''), kp(r.executado.length, 'etapas com produção'));
-  if (tipo !== 'executado') kpis.push(kp(its.length, 'serviços projetados'), kp(risco, 'com risco de atraso', risco ? 'risco' : ''));
-  if (tipo === 'previsao') kpis.push(kp(C.fimPrev ? fc(C.fimPrev) : '—', 'previsão cadastrada até'));
-  const th = (t, c = '') => `<th class="${c}">${t}</th>`;
-  const exec = r.executado.map(e => `<div class="rl-bloco rl-et"><div class="rl-et-t"><div><b>${esc(e.nome)}</b>${e.local ? `<small>${esc(e.local)}</small>` : ''}</div><span class="rl-pct">${pct(e.pct)}<small>acumulado</small></span></div>
-      <table class="rl-t"><thead><tr>${th('Serviço')}${th('No período', 'n')}${th('Acumulado', 'n')}${th('Previsto', 'n')}${th('Avanço', 'bar')}</tr></thead><tbody>
-      ${e.itens.map(i => `<tr><td>${esc(i.servico)}</td><td class="n"><b>${nf(i.periodo)}</b> ${esc(i.unidade)}</td><td class="n">${nf(i.acumulado)}</td><td class="n">${nf(i.previsto)}</td><td class="bar"><span class="rl-bar"><i style="width:${Math.min(100, i.pct)}%"></i></span><small>${pct(i.pct)}</small></td></tr>`).join('')}</tbody></table>
-      ${e.equipes.length ? `<div class="rl-eq">${e.equipes.map(q => `<span>${esc(q.equipe)} · ${plural(q.pessoas, 'pessoa', 'pessoas')} · ${plural(q.dias, 'dia', 'dias')}</span>`).join('')}</div>` : ''}</div>`).join('');
-  const inter = r.parados.map(x => `<div class="rl-li chuva"><b>${dsemC(x.data)} ${fc(x.data)}</b><span>Parado por chuva${x.mm ? ' · ' + nf(x.mm) + ' mm no horário de trabalho' : ''}</span></div>`)
-    .concat(r.ocorrencias.map(x => `<div class="rl-li"><b>${dsemC(x.data)} ${fc(x.data)}</b><span>${esc(x.texto)}</span></div>`)).join('');
-  const prev = r.previsto.map(e => `<div class="rl-bloco rl-et"><div class="rl-et-t"><div><b>${esc(e.nome)}</b>${e.local ? `<small>${esc(e.local)}</small>` : ''}</div></div>
-      <table class="rl-t"><thead><tr>${th('Serviço')}${th('Saldo', 'n')}${th('Meta p/ cumprir o prazo', 'n')}${th('No ritmo atual', 'n')}${th('Término')}</tr></thead><tbody>
-      ${e.itens.map(i => {
-        const mudou = i.termino_original && i.termino_original !== i.termino;
-        return `<tr><td>${esc(i.servico)}<br><span class="rl-sit ${i.situacao}">${SIT_REL[i.situacao] || ''}</span></td><td class="n">${nf(i.saldo)} ${esc(i.unidade)}</td>
-          <td class="n">${i.meta === null ? '<span class="rl-venc">prazo vencido</span>' : `<b>${nf(i.meta)}</b> ${esc(i.unidade)}<small>${plural(i.dias_meta, 'dia útil', 'dias úteis')}</small>`}</td>
-          <td class="n">${i.proj_periodo === null ? '—' : `${nf(i.proj_periodo)} ${esc(i.unidade)}<small>${nf(i.ritmo_atual)}/dia</small>`}</td>
-          <td>${fd(i.termino)}${mudou ? `<small>original ${fd(i.termino_original)}</small>` : ''}${i.projecao && i.projecao !== i.termino ? `<small class="${i.situacao}">projetado ${fd(i.projecao)}</small>` : ''}</td></tr>`;
-      }).join('')}</tbody></table></div>`).join('');
-  const rep = r.reprogramacoes.map(x => `<div class="rl-li rep"><b>${fc(x.data)}</b><span><i>${esc(x.servico)}</i> · ${x.campo}: ${esc(fmtAlt(x.de))} → <b>${esc(fmtAlt(x.para))}</b>${x.motivo ? `<br><em>${esc(x.motivo)}</em>` : ''}</span></div>`).join('');
-  const sec = (t, corpo, cl = '') => `<div class="rl-sec ${cl}"><div class="rl-sec-t">${t}</div>${corpo}</div>`;
+  const tipo = REL.tipo, h = hoje(), parados = {}, extra = {};
+  r.parados.forEach(x => { parados[x.data] = x.mm; });
+  r.executado.forEach(e => e.itens.forEach(i => Object.keys(i.dias_qtd || {}).forEach(s => { extra[s] = 1; })));
+  let cols = relColunas(r.de, r.ate < h ? r.ate : h, extra, parados); // executado: só até hoje
+  const soma = (mapa, c) => Object.keys(mapa).filter(s => s >= c.ini && s <= c.fim).reduce((t, s) => t + mapa[s], 0);
+  const cab = fim => `<tr><th class="sv">Serviço</th>${cols.map(c => `<th class="d ${c.chuva ? 'chv' : ''}">${c.tit}${c.chuva ? '<i>chuva</i>' : ''}</th>`).join('')}<th class="d fim">${fim}</th></tr>`;
+  const linha = (nome, total, mapaPct, concl, tags) => `<tr><td class="sv">${esc(nome)}<small>${total}</small></td>${cols.map(c => {
+    const v = soma(mapaPct, c), tg = tags && tags(c);
+    return `<td class="d ${c.chuva ? 'chv' : ''}">${v > 0.04 ? `<b>${fmtP(v)}%</b>` : '<span class="nd">—</span>'}${tg ? `<small class="tg">${tg}</small>` : ''}</td>`;
+  }).join('')}<td class="d fim"><b>${fmtP(concl)}%</b><span class="rl-bar"><i style="width:${Math.min(100, concl)}%"></i></span></td></tr>`;
+  const cartao = (e, linhas, fim) => `<div class="rl-bloco rl-et"><div class="rl-et-t"><div><b>${esc(e.nome)}</b>${e.local ? `<small>${esc(e.local)}</small>` : ''}</div></div>
+    <table class="rl-t rl-sem"><thead>${cab(fim)}</thead><tbody>${linhas}</tbody></table></div>`;
+
+  const exec = r.executado.map(e => cartao(e, e.itens.filter(i => i.periodo > 0).map(i => {
+    const m = {}; Object.keys(i.dias_qtd || {}).forEach(s => { m[s] = i.previsto ? i.dias_qtd[s] / i.previsto * 100 : 0; });
+    return linha(i.servico, `${nf(i.periodo)} ${esc(i.unidade)} no período`, m, i.pct);
+  }).join(''), 'Já concluído')).join('');
+  cols = relColunas(r.prev_de, r.ate, {}, {}); // previsão: só do que ainda vem pela frente
+  const prev = r.previsto.map(e => {
+    const its = e.itens.filter(i => i.plano.length);
+    if (!its.length) return '';
+    return cartao(e, its.map(i => {
+      const m = {}; i.plano.forEach(x => { m[x.data] = x.pct; });
+      const d0 = i.plano[0].data, d1 = i.plano[i.plano.length - 1].data;
+      return linha(i.servico, `${nf(i.prevista)} ${esc(i.unidade)} no total`, m, i.pct_depois, c => (i.inicia && d0 >= c.ini && d0 <= c.fim ? 'início' : '') || (i.conclui && d1 >= c.ini && d1 <= c.fim ? 'conclusão' : ''));
+    }).join(''), 'Concluído ao fim');
+  }).join('');
+  const chuva = r.parados.length ? `<div class="rl-chuva rl-cut"><b>Chuva no período</b><span>${r.parados.map(x => `${DSEM[new Date(x.data + 'T12:00').getDay()]}, ${fc(x.data)}`).join(' · ')} — obra parada.</span></div>` : '';
+  const sec = (t, corpo) => `<div class="rl-sec"><div class="rl-sec-t">${t}</div>${corpo}</div>`;
+  const passou = r.ate < h;
   return `<div class="rl" id="relFolha">
     <div class="rl-top rl-cut"><div class="rl-logo"><img src="logo.png" alt="Size Engenharia"></div>
       <div class="rl-tit"><small>${esc(r.empresa)}</small><b>${REL_TITULO[tipo]}</b><span>${esc(r.obra.nome)}${r.obra.endereco ? ' · ' + esc(r.obra.endereco) : ''}</span></div>
       <div class="rl-per"><small>Período</small><b>${fc(r.de)} a ${fc(r.ate)}</b><span>${r.ate.slice(0, 4)}</span></div></div>
-    <div class="rl-kpis rl-cut">${kpis.join('')}</div>
-    ${REL.texto.trim() ? `<div class="rl-callout rl-cut"><div class="rl-sec-t sm">Resumo do período</div>${esc(REL.texto.trim()).replace(/\n/g, '<br>')}</div>` : ''}
-    ${tipo !== 'previsao' ? sec('Executado no período', exec || '<p class="rl-vazio">Nenhuma produção registrada neste período.</p>') : ''}
-    ${tipo !== 'previsao' && inter ? sec('Clima e ocorrências', `<div class="rl-bloco rl-lis">${inter}</div>`) : ''}
-    ${tipo !== 'executado' ? sec(r.ate < h ? 'Previsão' : `Previsão de ${fc(r.prev_de)} a ${fc(r.ate)}`, r.ate < h ? '<p class="rl-vazio">O período escolhido já passou — não há o que projetar.</p>' : prev || '<p class="rl-vazio">Não há serviços previstos para este período.</p>') : ''}
-    ${tipo !== 'executado' && rep ? sec('Reprogramações e justificativas', `<div class="rl-bloco rl-lis">${rep}</div>`) : ''}
-    <div class="rl-nota rl-cut">${tipo !== 'executado' ? 'A projeção considera as quantidades e os prazos programados e o ritmo médio dos últimos 7 dias trabalhados; chuva e falta de insumos podem alterá-la. ' : ''}Documento emitido por ${esc(r.emissor)} em ${new Date().toLocaleString('pt-BR')}.</div></div>`;
-}
-function relPrevDesenhar() {
+    ${REL.texto.trim() ? `<div class="rl-callout rl-cut"><div class="rl-sec-t sm">Resumo</div>${esc(REL.texto.trim()).replace(/\n/g, '<br>')}</div>` : ''}
+    ${chuva}
+    ${tipo !== 'previsao' ? sec('O que foi executado', exec || '<p class="rl-vazio">Nenhuma execução registrada neste período.</p>') : ''}
+    ${tipo !== 'executado' ? sec(passou ? 'O que está previsto' : `O que está previsto · ${fc(r.prev_de)} a ${fc(r.ate)}`, passou ? '<p class="rl-vazio">O período escolhido já passou.</p>' : prev || '<p class="rl-vazio">Não há serviços previstos neste período.</p>') : ''}
+    <div class="rl-leg rl-cut">Cada número é a parte do serviço feita no dia, em % do total do serviço. A última coluna mostra quanto do serviço está pronto.${tipo !== 'executado' ? ' A previsão pode mudar com chuva ou outros imprevistos.' : ''}</div>
+    <div class="rl-nota rl-cut">Documento emitido por ${esc(r.emissor)} em ${new Date().toLocaleString('pt-BR')}.</div></div>`;
+}function relPrevDesenhar() {
   const el = $('#relPrev'); if (!el) return;
   const ac = $('#relAcoes');
   if (ac) $$('button', ac).forEach(b => { b.disabled = !REL.dados; });
