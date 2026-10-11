@@ -9,7 +9,7 @@ Object.assign(IC, {
   mail: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6',
   whats: 'M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5zM9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .7a3.5 3.5 0 0 1-1.7-1.7l.7-1-1-2z'
 });
-const REL = { obra: '', tipo: 'completo', de: '', ate: '', pick: null, mes: '', manual: false, dados: null, erro: '', texto: '', editado: false, tok: 0, pdf: null, gerando: false };
+const REL = { chuva: {}, obra: '', tipo: 'completo', de: '', ate: '', pick: null, mes: '', manual: false, dados: null, erro: '', texto: '', editado: false, tok: 0, pdf: null, gerando: false };
 const REL_TIPOS = {
   executado: ['Executado', 'O que foi feito no período, com clima e ocorrências', 'check'],
   previsao: ['Previsão', 'A meta e a projeção do que vem pela frente', 'clock'],
@@ -143,13 +143,35 @@ function relPer() {
 }
 function relTxtPor() { const t = $('#relTxt'); if (t && t.value !== REL.texto) t.value = REL.texto; }
 
+/* previsão de chuva (Open-Meteo, até 15 dias à frente): dias úteis com chuva forte no horário de trabalho (7h–17h) */
+async function relChuvaPrev(de, ate) {
+  const o = EX.d.obra, h = hoje(), a = de > h ? de : h, lim15 = addD(h, 15), b = ate < lim15 ? ate : lim15;
+  if (!o || o.lat === '' || o.lat == null || o.lng === '' || o.lng == null || a > b) return {};
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${o.lat}&longitude=${o.lng}&hourly=precipitation,precipitation_probability&timezone=America%2FSao_Paulo&start_date=${a}&end_date=${b}`, { signal: ctl.signal });
+    const hh = (await r.json()).hourly;
+    if (!hh || !hh.time) return {};
+    const limite = num(EX.d.limite_chuva) || 5, dias = {}, out = {};
+    hh.time.forEach((x, i) => {
+      const d = String(x).slice(0, 10), hr = +String(x).slice(11, 13);
+      if (hr < 7 || hr >= 17) return;
+      const e = dias[d] = dias[d] || { mm: 0, prob: 0 };
+      e.mm += +hh.precipitation[i] || 0; e.prob = Math.max(e.prob, +hh.precipitation_probability[i] || 0);
+    });
+    Object.keys(dias).forEach(d => { const e = dias[d]; if (util(d) && (e.mm >= limite || (e.prob >= 70 && e.mm >= 1))) out[d] = { mm: Math.round(e.mm * 10) / 10, prob: Math.round(e.prob) }; });
+    return out;
+  } catch (e) { return {}; } finally { clearTimeout(tm); }
+}
 async function relCarregar() {
   const t = ++REL.tok;
-  REL.dados = null; REL.erro = ''; REL.pdf = null; relPrevDesenhar();
+  REL.dados = null; REL.erro = ''; REL.pdf = null; REL.chuva = {}; relPrevDesenhar();
   try {
     const r = await api('exec_relatorio', { de: REL.de, ate: REL.ate });
     if (t !== REL.tok) return;
-    REL.dados = r;
+    const ch = r.ate >= hoje() ? await relChuvaPrev(r.prev_de, r.ate) : {};
+    if (t !== REL.tok) return;
+    REL.dados = r; REL.chuva = ch;
     if (!REL.editado) { REL.texto = textoAuto(r); relTxtPor(); }
   } catch (e) { if (t !== REL.tok) return; REL.erro = e.message; }
   relPrevDesenhar(); relPer();
@@ -170,6 +192,8 @@ function textoAuto(r) {
     const ini = its.filter(i => i.inicia), cont = its.filter(i => !i.inicia);
     if (ini.length) p.push(`Início previsto de ${fc(r.prev_de)} a ${fc(r.ate)}: ${ini.map(i => `${i.servico} (${fc(i.plano[0].data)})`).join('; ')}.`);
     if (cont.length) p.push(`Seguem em andamento: ${cont.map(i => i.servico).join(', ')}.`);
+    const rk = Object.keys(REL.chuva || {}).sort();
+    if (rk.length) p.push(`Há previsão de chuva em ${rk.map(d => dsemC(d) + ' ' + fc(d)).join(', ')}; a execução pode atrasar.`);
     if (!its.length) p.push(`Não há serviços previstos para ${fc(r.prev_de)} a ${fc(r.ate)}.`);
   }
   return p.join('\n\n');
@@ -177,10 +201,10 @@ function textoAuto(r) {
 
 /* ---------- a folha do relatório (a mesma na prévia e no PDF) ---------- */
 /* colunas: um dia por coluna (só dias úteis ou com produção); se forem muitos dias, uma coluna por semana */
-function relColunas(de, ate, extra, parados) {
+function relColunas(de, ate, extra, parados, risco = {}) {
   const dias = [];
   for (let s = de; s <= ate; s = addD(s, 1)) if (util(s) || extra[s] || parados[s]) dias.push(s);
-  const mk = (ini, fim, tit) => ({ ini, fim, tit, chuva: Object.keys(parados).some(d => d >= ini && d <= fim) });
+  const mk = (ini, fim, tit) => ({ ini, fim, tit, chuva: Object.keys(parados).some(d => d >= ini && d <= fim), risco: Object.keys(risco).some(d => d >= ini && d <= fim) });
   if (dias.length <= 8) return dias.map(s => mk(s, s, `${dsemC(s)}<br>${fc(s)}`));
   const cols = [];
   for (let seg = segDa(de); seg <= ate; seg = addD(seg, 7)) {
@@ -195,10 +219,10 @@ function relFolha(r) {
   r.executado.forEach(e => e.itens.forEach(i => Object.keys(i.dias_qtd || {}).forEach(s => { extra[s] = 1; })));
   let cols = relColunas(r.de, r.ate < h ? r.ate : h, extra, parados); // executado: só até hoje
   const soma = (mapa, c) => Object.keys(mapa).filter(s => s >= c.ini && s <= c.fim).reduce((t, s) => t + mapa[s], 0);
-  const cab = fim => `<tr><th class="sv">Serviço</th>${cols.map(c => `<th class="d ${c.chuva ? 'chv' : ''}">${c.tit}${c.chuva ? '<i>chuva</i>' : ''}</th>`).join('')}<th class="d fim">${fim}</th></tr>`;
+  const cab = fim => `<tr><th class="sv">Serviço</th>${cols.map(c => `<th class="d ${c.chuva ? 'chv' : ''} ${c.risco ? 'rsk' : ''}">${c.tit}${c.chuva ? '<i>chuva</i>' : ''}${c.risco ? '<i class="rk">possível chuva</i>' : ''}</th>`).join('')}<th class="d fim">${fim}</th></tr>`;
   const linha = (nome, total, mapaPct, concl, tags) => `<tr><td class="sv">${esc(nome)}<small>${total}</small></td>${cols.map(c => {
     const v = soma(mapaPct, c), tg = tags && tags(c);
-    return `<td class="d ${c.chuva ? 'chv' : ''}">${v > 0.04 ? `<b>${fmtP(v)}%</b>` : '<span class="nd">—</span>'}${tg ? `<small class="tg">${tg}</small>` : ''}</td>`;
+    return `<td class="d ${c.chuva ? 'chv' : ''} ${c.risco ? 'rsk' : ''}">${v > 0.04 ? `<b>${fmtP(v)}%</b>` : '<span class="nd">—</span>'}${tg ? `<small class="tg">${tg}</small>` : ''}</td>`;
   }).join('')}<td class="d fim"><b>${fmtP(concl)}%</b><span class="rl-bar"><i style="width:${Math.min(100, concl)}%"></i></span></td></tr>`;
   const cartao = (e, linhas, fim) => `<div class="rl-bloco rl-et"><div class="rl-et-t"><div><b>${esc(e.nome)}</b>${e.local ? `<small>${esc(e.local)}</small>` : ''}</div></div>
     <table class="rl-t rl-sem"><thead>${cab(fim)}</thead><tbody>${linhas}</tbody></table></div>`;
@@ -207,7 +231,8 @@ function relFolha(r) {
     const m = {}; Object.keys(i.dias_qtd || {}).forEach(s => { m[s] = i.previsto ? i.dias_qtd[s] / i.previsto * 100 : 0; });
     return linha(i.servico, `${nf(i.periodo)} ${esc(i.unidade)} no período`, m, i.pct);
   }).join(''), 'Já concluído')).join('');
-  cols = relColunas(r.prev_de, r.ate, {}, {}); // previsão: só do que ainda vem pela frente
+  const risco = REL.chuva || {};
+  cols = relColunas(r.prev_de, r.ate, {}, {}, risco); // previsão: só do que ainda vem pela frente
   const prev = r.previsto.map(e => {
     const its = e.itens.filter(i => i.plano.length);
     if (!its.length) return '';
@@ -218,6 +243,8 @@ function relFolha(r) {
     }).join(''), 'Concluído ao fim');
   }).join('');
   const chuva = r.parados.length ? `<div class="rl-chuva rl-cut"><b>Chuva no período</b><span>${r.parados.map(x => `${DSEM[new Date(x.data + 'T12:00').getDay()]}, ${fc(x.data)}`).join(' · ')} — obra parada.</span></div>` : '';
+  const rkd = Object.keys(risco).sort();
+  const aviso = tipo !== 'executado' && rkd.length && r.ate >= h ? `<div class="rl-chuva rk rl-cut"><b>Possibilidade de chuva</b><span>${rkd.map(d => `${DSEM[new Date(d + 'T12:00').getDay()]}, ${fc(d)} (${risco[d].prob}%)`).join(' · ')} — a execução pode atrasar.</span></div>` : '';
   const sec = (t, corpo) => `<div class="rl-sec"><div class="rl-sec-t">${t}</div>${corpo}</div>`;
   const passou = r.ate < h;
   return `<div class="rl" id="relFolha">
@@ -227,7 +254,7 @@ function relFolha(r) {
     ${REL.texto.trim() ? `<div class="rl-callout rl-cut"><div class="rl-sec-t sm">Resumo</div>${esc(REL.texto.trim()).replace(/\n/g, '<br>')}</div>` : ''}
     ${chuva}
     ${tipo !== 'previsao' ? sec('O que foi executado', exec || '<p class="rl-vazio">Nenhuma execução registrada neste período.</p>') : ''}
-    ${tipo !== 'executado' ? sec(passou ? 'O que está previsto' : `O que está previsto · ${fc(r.prev_de)} a ${fc(r.ate)}`, passou ? '<p class="rl-vazio">O período escolhido já passou.</p>' : prev || '<p class="rl-vazio">Não há serviços previstos neste período.</p>') : ''}
+    ${tipo !== 'executado' ? sec(passou ? 'O que está previsto' : `O que está previsto · ${fc(r.prev_de)} a ${fc(r.ate)}`, passou ? '<p class="rl-vazio">O período escolhido já passou.</p>' : aviso + (prev || '<p class="rl-vazio">Não há serviços previstos neste período.</p>')) : ''}
     <div class="rl-leg rl-cut">Cada número é a parte do serviço feita no dia, em % do total do serviço. A última coluna mostra quanto do serviço está pronto.${tipo !== 'executado' ? ' A previsão pode mudar com chuva ou outros imprevistos.' : ''}</div>
     <div class="rl-nota rl-cut">Documento emitido por ${esc(r.emissor)} em ${new Date().toLocaleString('pt-BR')}.</div></div>`;
 }function relPrevDesenhar() {

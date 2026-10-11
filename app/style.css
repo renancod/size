@@ -580,4 +580,7 @@ button.rel-chip{cursor:pointer}button.rel-chip:hover{background:rgba(255,255,255
 .rl-sem small.tg{display:block;margin-top:2px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#04857A}
 .rl-chuva{margin:14px 26px 0;padding:10px 14px;border-radius:12px;background:#EAF1FD;border-left:4px solid #1F5FBF;display:grid;gap:2px}
 .rl-chuva b{color:#1F5FBF;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.rl-chuva span{color:#1A2433}
-.rl-leg{margin:4px 26px 0;font-size:10px;color:#6B7A90;line-height:1.4}
+.rl-leg{margin:4px 26px 0;font-size:10px;color:#6B7A90;line-height:1.4}.rl-sec .rl-chuva{margin:0 0 10px}
+.rl-chuva.rk{background:#FDECEA;border-left-color:#C0392B}.rl-chuva.rk b{color:#C0392B}
+.rl-sem .rsk{background:#FDECEA}
+.rl-sem th.d i.rk{color:#C0392B}
