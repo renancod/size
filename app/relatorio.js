@@ -32,7 +32,7 @@ function relCal() {
 }
 function relPadrao(tipo) {
   const h = hoje(), seg = segDa(h), w = new Date(h + 'T12:00').getDay(), fimSem = w === 0 || w >= 5;
-  const exe = fimSem ? [seg, addD(seg, 4)] : [addD(seg, -7), addD(seg, -3)];
+  const exe = fimSem ? [seg, h] : [addD(seg, -7), h]; // até hoje: não deixa de fora sábado/domingo nem o que foi lançado nesta semana
   const pre = fimSem ? [addD(seg, 7), addD(seg, 11)] : [h, addD(seg, 4)];
   return tipo === 'executado' ? exe : tipo === 'previsao' ? pre : [exe[0], pre[1]];
 }
@@ -135,9 +135,12 @@ function relPer() {
     if (REL.tipo !== 'executado' && !C.fimPrev) avisos.push(['warn', 'Não há previsão cadastrada: cadastre etapas e serviços com datas para projetar.']);
     if (REL.tipo === 'executado' && REL.de > h) avisos.push(['warn', 'Esse período ainda não aconteceu — escolha "Previsão" ou "Completo".']);
     if (REL.tipo !== 'previsao' && C.ultimo && REL.de > C.ultimo) avisos.push(['warn', `A execução registrada vai só até ${fd(C.ultimo)}.`]);
+    else if (REL.tipo !== 'previsao' && C.ultimo && REL.dados && !REL.dados.executado.length && REL.de <= h)
+      avisos.push(['warn', `Não há produção lançada entre ${fc(REL.de)} e ${fc(REL.ate)}. A última execução registrada foi em ${fd(C.ultimo)}. <button type="button" class="linkbtn" id="relIrUlt">Usar a semana dessa execução</button>`, 1]);
   }
   $('#relPer').innerHTML = `<div class="rel-per"><span>${ic('calendar')}<b>${fc(REL.de)}</b> <small>${dsemC(REL.de)}</small> <i>→</i> <b>${fc(REL.ate)}</b> <small>${dsemC(REL.ate)}</small></span><em>${plural(u, 'dia útil', 'dias úteis')}</em></div>
-    ${avisos.map(a => `<div class="aviso ${a[0]}">${esc(a[1])}</div>`).join('')}`;
+    ${avisos.map(a => `<div class="aviso ${a[0]}">${a[2] ? a[1] : esc(a[1])}</div>`).join('')}`;
+  if ($('#relIrUlt')) $('#relIrUlt').onclick = () => { const u = C.ultimo; REL.de = segDa(u); REL.ate = u; REL.pick = null; REL.manual = true; REL.mes = u.slice(0, 7); relMudou(); };
 }
 function relTxtPor() { const t = $('#relTxt'); if (t && t.value !== REL.texto) t.value = REL.texto; }
 
@@ -150,7 +153,7 @@ async function relCarregar() {
     REL.dados = r;
     if (!REL.editado) { REL.texto = textoAuto(r); relTxtPor(); }
   } catch (e) { if (t !== REL.tok) return; REL.erro = e.message; }
-  relPrevDesenhar();
+  relPrevDesenhar(); relPer();
 }
 
 /* texto que abre o relatório: executado, chuva, meta da semana e reprogramações com o motivo */
