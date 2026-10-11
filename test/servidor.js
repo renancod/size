@@ -1,5 +1,5 @@
 // Servidor local de demonstração: app + API simulada com dados de exemplo.
-// Uso: node test/servidor.js  → http://localhost:5173  (login: admin / admin123 · compras, estoque, fin / senha123)
+// Uso: node test/servidor.js  → http://localhost:5173  (login: admin / Admin#Size26 · compras, estoque, fin / Obra#Teste26)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ G.setup();
 const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
 const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(acao + ': ' + r.erro); return r.dados; };
 let tk = call('login', { login: 'admin', senha }).token;
-call('trocarSenha', { token: tk, atual: senha, nova: 'admin123' });
+tk = call('trocarSenha', { token: tk, atual: senha, nova: 'Admin#Size26' }).token;
 const adm = (acao, d = {}) => call(acao, { token: tk, ...d });
 
 ['Cimento CP-II 50kg|sc|Estrutura', 'Areia média|m³|Agregados', 'Brita 1|m³|Agregados', 'Vergalhão CA-50 10mm|barra|Estrutura', 'Tijolo 6 furos|un|Alvenaria',
@@ -21,10 +21,10 @@ adm('admin_obra_criar', { nome: 'Residencial Jardins', sigla: 'RJ', endereco: 'R
 adm('admin_config_salvar', { config: { REGRAS_ORCAMENTO: '5000:2; 20000:3' } });
 const perfis = adm('admin_dados').perfis;
 const usuario = (login, nome, perfil) => {
-  adm('admin_usuario_salvar', { usuario: { nome, login, ativo: true }, senha: 'senha123', acessos: [{ obra_id: obra, perfil, permissoes: perfis.find(p => p.perfil === perfil).permissoes }] });
-  const s = call('login', { login, senha: 'senha123' });
-  call('trocarSenha', { token: s.token, atual: 'senha123', nova: 'senha123' });
-  return (acao, d = {}) => call(acao, { token: s.token, obra, ...d });
+  adm('admin_usuario_salvar', { usuario: { nome, login, ativo: true }, senha: 'Obra#Teste26', acessos: [{ obra_id: obra, perfil, permissoes: perfis.find(p => p.perfil === perfil).permissoes }] });
+  const s = call('login', { login, senha: 'Obra#Teste26' });
+  const novoToken = call('trocarSenha', { token: s.token, atual: 'Obra#Teste26', nova: 'Obra#Teste26' }).token;
+  return (acao, d = {}) => call(acao, { token: novoToken, obra, ...d });
 };
 const com = usuario('compras', 'Carla Compras', 'Compras');
 const est = usuario('estoque', 'Eduardo Almoxarife', 'Estoque');
@@ -70,7 +70,7 @@ est('pedido_receber', { numero: p6, itens: { 1: 12 }, nf_numero: '4521', nf_data
 call('pedido_detalhe', { token: tk, obra, numero: p6 });
 est('cad_salvar', { tipo: 'materiais', dados: { codigo: 'M0003', descricao: 'Brita 1', unidade: 'm³', categoria: 'Agregados', estoque_min: 20 } });
 est('estoque_movimentar', { tipo: 'Saída', material_cod: 'M0001', qtd: 25, frente: 'Fundação' });
-// ---- execução / diário de obra (login: eng · mestre / senha123) ----
+// ---- execução / diário de obra (login: eng · mestre / Obra#Teste26) ----
 adm('admin_obra_salvar', { id: obra, nome: 'Prime Beach', endereco: 'Av. Beira-Mar, 1000 — Capão da Canoa/RS', ativa: true, lat: '-29.746', lng: '-50.009' });
 const eng = usuario('eng', 'Ernesto Engenheiro', 'Engenheiro');
 const mestre = usuario('mestre', 'Marcos Encarregado', 'Encarregado');

@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://api.open-meteo.com https://archive-api.open-meteo.com; frame-src blob: data:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Size Engenharia</title>
 <meta name="theme-color" content="#0E2A6B">
@@ -23,8 +24,6 @@
 <script src="app.js"></script>
 <script src="exec.js"></script>
 <script src="relatorio.js"></script>
-<script>
-  if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
-</script>
+<script src="sw-registro.js"></script>
 </body>
 </html>

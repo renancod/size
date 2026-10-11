@@ -8,7 +8,8 @@
  * Implantar > Nova implantação > App da Web: executar como "Eu", acesso "Qualquer pessoa".
  * Antes da primeira implantação rode setup() no editor (veja Setup.gs).
  */
-const SESSAO_DIAS = 30;
+const SESSAO_DIAS = 14;
+const LOGIN_MAX_FALHAS = 5, LOGIN_BLOQUEIO_MIN = 15;
 
 function doGet() {
   return ContentService.createTextOutput('Compras Size API ok');
@@ -89,6 +90,7 @@ const ROTAS = {
   admin_obra_criar: { admin: true, lock: true, fn: adminObraCriar_ },
   admin_obra_salvar: { admin: true, lock: true, fn: adminObraSalvar_ },
   admin_config_salvar: { admin: true, lock: true, fn: adminConfigSalvar_ },
+  admin_backup: { admin: true, lock: true, fn: adminBackup_ },
   admin_perfil_salvar: { admin: true, lock: true, fn: adminPerfilSalvar_ },
   admin_padrao_salvar: { admin: true, lock: true, fn: adminPadraoSalvar_ },
   admin_padrao_excluir: { admin: true, lock: true, fn: adminPadraoExcluir_ },
@@ -176,10 +178,12 @@ function segredo_() {
 function assinar_(txt) {
   return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(txt, segredo_()));
 }
-function token_(uid) {
-  const c = Utilities.base64EncodeWebSafe(JSON.stringify({ u: String(uid), e: Date.now() + SESSAO_DIAS * 864e5 }), Utilities.Charset.UTF_8);
+function token_(u) {
+  const c = Utilities.base64EncodeWebSafe(JSON.stringify({ u: String(u.id), v: versaoSenha_(u), e: Date.now() + SESSAO_DIAS * 864e5 }), Utilities.Charset.UTF_8);
   return c + '.' + assinar_(c);
 }
+/* "versão" da senha dentro do token: trocar a senha invalida as sessões abertas em outros aparelhos */
+function versaoSenha_(u) { return assinar_('sv|' + u.senha_hash).slice(0, 12); }
 function usuarioDoToken_(t) {
   const a = String(t || '').split('.');
   if (a.length !== 2 || assinar_(a[0]) !== a[1]) throw new Error('Sessão inválida. Entre novamente.');
@@ -187,20 +191,43 @@ function usuarioDoToken_(t) {
   if (d.e < Date.now()) throw new Error('Sessão expirada. Entre novamente.');
   const u = central_('Usuarios').all().find(x => String(x.id) === d.u);
   if (!u || !sim_(u.ativo)) throw new Error('Sessão inválida: usuário desativado.');
+  // tokens antigos (sem "v") continuam valendo até vencer; os novos acompanham a senha
+  if (d.v && d.v !== versaoSenha_(u)) throw new Error('Sessão encerrada: a senha foi alterada. Entre novamente.');
   return u;
+}
+/* e-mail de segurança para os administradores (nunca derruba o fluxo se falhar) */
+function avisarAdmins_(assunto, texto) {
+  try {
+    const para = central_('Usuarios').all().filter(u => sim_(u.admin) && sim_(u.ativo) && /@/.test(String(u.email || ''))).map(u => String(u.email).trim());
+    if (!para.length) para.push(Session.getEffectiveUser().getEmail());
+    GmailApp.sendEmail(para.filter(Boolean).join(','), assunto, texto, { name: String(config_().EMPRESA || 'Size Engenharia') + ' · Segurança' });
+    return true;
+  } catch (e) { return false; }
 }
 function login_(q) {
   const login = norm_(q.login), senha = String(q.senha || '');
   if (!login || !senha) throw new Error('Informe usuário e senha.');
+  // bloqueio por tentativas erradas (por usuário digitado, exista ou não — não revela quem tem conta)
+  const cache = CacheService.getScriptCache(), kf = 'lf|' + login.slice(0, 80), falhas = Number(cache.get(kf)) || 0;
+  if (falhas >= LOGIN_MAX_FALHAS) {
+    Utilities.sleep(800);
+    throw new Error('Muitas tentativas erradas. Por segurança o acesso ficou bloqueado por ' + LOGIN_BLOQUEIO_MIN + ' minutos. Tente de novo depois (ou peça ao administrador).');
+  }
   const T = central_('Usuarios');
   const u = T.all().find(x => norm_(x.login) === login || (x.email && norm_(x.email) === login));
   if (!u || !sim_(u.ativo) || hash_(senha, u.salt) !== u.senha_hash) {
+    cache.put(kf, String(falhas + 1), LOGIN_BLOQUEIO_MIN * 60);
+    if (falhas + 1 === LOGIN_MAX_FALHAS && !cache.get('la|' + kf)) {
+      cache.put('la|' + kf, '1', 3600);
+      avisarAdmins_('Alerta de segurança: tentativas de login erradas', 'Houve ' + LOGIN_MAX_FALHAS + ' tentativas de login erradas seguidas para o usuário "' + login + '". O acesso desse usuário ficou bloqueado por ' + LOGIN_BLOQUEIO_MIN + ' minutos. Se não foi a própria pessoa, considere trocar a senha dela.');
+    }
     Utilities.sleep(800);
     throw new Error('Usuário ou senha incorretos.');
   }
+  cache.remove(kf);
   u.ultimo_acesso = new Date();
   T.update(u);
-  return Object.assign({ token: token_(u.id) }, sessaoDe_(u));
+  return Object.assign({ token: token_(u) }, sessaoDe_(u));
 }
 function sessaoDe_(u) {
   const admin = sim_(u.admin);
@@ -220,11 +247,15 @@ function trocarSenha_(q, ctx) {
   definirSenha_(u, q.nova);
   u.trocar_senha = 'Não';
   T.update(u);
-  return { msg: 'Senha alterada.' };
+  // as outras sessões deste usuário caem (a versão da senha mudou); esta recebe um token novo
+  return { msg: 'Senha alterada.', token: token_(u) };
 }
+const SENHAS_FRACAS_ = ['1234567890', '0123456789', '12345678910', '1234567890a', 'senha12345', 'senha123456', 'password12', 'password123', 'qwertyuiop', 'abcdefghij', 'admin12345', 'size123456', 'sizeengenharia'];
 function definirSenha_(u, senha) {
   senha = String(senha || '');
-  if (senha.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+  if (senha.length < 10) throw new Error('A senha precisa ter pelo menos 10 caracteres.');
+  if (SENHAS_FRACAS_.indexOf(senha.toLowerCase()) >= 0 || /^(.)\1+$/.test(senha) || (u.login && norm_(senha) === norm_(u.login)))
+    throw new Error('Essa senha é fácil de adivinhar. Escolha outra (misture letras e números).');
   u.salt = Utilities.getUuid();
   u.senha_hash = hash_(senha, u.salt);
 }

@@ -35,7 +35,9 @@ function atualizarPerfis_() {
 function adminDados_(q, ctx) {
   atualizarPerfis_();
   garantirGatilhos_();
+  garantirBackup_();
   return {
+    backup: backupInfo_(),
     usuarios: central_('Usuarios').all().map(pub_),
     acessos: central_('Acessos').all().map(a => {
       const o = pub_(a);

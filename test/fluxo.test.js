@@ -17,8 +17,8 @@ function preparar() {
 function criarUsuario(t, login, perfil, obra) {
   const perfis = t.adm('admin_dados').perfis;
   const p = perfis.find(x => x.perfil === perfil);
-  t.adm('admin_usuario_salvar', { usuario: { nome: login, login, ativo: true }, senha: 'senha123', acessos: obra ? [{ obra_id: obra, perfil, permissoes: p.permissoes }] : [] });
-  const s = t.call('login', { login, senha: 'senha123' });
+  t.adm('admin_usuario_salvar', { usuario: { nome: login, login, ativo: true }, senha: 'Obra#Teste26', acessos: obra ? [{ obra_id: obra, perfil, permissoes: p.permissoes }] : [] });
+  const s = t.call('login', { login, senha: 'Obra#Teste26' });
   return (acao, d = {}) => t.call(acao, { token: s.token, obra, ...d });
 }
 const falha = (fn, re) => assert.throws(fn, re);
@@ -28,8 +28,8 @@ test('setup, login e troca de senha', () => {
   const s = t.call('login', { login: 'admin', senha: t.senha });
   assert.equal(s.usuario.trocar_senha, true);
   falha(() => t.call('login', { login: 'admin', senha: 'errada' }), /incorretos/);
-  t.adm('trocarSenha', { atual: t.senha, nova: 'nova123' });
-  assert.equal(t.call('login', { login: 'ADMIN', senha: 'nova123' }).usuario.trocar_senha, false);
+  t.adm('trocarSenha', { atual: t.senha, nova: 'Nova-Senha-26' });
+  assert.equal(t.call('login', { login: 'ADMIN', senha: 'Nova-Senha-26' }).usuario.trocar_senha, false);
   falha(() => t.call('sessao', { token: 'x.y' }), /Sessão inválida/);
 });
 

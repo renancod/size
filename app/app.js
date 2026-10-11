@@ -58,6 +58,14 @@ function toast(t, erro) {
   setTimeout(() => p.remove(), erro ? 8000 : 4000);
 }
 
+/* botões do HTML gerado usam data-acao (sem onclick inline, para valer a política de segurança do navegador) */
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-acao]');
+  if (!b) return;
+  const f = { instalar: () => instalar(), rotear: () => rotear(), recarregar: () => location.reload(), descartarErros: () => descartarErros(), sincronizar: () => sincronizar() }[b.dataset.acao];
+  if (f) f();
+});
+
 /* arquivos: fotos grandes do celular são reduzidas antes do envio */
 const paraB64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
 function reduzirFoto(f) {
@@ -102,7 +110,7 @@ const instalado = () => matchMedia('(display-mode: standalone)').matches || navi
 const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); PROMPT_INSTALAR = e; });
 addEventListener('appinstalled', () => { PROMPT_INSTALAR = null; $$('.instalar').forEach(b => b.remove()); toast('App instalado! Abra pelo ícone "Size".'); });
-const botaoInstalar = cl => instalado() ? '' : `<button type="button" class="instalar ${cl}" onclick="instalar()">${ic('download')}<span>Instalar o app</span></button>`;
+const botaoInstalar = cl => instalado() ? '' : `<button type="button" class="instalar ${cl}" data-acao="instalar">${ic('download')}<span>Instalar o app</span></button>`;
 async function instalar() {
   if (PROMPT_INSTALAR) {
     PROMPT_INSTALAR.prompt();
@@ -346,7 +354,7 @@ async function rotear() {
     if (!m) continue;
     carregandoView();
     try { await fn(...m.slice(1).map(x => x && decodeURIComponent(x))); }
-    catch (e) { if (id === rotaN && S.token) view(`<div class="aviso erro">${esc(e.message)}</div><button class="btn sec" onclick="rotear()">Tentar de novo</button>`); }
+    catch (e) { if (id === rotaN && S.token) view(`<div class="aviso erro">${esc(e.message)}</div><button class="btn sec" data-acao="rotear">Tentar de novo</button>`); }
     window.scrollTo(0, 0);
     return;
   }
@@ -390,15 +398,15 @@ function telaTrocarSenha() {
     <div class="marca"><img src="icon-192.png" alt=""><div><b>Defina sua senha</b><small>${esc(S.sess.usuario.nome)}</small></div></div>
     <div class="aviso info">Você entrou com uma senha provisória. Crie a sua para continuar.</div>
     <label>Senha provisória<input name="atual" type="password" autocomplete="current-password" required></label>
-    <label>Nova senha (mín. 6)<input name="nova" type="password" minlength="6" autocomplete="new-password" required></label>
-    <label>Repita a nova senha<input name="nova2" type="password" minlength="6" autocomplete="new-password" required></label>
+    <label>Nova senha (mín. 10 caracteres)<input name="nova" type="password" minlength="10" autocomplete="new-password" required></label>
+    <label>Repita a nova senha<input name="nova2" type="password" minlength="10" autocomplete="new-password" required></label>
     <button class="btn full">Salvar e entrar</button><button type="button" class="linkbtn" id="out">Sair</button></form></div>`;
   $('#out').onclick = () => sair();
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const f = e.target;
     if (f.nova.value !== f.nova2.value) return toast('As senhas não conferem.', 1);
-    try { await api('trocarSenha', { atual: f.atual.value, nova: f.nova.value }); S.sess.usuario.trocar_senha = false; toast('Senha definida.'); iniciar(); }
+    try { const r = await api('trocarSenha', { atual: f.atual.value, nova: f.nova.value }); if (r.token) { S.token = r.token; LS.set('cs_token', r.token); } S.sess.usuario.trocar_senha = false; toast('Senha definida.'); iniciar(); }
     catch (x) { toast(x.message, 1); }
   };
 }
@@ -427,7 +435,7 @@ async function boot() {
     // sem sinal: abre com a última sessão guardada (o diário funciona offline)
     const c = e.rede && LS.get('cs_sess');
     if (c) { S.sess = JSON.parse(c); S.offline = true; return iniciar(); }
-    if (S.token) $('#raiz').innerHTML = `<div class="login"><div class="card"><div class="aviso erro">${esc(e.message)}</div><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>`; return; }
+    if (S.token) $('#raiz').innerHTML = `<div class="login"><div class="card"><div class="aviso erro">${esc(e.message)}</div><button class="btn" data-acao="recarregar">Tentar de novo</button></div></div>`; return; }
   iniciar();
 }
 
@@ -1195,12 +1203,12 @@ async function vConta() {
   view(`<div class="card"><dl class="kv"><dt>Nome</dt><dd>${esc(u.nome)}</dd><dt>Usuário</dt><dd>${esc(u.login)}</dd>${u.email ? `<dt>E-mail</dt><dd>${esc(u.email)}</dd>` : ''}
     <dt>Obra atual</dt><dd>${esc(obraAtual()?.nome || '—')}</dd><dt>Permissões</dt><dd>${u.admin ? 'Administrador (tudo)' : (S.dados?.permissoes || []).map(p => esc(S.sess.permissoes[p] || p)).join(' · ') || '—'}</dd></dl></div>
     <form class="card grid" id="f"><h3>Trocar senha</h3><label>Senha atual<input name="atual" type="password" autocomplete="current-password" required></label>
-    <label>Nova senha (mín. 6)<input name="nova" type="password" minlength="6" autocomplete="new-password" required></label><button class="btn">Salvar nova senha</button></form>
+    <label>Nova senha (mín. 10 caracteres)<input name="nova" type="password" minlength="10" autocomplete="new-password" required></label><button class="btn">Salvar nova senha</button></form>
     <button class="btn perigo full" id="sair2">${ic('logout')} Sair</button>`);
   $('#sair2').onclick = () => sair();
   $('#f').onsubmit = async e => {
     e.preventDefault();
-    try { toast((await api('trocarSenha', { atual: e.target.atual.value, nova: e.target.nova.value })).msg); e.target.reset(); } catch (x) { toast(x.message, 1); }
+    try { const r = await api('trocarSenha', { atual: e.target.atual.value, nova: e.target.nova.value }); if (r.token) { S.token = r.token; LS.set('cs_token', r.token); } toast(r.msg); e.target.reset(); } catch (x) { toast(x.message, 1); }
   };
 }
 
@@ -1237,7 +1245,7 @@ function mUsuario(u) {
     <div class="g2"><label>Nome<input name="nome" required value="${esc(u?.nome || '')}"></label>
       <label>Usuário (login)<input name="login" required autocapitalize="none" autocorrect="off" value="${esc(u?.login || '')}" placeholder="ex: joao.silva"></label>
       <label>E-mail<input name="email" type="email" value="${esc(u?.email || '')}"></label><label>Telefone<input name="telefone" type="tel" value="${esc(u?.telefone || '')}"></label></div>
-    ${u ? '' : `<label>Senha provisória (mín. 6)<input name="senha" required minlength="6" autocomplete="new-password" value="${senhaAleatoria()}"></label><small>Já sugerimos uma senha. A pessoa cria a dela no primeiro acesso. Depois de salvar, aparece o convite para enviar por WhatsApp ou e-mail.</small>`}
+    ${u ? '' : `<label>Senha provisória (mín. 10)<input name="senha" required minlength="10" autocomplete="new-password" value="${senhaAleatoria()}"></label><small>Já sugerimos uma senha. A pessoa cria a dela no primeiro acesso. Depois de salvar, aparece o convite para enviar por WhatsApp ou e-mail.</small>`}
     <label class="ck"><input type="checkbox" name="ativo" ${!u || sim(u.ativo) ? 'checked' : ''}> Ativo</label>
     <label class="ck"><input type="checkbox" name="admin" ${u && sim(u.admin) ? 'checked' : ''}> Administrador (acesso total a todas as obras e à administração)</label>
     <div id="acessos"><h3>Acesso por obra</h3>${A.obras.map(o => {
@@ -1269,7 +1277,7 @@ function mUsuario(u) {
     cks.forEach(c => { c.onchange = () => { sel.value = perfilDe(cks.filter(x => x.checked).map(x => x.value)); }; });
   });
   if (u) $('#senha').onclick = () => modal('Nova senha provisória', `<p>Para <b>${esc(u.nome)}</b> (@${esc(u.login)}). A pessoa cria a própria senha no próximo acesso.</p>
-    <label>Senha provisória (mín. 6)<input name="senha" required minlength="6" value="${senhaAleatoria()}"></label>`, {
+    <label>Senha provisória (mín. 10)<input name="senha" required minlength="10" value="${senhaAleatoria()}"></label>`, {
     ok: 'Definir e gerar convite',
     onOk: async f2 => { toast((await api('admin_senha', { usuario_id: u.id, senha: f2.senha.value })).msg); setTimeout(() => convite(u, f2.senha.value), 50); }
   });
@@ -1351,10 +1359,15 @@ async function vConfig() {
       <label>E-mail do financeiro <small>(avisos de pagamento)</small><input name="EMAIL_FINANCEIRO" value="${esc(c('EMAIL_FINANCEIRO'))}"></label>
       <label>Endereço do app <small>(para links nos e-mails)</small><input name="APP_URL" value="${esc(c('APP_URL') || location.origin + location.pathname)}"></label>
       <label>Nome da empresa<input name="EMPRESA" value="${esc(c('EMPRESA'))}"></label>
+      <label>Backup: quantos dias de cópias guardar <small>(mín. 3 — padrão 14)</small><input name="BACKUP_DIAS" type="number" min="3" value="${esc(c('BACKUP_DIAS') || 14)}"></label>
       <label>Chuva que para a obra <small>(mm entre 7h e 17h — o diário sugere "Parado por chuva")</small><input name="CHUVA_LIMITE_MM" type="number" step="0.5" min="0" value="${esc(c('CHUVA_LIMITE_MM') || 5)}"></label>
       <label>Frentes padrão das obras novas <small>(separe com ;)</small><textarea name="FRENTES_PADRAO">${esc(c('FRENTES_PADRAO'))}</textarea></label>
       <label>Unidades <small>(separe com vírgula)</small><textarea name="unidades">${esc(A.unidades.join(', '))}</textarea></label>
       <button class="btn">Salvar configurações</button></form>
+    <div class="card"><h3>Backup automático</h3>
+      <p class="mute" style="margin:0 0 8px">Todo dia de madrugada o sistema copia as planilhas (central e de cada obra) para a pasta <b>Backups</b> do Drive e guarda os últimos ${(A.backup && A.backup.dias) || 14} dias. Fotos e PDFs ficam protegidos pelo histórico do próprio Drive.</p>
+      <p id="bkInfo" style="margin:0 0 12px">${A.backup ? `Último backup: <b>${esc(A.backup.quando)}</b> — ${A.backup.feitos} de ${A.backup.total} planilhas${(A.backup.erros || []).length ? ' <b style="color:var(--err)">(com falhas)</b>' : ''}.` : 'Ainda não rodou: ele roda sozinho de madrugada, ou use o botão abaixo.'}</p>
+      <div class="acoes"><button class="btn" id="bkAgora" type="button">${ic('refresh')} Fazer backup agora</button>${A.backup && A.backup.pasta_url ? `<a class="btn sec" href="${esc(A.backup.pasta_url)}" target="_blank" rel="noopener">Abrir a pasta Backups</a>` : ''}</div></div>
     <div class="card"><div class="cab"><h3 style="flex:1;margin:0">Materiais padrão (${A.padrao.length})</h3><button class="btn sec peq" id="novoMat">${ic('plus')} Adicionar</button></div>
       <small>Toda obra nova já nasce com estes materiais.</small>
       <div class="busca" style="margin-top:10px">${ic('search')}<input type="search" id="bm" placeholder="Buscar…"></div><div id="lm"></div></div>
@@ -1365,8 +1378,13 @@ async function vConfig() {
   $('#fc').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, config = {};
-    ['MIN_ORCAMENTOS', 'PRAZO_FATURADO_PADRAO', 'REGRAS_ORCAMENTO', 'EMAIL_FINANCEIRO', 'APP_URL', 'EMPRESA', 'FRENTES_PADRAO', 'CHUVA_LIMITE_MM'].forEach(k => { config[k] = f[k].value; });
+    ['MIN_ORCAMENTOS', 'PRAZO_FATURADO_PADRAO', 'REGRAS_ORCAMENTO', 'EMAIL_FINANCEIRO', 'APP_URL', 'EMPRESA', 'FRENTES_PADRAO', 'CHUVA_LIMITE_MM', 'BACKUP_DIAS'].forEach(k => { config[k] = f[k].value; });
     try { toast((await api('admin_config_salvar', { config, unidades: f.unidades.value.split(',').map(s => s.trim()).filter(Boolean) })).msg); if (S.obraId) await recarregarDados(); } catch (x) { toast(x.message, 1); }
+  };
+  $('#bkAgora').onclick = async e => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Copiando…';
+    try { toast((await api('admin_backup')).msg); } catch (x) { toast(x.message, 1); }
+    vConfig();
   };
   const lm = () => {
     const t = norm($('#bm').value);

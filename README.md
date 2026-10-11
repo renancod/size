@@ -58,4 +58,11 @@ npm test          # testes do backend com simulador do Apps Script (test/gas-moc
 npm run demo      # app + API simulada com dados de exemplo em http://localhost:5173
 ```
 
-Logins da demo: `admin`/`admin123`, `compras`, `estoque`, `fin`, `joao` (senha `senha123`).
+Logins da demo: `admin`/`Admin#Size26`, `compras`, `estoque`, `fin`, `joao` (senha `Obra#Teste26`).
+
+## Segurança e backup
+
+- **Login:** 5 senhas erradas seguidas bloqueiam o usuário por 15 minutos (o administrador recebe um e-mail de alerta). Senhas **novas** precisam de 10+ caracteres e não podem ser óbvias; quem já tinha senha continua entrando com ela até trocar.
+- **Sessão:** 14 dias. Trocar a senha encerra as sessões abertas nos outros aparelhos (a do aparelho atual recebe um token novo).
+- **Navegador:** o `index.html` e o `fornecedor.html` trazem uma política de segurança (CSP) que só deixa o app carregar scripts dele e do `cdnjs.cloudflare.com` (usado só para gerar PDF) e só falar com o Apps Script e a Open-Meteo. Por isso não use `onclick="..."` nem `<script>` inline: use `data-acao` (veja `app.js`) ou um arquivo `.js`.
+- **Backup:** todo dia às 3h o script copia a planilha central e as das obras para `Compras Size / Backups` no Drive (`AAAA-MM-DD · nome`), guardando `BACKUP_DIAS` dias (padrão 14). O gatilho é criado sozinho quando um administrador abre a administração; Administração → Configurações tem o botão "Fazer backup agora". Fotos e PDFs não são duplicados.

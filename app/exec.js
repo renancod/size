@@ -129,8 +129,8 @@ function filaInfo() {
   const erros = (EX.filaErros || []).filter(o => o.obra === S.obraId);
   if (!EX.fila && !erros.length) return '<span id="filaInfo" hidden></span>';
   return `<div class="aviso ${erros.length ? 'erro' : 'warn'}" id="filaInfo">${ic('wifi')} ${EX.fila ? plural(EX.fila, 'envio guardado', 'envios guardados') + ' no aparelho — sobe sozinho quando o sinal voltar.' : ''}
-    ${erros.length ? `<br><b>Não aceito pelo servidor:</b> ${erros.map(o => esc(o.erro)).join(' · ')} <button type="button" class="linkbtn" onclick="descartarErros()">descartar</button>` : ''}
-    ${EX.fila ? ' <button type="button" class="linkbtn" onclick="sincronizar()">Enviar agora</button>' : ''}</div>`;
+    ${erros.length ? `<br><b>Não aceito pelo servidor:</b> ${erros.map(o => esc(o.erro)).join(' · ')} <button type="button" class="linkbtn" data-acao="descartarErros">descartar</button>` : ''}
+    ${EX.fila ? ' <button type="button" class="linkbtn" data-acao="sincronizar">Enviar agora</button>' : ''}</div>`;
 }
 async function descartarErros() {
   if (!confirm('Descartar os envios que o servidor recusou?')) return;

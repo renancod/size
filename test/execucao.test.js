@@ -19,8 +19,8 @@ function preparar() {
   adm('admin_obra_salvar', { id: obra, nome: 'Loteamento Sul', endereco: 'Rua X', ativa: true, lat: '-27.6', lng: '-48.5' });
   const usuario = (login, perfil) => {
     const p = adm('admin_dados').perfis.find(x => x.perfil === perfil);
-    adm('admin_usuario_salvar', { usuario: { nome: login, login, ativo: true }, senha: 'senha123', acessos: [{ obra_id: obra, perfil, permissoes: p.permissoes }] });
-    const s = call('login', { login, senha: 'senha123' });
+    adm('admin_usuario_salvar', { usuario: { nome: login, login, ativo: true }, senha: 'Obra#Teste26', acessos: [{ obra_id: obra, perfil, permissoes: p.permissoes }] });
+    const s = call('login', { login, senha: 'Obra#Teste26' });
     return (acao, d = {}) => call(acao, { token: s.token, obra, ...d });
   };
   return { G, adm, obra, eng: usuario('eng', 'Engenheiro'), enc: usuario('joao', 'Encarregado'), enc2: usuario('pedro', 'Encarregado') };

@@ -8,7 +8,7 @@ function criarGAS() {
   let seq = 0;
   const novoId = p => p + (++seq).toString(36).padStart(6, '0');
   const enviados = [], threads = [];
-  const planilhas = {}, pastas = {}, arquivos = {}, props = {};
+  const planilhas = {}, pastas = {}, arquivos = {}, props = {}, cache = {};
 
   const bytes = buf => Array.from(buf);
   const toBuf = d => Buffer.isBuffer(d) ? d : Array.isArray(d) ? Buffer.from(d.map(b => b & 255)) : Buffer.from(String(d), 'utf8');
@@ -63,8 +63,8 @@ function criarGAS() {
   Folder.prototype.createFolder = function (n) { return new Folder(n, this.id); };
   Folder.prototype.getFoldersByName = function (n) { return iter(Object.values(pastas).filter(f => f.pai === this.id && f.nome === n)); };
   Folder.prototype.createFile = function (blob) { const f = new File(blob, this.id); return f; };
-  Folder.prototype.getFiles = function () { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.blob); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
-  Folder.prototype.getFilesByName = function (n) { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.nome === n); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
+  Folder.prototype.getFiles = function () { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.blob && !a.lixo); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
+  Folder.prototype.getFilesByName = function (n) { const l = Object.values(arquivos).filter(a => a.pai === this.id && a.nome === n && !a.lixo); return { hasNext: () => l.length > 0, next: () => l.shift() }; };
   function File(blob, pai) { this.id = novoId('fi'); this.nome = blob.getName(); this.blob = blob; this.mime = blob.getContentType(); this.pai = pai; arquivos[this.id] = this; }
   File.prototype.getId = function () { return this.id; };
   File.prototype.getName = function () { return this.nome; };
@@ -73,6 +73,7 @@ function criarGAS() {
   File.prototype.getMimeType = function () { return this.mime; };
   File.prototype.getSize = function () { return this.blob.getSize(); };
   File.prototype.moveTo = function (f) { this.pai = f.id; return this; };
+  File.prototype.setTrashed = function (v) { this.lixo = !!v; return this; };
 
   const iter = l => ({ hasNext: () => l.length > 0, next: () => l.shift() });
   const pad = n => String(n).padStart(2, '0');
@@ -90,6 +91,7 @@ function criarGAS() {
         const f = arquivos[id];
         if (!f) throw new Error('Arquivo não encontrado');
         if (!f.moveTo) f.moveTo = function (p) { this.pai = p.id; return this; };
+        if (!f.makeCopy) f.makeCopy = function (n, pasta) { return new File(new Blob('copia de ' + this.nome, 'application/vnd.google-apps.spreadsheet', n), pasta.id); };
         return f;
       }
     },
@@ -110,19 +112,20 @@ function criarGAS() {
       getUuid: () => crypto.randomUUID(),
       sleep: () => {}
     },
+    CacheService: { getScriptCache: () => ({ get: k => { const e = cache[k]; if (!e) return null; if (e.exp < Date.now()) { delete cache[k]; return null; } return e.v; }, put: (k, v, s) => { cache[k] = { v: String(v), exp: Date.now() + (s || 600) * 1000 }; }, remove: k => { delete cache[k]; } }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
     Session: { getScriptTimeZone: () => 'America/Sao_Paulo', getEffectiveUser: () => ({ getEmail: () => 'adm@sizeengenhariaambiental.com.br' }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ s, setMimeType() { return this; }, getContent() { return this.s; } }) },
     ScriptApp: { getProjectTriggers: () => [], deleteTrigger: () => {}, newTrigger: () => { const b = { timeBased: () => b, everyMinutes: () => b, everyDays: () => b, atHour: () => b, create: () => {} }; return b; } },
     Logger: { log: (...a) => G._logs.push(a.join(' ')) },
-    _logs: [], _enviados: enviados, _threads: threads, _planilhas: planilhas, _arquivos: arquivos, Blob
+    _logs: [], _cache: cache, _enviados: enviados, _threads: threads, _planilhas: planilhas, _arquivos: arquivos, Blob
   };
   G.console = console;
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());
