@@ -80,6 +80,8 @@ const ROTAS = {
   exec_item_alterar: { obra: true, perm: 'exec_planejar', lock: true, fn: execItemAlterar_ },
   exec_aviso_salvar: { obra: true, perm: 'exec_planejar', lock: true, fn: execAvisoSalvar_ },
   exec_revisar: { obra: true, perm: 'exec_planejar', lock: true, fn: execRevisar_ },
+  exec_relatorio: { obra: true, perm: 'exec_planejar', fn: execRelatorio_ },
+  exec_relatorio_email: { obra: true, perm: 'exec_planejar', fn: execRelatorioEmail_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },

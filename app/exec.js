@@ -156,6 +156,7 @@ async function vExec() {
   if (can(['exec_lancar', 'exec_planejar'])) acoes.push({ k: 'a:diario', t: 'Diário de hoje', i: 'book', cl: 'acao' });
   if (can('exec_planejar')) acoes.push({ k: 'a:etapa', t: 'Nova etapa', i: 'plus', cl: 'acao' }, { k: 'a:aviso', t: 'Avisar a equipe', i: 'alert', cl: 'acao' });
   acoes.push({ k: 'a:diarios', t: 'Diários (RDO)', i: 'file', cl: 'acao' });
+  if (can('exec_planejar')) acoes.push({ k: 'a:relatorio', t: 'Relatório / projeção', i: 'send', cl: 'acao' });
   grupos.push({ t: 'Ações', itens: acoes });
   const lista = (FX === 'todas' ? ets : todas).filter(F[FX][2]);
   // visão semanal: em andamento · começam nesta semana · próximas
@@ -180,6 +181,7 @@ async function vExec() {
   ligarEtapas(k => {
     if (k === 'a:diario') { location.hash = '#/diario'; return; }
     if (k === 'a:diarios') { location.hash = '#/diarios'; return; }
+    if (k === 'a:relatorio') { location.hash = '#/exec/relatorio'; return; }
     if (k === 'a:etapa') return mEtapa();
     if (k === 'a:aviso') return mAviso();
     FX = k; vExec();

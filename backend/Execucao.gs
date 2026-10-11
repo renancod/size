@@ -518,6 +518,109 @@ function execRdo_(q, ctx) {
   };
 }
 
+/* ---------- RELATÓRIO DE EXECUÇÃO / PROJEÇÃO (engenheiro → contratante) ----------
+ * Junta, para um período escolhido: o que foi executado (diários), clima/interrupções, e a projeção do que vem
+ * (meta para cumprir o prazo × ritmo atual), com as reprogramações e seus motivos. O app monta o PDF. */
+function execRelatorio_(q, ctx) {
+  const de = ymd_(q.de), ate = ymd_(q.ate), re = /^\d{4}-\d{2}-\d{2}$/;
+  if (!re.test(de) || !re.test(ate)) throw new Error('Escolha o período do relatório.');
+  if (ate < de) throw new Error('A data final está antes da inicial.');
+  if (addDias_(de, 92) < ate) throw new Error('Período grande demais (máximo 3 meses).');
+  const c = calcExec_(ctx), hoje = c.hoje, util = c.util;
+  const uteis = (a, b) => { let n = 0; for (let s = a; s <= b; s = addDias_(s, 1)) if (util(s)) n++; return n; };
+  const noPer = s => s >= de && s <= ate;
+  const prodAll = obraTab_(ctx, 'Producao').all(), eqd = obraTab_(ctx, 'EquipesDia').all();
+  const diarios = obraTab_(ctx, 'Diarios').all().filter(d => noPer(ymd_(d.data)));
+  const etapas = c.etapas.filter(e => e.ativa);
+  const idItens = {};
+  etapas.forEach(e => e.itens.forEach(i => { idItens[i.id] = { etapa: e.nome, servico: i.servico, unidade: i.unidade }; }));
+
+  // --- executado no período ---
+  const executado = [];
+  etapas.forEach(e => {
+    const itens = e.itens.map(i => {
+      const ls = prodAll.filter(p => String(p.item_id) === String(i.id));
+      const dias = {};
+      ls.forEach(p => { const s = ymd_(p.data); if (noPer(s)) dias[s] = (dias[s] || 0) + num_(p.qtd); });
+      const periodo = Object.keys(dias).reduce((t, s) => t + dias[s], 0), nd = Object.keys(dias).filter(s => dias[s] > 0).length;
+      const acum = ls.filter(p => ymd_(p.data) <= ate).reduce((t, p) => t + num_(p.qtd), 0);
+      return { id: i.id, servico: i.servico, unidade: i.unidade, periodo: r2_(periodo), acumulado: r2_(acum), previsto: i.prevista, pct: i.prevista ? r2_(acum / i.prevista * 100) : 0, dias: nd, media: nd ? r2_(periodo / nd) : 0 };
+    });
+    if (!itens.some(i => i.periodo > 0)) return;
+    const eq = {};
+    eqd.filter(x => String(x.etapa) === String(e.codigo) && noPer(ymd_(x.data))).forEach(x => {
+      const k = String(x.equipe || 'Equipe'); eq[k] = eq[k] || { dias: 0, soma: 0 }; eq[k].dias++; eq[k].soma += num_(x.pessoas);
+    });
+    executado.push({
+      codigo: e.codigo, nome: e.nome, local: e.local, itens: itens.filter(i => i.periodo > 0 || i.acumulado > 0),
+      pct: r2_(itens.reduce((t, i) => t + Math.min(100, i.pct), 0) / (itens.length || 1)),
+      equipes: Object.keys(eq).map(k => ({ equipe: k, dias: eq[k].dias, pessoas: Math.round(eq[k].soma / eq[k].dias) }))
+    });
+  });
+  const trabalhados = {};
+  prodAll.forEach(p => { const s = ymd_(p.data); if (noPer(s) && num_(p.qtd) > 0) trabalhados[s] = 1; });
+  const parados = diarios.filter(d => d.condicao === 'Parado por chuva')
+    .map(d => ({ data: ymd_(d.data), mm: r2_(num_(d.chuva_trabalho) || num_(d.chuva_dia)) })).sort((a, b) => a.data.localeCompare(b.data));
+  const ocorrencias = diarios.filter(d => String(d.ocorrencias || '').trim())
+    .map(d => ({ data: ymd_(d.data), texto: String(d.ocorrencias).trim() })).sort((a, b) => a.data.localeCompare(b.data));
+
+  // --- projeção para o período ---
+  const previsto = [];
+  etapas.forEach(e => {
+    const itens = e.itens.filter(i => i.situacao !== 'concluido' && i.inicio && i.inicio <= ate && (i.termino >= de || i.situacao === 'atrasado')).map(i => {
+      const de0 = i.hoje_qtd > 0 ? addDias_(hoje, 1) : hoje, a = [de, i.inicio, de0].sort().pop();
+      const dMeta = a <= (i.termino < ate ? i.termino : ate) ? uteis(a, i.termino < ate ? i.termino : ate) : 0;
+      const dRitmo = a <= ate ? uteis(a, ate) : 0;
+      const meta = i.ritmo === null ? null : r2_(Math.min(i.saldo, i.ritmo * dMeta));
+      const iniciou = !!i.primeiro && i.media7 > 0;
+      return {
+        id: i.id, servico: i.servico, unidade: i.unidade, saldo: i.saldo, executado: i.executado, prevista: i.prevista, pct: i.pct,
+        inicio: i.inicio, termino: i.termino, termino_original: i.termino_original, projecao: i.projecao, situacao: i.situacao,
+        meta: meta, ritmo_atual: iniciou ? i.media7 : null, proj_periodo: iniciou ? r2_(Math.min(i.saldo, i.media7 * dRitmo)) : null, dias_meta: dMeta
+      };
+    });
+    if (itens.length) previsto.push({ codigo: e.codigo, nome: e.nome, local: e.local, itens: itens });
+  });
+
+  // --- reprogramações (datas / quantidades alteradas, com o motivo) ---
+  const desde = addDias_(de, -14);
+  const reprog = obraTab_(ctx, 'AlteracoesExec').all()
+    .filter(a => a.tipo === 'item' && ['inicio', 'termino', 'qtd_prevista'].indexOf(a.campo) >= 0 && idItens[a.ref] && ymd_(a.data) >= desde && ymd_(a.data) <= ate)
+    .map(a => ({
+      data: ymd_(a.data), etapa: idItens[a.ref].etapa, servico: idItens[a.ref].servico, unidade: idItens[a.ref].unidade,
+      campo: { inicio: 'início', termino: 'término', qtd_prevista: 'quantidade' }[a.campo], de: String(a.de), para: String(a.para), motivo: String(a.motivo || ''), usuario: a.usuario
+    })).sort((a, b) => a.data.localeCompare(b.data));
+
+  log_(ctx, 'exec_relatorio', de + ' a ' + ate);
+  return {
+    empresa: config_().EMPRESA || 'Size Engenharia', emissor: ctx.u.nome, hoje: hoje, de: de, ate: ate, prev_de: de > hoje ? de : hoje,
+    obra: { nome: ctx.obra.nome, sigla: ctx.obra.sigla, endereco: ctx.obra.endereco },
+    resumo: { dias_uteis: uteis(de, ate), dias_trabalhados: Object.keys(trabalhados).length, dias_parados: parados.length },
+    executado: executado, parados: parados, ocorrencias: ocorrencias, previsto: previsto, reprogramacoes: reprog
+  };
+}
+/* envia o PDF do relatório (gerado no app) por e-mail, com cópia opcional para quem enviou */
+function execRelatorioEmail_(q, ctx) {
+  const para = String(q.para || '').split(/[;,\s]+/).filter(Boolean);
+  if (!para.length) throw new Error('Informe o e-mail de quem vai receber.');
+  if (para.length > 10) throw new Error('No máximo 10 destinatários por envio.');
+  const ruim = para.filter(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+  if (ruim.length) throw new Error('E-mail inválido: ' + ruim.join(', '));
+  if (!q.pdf || !q.pdf.b64) throw new Error('O PDF não foi gerado. Tente de novo.');
+  if (q.pdf.b64.length > 9000000) throw new Error('PDF grande demais para enviar por e-mail.');
+  const nome = String(q.pdf.nome || 'Relatorio.pdf').replace(/[^\w.\- ]/g, '_').slice(0, 80);
+  const blob = Utilities.newBlob(Utilities.base64Decode(q.pdf.b64), 'application/pdf', nome);
+  const assunto = String(q.assunto || '').trim().slice(0, 150) || ('Relatório de execução · ' + ctx.obra.nome);
+  const msg = String(q.mensagem || '').trim().slice(0, 3000);
+  const html = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1A2433">' + (msg ? '<p>' + h_(msg).replace(/\n/g, '<br>') + '</p>' : '') +
+    '<p style="color:#5B6B82">Relatório em anexo (PDF).</p><p>Atenciosamente,<br><b>' + h_(ctx.u.nome) + '</b><br>' + h_(empresa_()) + '</p></div>';
+  const op = { htmlBody: html, name: empresa_(), attachments: [blob] };
+  if (q.copia && ctx.u.email) op.cc = ctx.u.email;
+  GmailApp.sendEmail(para.join(','), assunto, (msg || 'Relatório em anexo.'), op);
+  log_(ctx, 'exec_relatorio_email', para.join(', ') + ' · ' + nome);
+  return { msg: 'Relatório enviado para ' + para.join(', ') + '.' };
+}
+
 /* ---------- avisos na tela (sino) para o módulo Execução ---------- */
 function notifExec_(c, add) {
   const pode = p => pode_(c, p);

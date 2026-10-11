@@ -215,6 +215,7 @@ const MODULOS = [
       { h: '#/exec', t: 'Painel da execução', i: 'chart', ok: () => can(['exec_ver', 'exec_planejar']), c: 'exec-alertas' },
       { h: '#/diario', t: 'Diário de obra', i: 'book', ok: () => can(['exec_lancar', 'exec_planejar']), c: 'exec-fila' },
       { h: '#/diarios', t: 'Diários (RDO)', i: 'file', ok: () => can(['exec_ver', 'exec_lancar', 'exec_planejar']), c: 'exec-revisar' },
+      { h: '#/exec/relatorio', t: 'Relatórios', i: 'send', ok: () => can('exec_planejar') },
       { h: '#/exec/equipes', t: 'Equipes', i: 'users', ok: () => can(['exec_lancar', 'exec_planejar']) }
     ]
   }

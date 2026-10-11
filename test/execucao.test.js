@@ -182,6 +182,55 @@ test('avisos do engenheiro, fotos (sem duplicar), revisão e RDO', () => {
   assert.equal(rdo.diario.ocorrencias, 'Caminhão atrasou 1h');
 });
 
+test('relatório de execução/projeção: executado no período, chuva, meta × ritmo, reprogramação com motivo e envio por e-mail', () => {
+  const t = preparar();
+  const cod = t.eng('exec_etapa_salvar', { nome: 'Drenagem', itens: [{ servico: 'Meio-fio', qtd_prevista: 100, inicio: '2026-03-02', termino: '2026-03-13' }] }).codigo;
+  const id = t.eng('exec_dados').etapas[0].itens[0].id;
+  const m = 'lançamento retroativo do teste';
+  t.eng('exec_diario_salvar', { data: '2026-03-02', motivo: m, lancamentos: [{ item_id: id, qtd: 10 }], equipes: [{ etapa: cod, equipe: 'Empreiteiro A', pessoas: 5 }] });
+  t.eng('exec_diario_salvar', { data: '2026-03-03', motivo: m, lancamentos: [{ item_id: id, qtd: 14 }], equipes: [{ etapa: cod, equipe: 'Empreiteiro A', pessoas: 7 }] });
+  t.eng('exec_diario_salvar', { data: '2026-03-04', motivo: m, condicao: 'Parado por chuva', clima: CLIMA(22), ocorrencias: 'Chuva forte o dia todo', lancamentos: [] });
+  assert.throws(() => t.enc('exec_relatorio', { de: '2026-03-02', ate: '2026-03-06' }), /permissão/);
+  assert.throws(() => t.eng('exec_relatorio', { de: '2026-03-06', ate: '2026-03-02' }), /antes/);
+  const r = t.eng('exec_relatorio', { de: '2026-03-02', ate: '2026-03-06' });
+  assert.equal(r.resumo.dias_uteis, 5);
+  assert.equal(r.resumo.dias_trabalhados, 2);
+  assert.equal(r.resumo.dias_parados, 1);
+  assert.equal(r.parados[0].data, '2026-03-04');
+  assert.match(r.ocorrencias[0].texto, /Chuva forte/);
+  const it = r.executado[0].itens[0];
+  assert.equal(it.periodo, 24);
+  assert.equal(it.acumulado, 24);
+  assert.equal(it.dias, 2);
+  assert.equal(r.executado[0].equipes[0].equipe, 'Empreiteiro A');
+  assert.equal(r.executado[0].equipes[0].pessoas, 6);           // média de 5 e 7
+  // um período sem produção não traz a etapa no "executado"
+  assert.equal(t.eng('exec_relatorio', { de: '2026-03-09', ate: '2026-03-13' }).executado.length, 0);
+
+  // reprogramação com motivo aparece no relatório
+  const hoje = dia(0), fim = dia(30);
+  t.eng('exec_item_alterar', { id, termino: fim, motivo: 'falta de material na obra' });
+  const r2 = t.eng('exec_relatorio', { de: hoje, ate: dia(7) });
+  assert.equal(r2.reprogramacoes.length, 1);
+  assert.equal(r2.reprogramacoes[0].campo, 'término');
+  assert.match(r2.reprogramacoes[0].motivo, /falta de material/);
+  const p = r2.previsto[0].itens[0];
+  assert.ok(p.meta > 0 && p.meta <= p.saldo);
+  assert.equal(p.termino, fim);
+  assert.equal(p.termino_original, '2026-03-13');
+
+  // e-mail com PDF em anexo
+  const pdf = { nome: 'Relatorio semanal.pdf', b64: Buffer.from('%PDF-1.4 teste').toString('base64') };
+  const antes = t.G._enviados.length;
+  t.eng('exec_relatorio_email', { para: 'cliente@obra.com; fiscal@obra.com', assunto: 'Projeção semanal', mensagem: 'Segue.', pdf });
+  assert.equal(t.G._enviados.length, antes + 1);
+  assert.match(t.G._enviados.at(-1).para, /cliente@obra\.com,fiscal@obra\.com/);
+  assert.equal(t.G._enviados.at(-1).anexos, 1);
+  assert.throws(() => t.eng('exec_relatorio_email', { para: 'sem-arroba', pdf }), /inválido/);
+  assert.throws(() => t.eng('exec_relatorio_email', { para: 'a@b.com' }), /PDF/);
+  assert.throws(() => t.enc('exec_relatorio_email', { para: 'a@b.com', pdf }), /permissão/);
+});
+
 test('retroativo Bacia 02 (Prime Beach): 8 diários, 75 T coletores, uma vez só, quando o admin abre o painel', () => {
   const G = criarGAS();
   G.setup();
