@@ -74,3 +74,11 @@ Logins da demo: `admin`/`Admin#Size26`, `compras`, `estoque`, `fin`, `joao` (sen
 - **Ficha:** O / X / ⊗ (reinspeção, até 3 vistorias) / N/A, alteração em relação ao projeto (com quem autorizou), não conformidades, **croqui base** e **croqui de execução** (obrigatórios), outros anexos e os **RDOs vinculados** (vêm dos lançamentos do serviço).
 - **Aprovação:** quem tem a permissão `fvs_aprovar` (Engenheiro e Admin) aprova ou devolve. Ao aprovar, a FVS ganha o número em sequência (FVS 001…), é travada com um código de verificação e vai para `Drive → obra → FVS → AAAA-MM → "FVS 001 · …"` com o PDF, os croquis e os anexos.
 - Permissões novas: `fvs_ver`, `fvs_preencher`, `fvs_aprovar` (migração automática para Admin/Engenheiro/Encarregado no primeiro acesso).
+
+## Medições de empreiteiros
+
+- **Empreiteiros** = o painel de Equipes (empresa, responsável, telefone, e-mail, CNPJ/CPF, equipe em campo). Cada **frente de trabalho (etapa)** escolhe o empreiteiro e informa se é **com contrato** (número e data) ou **sem contrato**; isso aparece na medição. (O módulo **Contratos** aparece no menu como "em breve".)
+- **Medição:** o empreiteiro soma as frentes dele. Só entra serviço **concluído** (executado ≥ previsto) **e com FVS aprovada**, **uma vez só**, inteiro, no período em que foi concluído, pela quantidade **executada**. Serviço já medido que recebe mais lançamento entra como **complemento** na medição seguinte.
+- **Fluxo:** rascunho → aguardando aprovação → aprovada (numerada **por empreiteiro**, travada, PDF em `Drive → obra → Medições → empreiteiro → Medição 001 · período`) → paga. Rascunho e devolvida não reservam serviços; enviada, aprovada e paga reservam.
+- **Permissões por obra:** `medicao_ver`, `medicao_lancar`, `medicao_aprovar` (administrador tem todas; as demais pessoas são liberadas na tela de acessos). O sino avisa quem aprova quando uma medição é enviada.
+- Valores (contrato × pago × saldo por etapa) e descontos ficam para a próxima etapa.

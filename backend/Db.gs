@@ -28,9 +28,9 @@ const SCHEMA_OBRA = {
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],
   // módulo Execução / Diário de obra
-  Etapas: ['codigo', 'nome', 'local', 'frente', 'responsavel', 'obs', 'ativa', 'criado_em', 'criado_por'],
+  Etapas: ['codigo', 'nome', 'local', 'frente', 'responsavel', 'obs', 'ativa', 'criado_em', 'criado_por', 'empreiteiro', 'contrato_tipo', 'contrato_numero', 'contrato_data'],
   EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo'],
-  Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa'],
+  Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa', 'empresa', 'responsavel', 'telefone', 'email', 'documento'],
   Diarios: ['numero', 'data', 'status', 'condicao', 'aditivo', 'responsavel_id', 'responsavel', 'chuva_manha', 'chuva_tarde', 'chuva_trabalho', 'chuva_dia',
     'tmin', 'tmax', 'vento', 'sugestao', 'ocorrencias', 'obs', 'enviado_por', 'enviado_em', 'revisado_por', 'revisado_em', 'clima_final', 'clima_json', 'criado_em', 'atualizado_em'],
   Producao: ['id', 'diario', 'data', 'etapa', 'item_id', 'servico', 'unidade', 'qtd', 'obs', 'usuario_id', 'usuario', 'lancado_em', 'atualizado_em', 'cliente_id'],
@@ -40,7 +40,10 @@ const SCHEMA_OBRA = {
   AvisosExec: ['id', 'data', 'etapa', 'etapa_nome', 'tipo', 'texto', 'autor', 'status', 'ciente_por', 'ciente_em'],
   // FVS (ficha de verificação de serviço): uma por serviço da frente de trabalho
   Fvs: ['id', 'numero', 'modelo', 'modelo_nome', 'modelo_rev', 'categoria', 'tipo', 'modelo_json', 'etapa', 'item_id', 'servico', 'status', 'vistoria', 'checklist_json', 'nc_json', 'alteracao_sim', 'alteracao', 'alteracao_aut',
-    'anexos_json', 'vistorias_json', 'historico_json', 'preenchido_por', 'enviado_em', 'enviado_por', 'aprovado_por', 'aprovado_em', 'motivo', 'hash', 'pasta_id', 'pdf_id', 'auto_aprovada', 'criado_em', 'criado_por', 'atualizado_em']
+    'anexos_json', 'vistorias_json', 'historico_json', 'preenchido_por', 'enviado_em', 'enviado_por', 'aprovado_por', 'aprovado_em', 'motivo', 'hash', 'pasta_id', 'pdf_id', 'auto_aprovada', 'criado_em', 'criado_por', 'atualizado_em'],
+  // Medições de empreiteiros (por frente de trabalho; só serviços concluídos e com FVS aprovada)
+  Medicoes: ['id', 'numero', 'empreiteiro', 'empreiteiro_nome', 'de', 'ate', 'status', 'obs', 'criado_em', 'criado_por', 'enviado_em', 'enviado_por', 'aprovado_em', 'aprovado_por', 'motivo', 'hash', 'pasta_id', 'pdf_id', 'pago_em', 'pago_obs', 'auto_aprovada', 'historico_json', 'atualizado_em'],
+  MedicaoItens: ['medicao', 'item_id', 'etapa', 'etapa_nome', 'servico', 'unidade', 'qtd', 'concluido_em', 'complemento', 'contrato', 'fvs', 'rdos_json', 'dias_json']
 };
 
 let _central = null;

@@ -34,6 +34,8 @@ function atualizarPerfis_() {
 
 function adminDados_(q, ctx) {
   atualizarPerfis_();
+  atualizarPerfisFvs_();
+  atualizarPerfisMed_();
   garantirGatilhos_();
   garantirBackup_();
   return {

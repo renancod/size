@@ -225,7 +225,17 @@ const MODULOS = [
       { h: '#/diarios', t: 'Diários (RDO)', i: 'file', ok: () => can(['exec_ver', 'exec_lancar', 'exec_planejar']), c: 'exec-revisar' },
       { h: '#/exec/relatorio', t: 'Relatórios', i: 'send', ok: () => can('exec_planejar') },
       { h: '#/fvs', t: 'FVS · Qualidade', i: 'clip', ok: () => can(['fvs_ver', 'fvs_preencher', 'fvs_aprovar']) },
-      { h: '#/exec/equipes', t: 'Equipes', i: 'users', ok: () => can(['exec_lancar', 'exec_planejar']) }
+      { h: '#/exec/equipes', t: 'Equipes e empreiteiros', i: 'users', ok: () => can(['exec_lancar', 'exec_planejar']) }
+    ]
+  },
+  {
+    id: 'medicoes', t: 'Medições', i: 'sliders2', home: '#/med',
+    desc: 'Medição de empreiteiros por frente de trabalho: serviços concluídos com FVS aprovada, numeração, aprovação e PDF no Drive',
+    rotas: /^#\/med/,
+    itens: [
+      { h: '#/med', t: 'Medições', i: 'sliders2', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar']) },
+      { h: '#/med/empreiteiros', t: 'Empreiteiros', i: 'users', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar']) },
+      { breve: true, t: 'Contratos', i: 'file', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar']) }
     ]
   }
 ];
@@ -286,7 +296,7 @@ function montarMenu() {
   const obras = S.sess.obras;
   $('#obrasel').innerHTML = obras.length ? obras.map(o => `<option value="${esc(o.id)}" ${o.id === S.obraId ? 'selected' : ''}>${esc(o.nome)}${o.ativa ? '' : ' (desativada)'}</option>`).join('') : '<option>Nenhuma obra liberada</option>';
   $('#obranome').textContent = obraAtual()?.nome || '';
-  const link = n => `<a href="${n.h}" data-h="${n.h}">${ic(n.i)}<span>${n.t}</span>${n.c ? `<span class="cont" data-c="${n.c}" hidden></span>` : ''}</a>`;
+  const link = n => n.breve ? `<div class="sub-breve">${ic(n.i)}<span>${n.t}</span><small>em breve</small></div>`  : `<a href="${n.h}" data-h="${n.h}">${ic(n.i)}<span>${n.t}</span>${n.c ? `<span class="cont" data-c="${n.c}" hidden></span>` : ''}</a>`;
   const aberto = LS.get('cs_mod') || 'compras';
   $('#nav').innerHTML = `<a href="#/inicio" data-h="#/inicio">${ic('home')}<span>Início</span></a>
     <div class="sep">Módulos</div>
@@ -320,7 +330,7 @@ function marcarMenu() {
 function contadores() {
   $$('#nav .cont').forEach(c => {
     const k = c.dataset.c;
-    const n = /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
+    const n = /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
     c.textContent = n; c.hidden = !n;
   });
 }
@@ -471,7 +481,8 @@ const ETAPA_NOTIF = {
   receber: ['Receber material', 'box'], entrega: ['Previsão de entrega', 'truck'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
   pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'],
   exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file'],
-  fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip']
+  fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip'],
+  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {

@@ -91,6 +91,17 @@ const ROTAS = {
   fvs_nova_vistoria: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsNovaVistoria_ },
   fvs_anexo: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsAnexo_ },
   fvs_anexo_remover: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsAnexoRemover_ },
+  medicoes: { obra: true, perm: ['medicao_ver', 'medicao_lancar', 'medicao_aprovar'], fn: medListar_ },
+  medicao_prever: { obra: true, perm: ['medicao_lancar', 'medicao_aprovar'], fn: medPrever_ },
+  medicao_detalhe: { obra: true, perm: ['medicao_ver', 'medicao_lancar', 'medicao_aprovar'], fn: medDetalhe_ },
+  medicao_criar: { obra: true, perm: 'medicao_lancar', lock: true, fn: medCriar_ },
+  medicao_salvar: { obra: true, perm: 'medicao_lancar', lock: true, fn: medSalvar_ },
+  medicao_enviar: { obra: true, perm: 'medicao_lancar', lock: true, fn: medEnviar_ },
+  medicao_aprovar: { obra: true, perm: 'medicao_aprovar', lock: true, fn: medAprovar_ },
+  medicao_devolver: { obra: true, perm: 'medicao_aprovar', lock: true, fn: medDevolver_ },
+  medicao_cancelar: { obra: true, perm: ['medicao_lancar', 'medicao_aprovar'], lock: true, fn: medCancelar_ },
+  medicao_pagar: { obra: true, perm: 'medicao_aprovar', lock: true, fn: medPagar_ },
+  medicao_pdf: { obra: true, perm: ['medicao_ver', 'medicao_lancar', 'medicao_aprovar'], fn: medPdfVer_ },
   fvs_pdf: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar'], fn: fvsPdfVer_ },
   fvs_anexo_ver: { obra: true, perm: ['fvs_ver', 'fvs_preencher', 'fvs_aprovar'], fn: fvsAnexoVer_ },
   fvs_enviar: { obra: true, perm: 'fvs_preencher', lock: true, fn: fvsEnviar_ },
@@ -149,7 +160,10 @@ const PERMISSOES = {
   exec_planejar: 'Execução: planejar etapas, alterar previsto, corrigir lançamentos e avisar a equipe',
   fvs_ver: 'FVS (qualidade): consultar as fichas',
   fvs_preencher: 'FVS (qualidade): abrir, preencher, anexar croquis e enviar para aprovação',
-  fvs_aprovar: 'FVS (qualidade): aprovar ou devolver fichas e editar os modelos'
+  fvs_aprovar: 'FVS (qualidade): aprovar ou devolver fichas e editar os modelos',
+  medicao_ver: 'Medições: consultar',
+  medicao_lancar: 'Medições: montar e enviar para aprovação',
+  medicao_aprovar: 'Medições: aprovar, devolver e marcar como paga'
 };
 const PERFIS_PADRAO = [
   ['Admin', Object.keys(PERMISSOES).join(','), 'Tudo na obra'],
@@ -244,7 +258,7 @@ function login_(q) {
     throw new Error('Usuário ou senha incorretos.');
   }
   cache.remove(kf);
-  try { atualizarPerfisFvs_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
+  try { atualizarPerfisFvs_(); atualizarPerfisMed_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
   u.ultimo_acesso = new Date();
   T.update(u);
   return Object.assign({ token: token_(u) }, sessaoDe_(u));

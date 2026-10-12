@@ -212,6 +212,7 @@ function calcExec_(ctx, ate) {
     const sit = li.length ? li.reduce((m, i) => SEVERIDADE_[i.situacao] > SEVERIDADE_[m] ? i.situacao : m, li.every(i => i.situacao === 'concluido') ? 'concluido' : 'nao_iniciado') : 'nao_iniciado';
     return {
       codigo: e.codigo, nome: e.nome, local: e.local, frente: e.frente, responsavel: e.responsavel, obs: e.obs, ativa: !/^n/i.test(String(e.ativa)),
+      empreiteiro: String(e.empreiteiro || ''), contrato_tipo: e.contrato_tipo || '', contrato_numero: e.contrato_numero || '', contrato_data: ymd_(e.contrato_data),
       pct: li.length ? r2_(li.reduce((t, i) => t + Math.min(100, i.pct), 0) / li.length) : 0,
       planejado: li.length ? r2_(li.reduce((t, i) => t + i.planejado, 0) / li.length) : 0,
       inicio: li.map(i => i.inicio).filter(Boolean).sort()[0] || '', termino: li.map(i => i.termino).filter(Boolean).sort().pop() || '',
@@ -261,6 +262,18 @@ function execEtapaSalvar_(q, ctx) {
   else if (norm_(e.nome) !== norm_(nome)) alteracao_(ctx, 'etapa', e.codigo, 'nome', e.nome, nome, q.motivo);
   e.nome = nome; e.local = String(q.local || '').trim(); e.frente = String(q.frente || '').trim();
   e.responsavel = String(q.responsavel || '').trim(); e.obs = String(q.obs || '').trim();
+  // empreiteiro da frente (as medições dele somam as etapas dele) e contrato de execução
+  if (q.empreiteiro !== undefined) {
+    const emp = String(q.empreiteiro || '').trim();
+    if (emp && !obraTab_(ctx, 'Equipes').all().some(x => String(x.codigo) === emp)) throw new Error('Empreiteiro não encontrado.');
+    if (!nova && String(e.empreiteiro || '') !== emp && medEtapaMedida_(ctx, e.codigo)) throw new Error('Esta frente já tem serviços em medição: não dá para trocar o empreiteiro.');
+    e.empreiteiro = emp;
+  }
+  if (q.contrato_tipo !== undefined) {
+    const t = ['Com contrato', 'Sem contrato'].indexOf(q.contrato_tipo) >= 0 ? q.contrato_tipo : '';
+    e.contrato_tipo = t; e.contrato_numero = t === 'Com contrato' ? String(q.contrato_numero || '').trim().slice(0, 60) : ''; e.contrato_data = t === 'Com contrato' ? (dataDe_(q.contrato_data) || '') : '';
+    if (t === 'Com contrato' && !e.contrato_numero) throw new Error('Informe o número do contrato (ou escolha "Sem contrato").');
+  }
   if (q.ativa !== undefined) e.ativa = q.ativa ? 'Sim' : 'Não';
   const novos = [].concat(q.itens || []).filter(x => x && !x.id);
   if (nova && !novos.length) throw new Error('Inclua pelo menos um serviço na etapa.');
@@ -321,6 +334,8 @@ function execEquipeSalvar_(q, ctx) {
   const nova = !e;
   if (nova) e = { codigo: T.proxCodigo('codigo', 'EQ', 2) };
   e.nome = nome; e.pessoas = Math.max(0, Math.round(num_(q.pessoas))); e.encarregado = String(q.encarregado || '').trim();
+  ['empresa', 'responsavel', 'telefone', 'email', 'documento'].forEach(k => { if (q[k] !== undefined) e[k] = String(q[k] || '').trim().slice(0, 120); });
+  if (e.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.email)) throw new Error('E-mail do empreiteiro inválido.');
   e.ativa = q.ativa === false ? 'Não' : 'Sim';
   if (nova) T.insert(e); else T.update(e);
   return { msg: 'Equipe salva.', codigo: e.codigo };
@@ -639,6 +654,7 @@ function execRelatorioEmail_(q, ctx) {
 /* ---------- avisos na tela (sino) para o módulo Execução ---------- */
 function notifExec_(c, add) {
   try { notifFvs_(c, add); } catch (e) { /* aviso de FVS nunca derruba o sino */ }
+  try { notifMed_(c, add); } catch (e) { /* idem para medições */ }
   const pode = p => pode_(c, p);
   if (!pode(['exec_ver', 'exec_lancar', 'exec_planejar'])) return;
   if (!obraTab_(c, 'Etapas').all().length) return;

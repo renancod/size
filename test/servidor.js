@@ -74,13 +74,13 @@ est('estoque_movimentar', { tipo: 'Saída', material_cod: 'M0001', qtd: 25, fren
 adm('admin_obra_salvar', { id: obra, nome: 'Prime Beach', endereco: 'Av. Beira-Mar, 1000 — Capão da Canoa/RS', ativa: true, lat: '-29.746', lng: '-50.009' });
 const eng = usuario('eng', 'Ernesto Engenheiro', 'Engenheiro');
 const mestre = usuario('mestre', 'Marcos Encarregado', 'Encarregado');
-eng('exec_equipe_salvar', { nome: 'Equipe Pavimentação', pessoas: 8, encarregado: 'Marcos' });
-eng('exec_equipe_salvar', { nome: 'Equipe Drenagem', pessoas: 6 });
-const e1 = eng('exec_etapa_salvar', { nome: 'Pavimentação · Rua A', local: 'Rua A, estaca 0 a 30', frente: 'Canteiro', itens: [
+const eqPav = eng('exec_equipe_salvar', { nome: 'Equipe Pavimentação', pessoas: 8, encarregado: 'Marcos', empresa: 'Pavi Sul Ltda', responsavel: 'Carlos Souza', telefone: '(51) 99999-0001', email: 'contato@pavisul.com.br', documento: '12.345.678/0001-90' }).codigo;
+const eqDre = eng('exec_equipe_salvar', { nome: 'Equipe Drenagem', pessoas: 6, empresa: 'Drenar Obras Ltda', responsavel: 'Ana Ribeiro', telefone: '(51) 98888-0002', email: 'ana@drenar.com.br' }).codigo;
+const e1 = eng('exec_etapa_salvar', { nome: 'Pavimentação · Rua A', local: 'Rua A, estaca 0 a 30', frente: 'Canteiro', empreiteiro: eqPav, contrato_tipo: 'Com contrato', contrato_numero: '015/2026', contrato_data: d(-30), itens: [
   { servico: 'Base', qtd_prevista: 600, inicio: d(-12), termino: d(6), fvs_modelo: 'FVS.05' },
   { servico: 'Asfalto (CBUQ)', qtd_prevista: 600, inicio: d(-4), termino: d(12), fvs_modelo: '-' },
   { servico: 'Meio-fio', qtd_prevista: 300, inicio: d(-12), termino: d(4), fvs_modelo: 'FVS.18.1' }] }).codigo;
-const e2 = eng('exec_etapa_salvar', { nome: 'Drenagem pluvial · Rua B', local: 'Rua B', itens: [
+const e2 = eng('exec_etapa_salvar', { nome: 'Drenagem pluvial · Rua B', local: 'Rua B', empreiteiro: eqDre, contrato_tipo: 'Sem contrato', itens: [
   { servico: 'Tubulação de concreto DN 600', qtd_prevista: 200, inicio: d(-15), termino: d(2), fvs_modelo: 'FVS.03' },
   { servico: 'Poço de visita', qtd_prevista: 8, inicio: d(-15), termino: d(4), fvs_modelo: 'FVS.03' },
   { servico: 'Boca de lobo', qtd_prevista: 10, inicio: d(-6), termino: d(8), fvs_modelo: '-' }] }).codigo;
@@ -100,6 +100,17 @@ for (let n = -12; n <= -1; n++) {
   if (n < -2) eng('exec_revisar', { data: dia });
 }
 eng('exec_aviso_salvar', { etapa: e2, tipo: 'Rendimento baixo', texto: 'Tubulação abaixo do ritmo: precisamos de 15 m/dia para fechar até o prazo.' });
+// Meio-fio concluído no último diário, com FVS aprovada: já aparece pronto para medir (login admin / Admin#Size26)
+eng('exec_diario_salvar', { data: d(-1), motivo: 'dados de exemplo', lancamentos: [{ item_id: it['Meio-fio'], qtd: 188 }] });
+{
+  const fv = eng('fvs_listar').fvs.find(f => f.item_id === it['Meio-fio']).id, det = eng('fvs_detalhe', { id: fv }), chk = {};
+  det.blocos.forEach((b, bi) => b.itens.forEach((x, ii) => { chk[bi + '.' + ii] = { r: 'O' }; }));
+  eng('fvs_salvar', { id: fv, checklist: chk, alteracao_sim: 'Não' });
+  const png = n => ({ nome: n, mime: 'image/png', b64: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64').toString('base64') });
+  eng('fvs_anexo', { id: fv, tipo: 'base', arquivo: png('croqui-base.png') }); eng('fvs_anexo', { id: fv, tipo: 'exec', arquivo: png('croqui-execucao.png') });
+  eng('fvs_enviar', { id: fv });
+  eng('fvs_aprovar', { id: fv, pdf: { nome: 'FVS.pdf', b64: Buffer.from('%PDF-1.4 exemplo').toString('base64') } });
+}
 console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diarios.length);
 
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');

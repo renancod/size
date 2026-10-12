@@ -210,7 +210,7 @@ function ligarAvisos() {
 function fvsOpcoes() {
   const grp = {};
   (EX.d.fvs_modelos || []).forEach(m => { (grp[m.categoria + ' · ' + m.tipo] = grp[m.categoria + ' · ' + m.tipo] || []).push(m); });
-  return '<option value="">— escolha a FVS —</option><option value="-">Sem FVS para este serviço</option>' + Object.keys(grp).sort().map(g =>
+  return '<option value="">— escolha a FVS —</option>' + Object.keys(grp).sort().map(g =>
     `<optgroup label="${esc(g)}">${grp[g].map(m => `<option value="${esc(m.codigo)}">${esc(m.codigo)} · ${esc(m.nome)}</option>`).join('')}</optgroup>`).join('');
 }
 function fvsDoItem(i) {
@@ -220,7 +220,7 @@ function fvsDoItem(i) {
   return chips || abrir ? `<div class="fv-chips">${chips}${abrir}</div>` : '';
 }
 function mAbrirFvs(i) {
-  modal('Abrir FVS · ' + esc(i.servico), `<label>Modelo de FVS<select name="m" required>${fvsOpcoes().replace('<option value="-">Sem FVS para este serviço</option>', '')}</select></label>
+  modal('Abrir FVS · ' + esc(i.servico), `<label>Modelo de FVS<select name="m" required>${fvsOpcoes()}</select></label>
     <small>A FVS fica vinculada aos diários de obra deste serviço e é preenchida pelo engenheiro.</small>`, {
     ok: 'Abrir FVS',
     onOk: async f => {
@@ -240,6 +240,9 @@ function mEtapa(e) {
     <div class="g2"><label>Local / trecho<input name="local" value="${esc(e?.local || '')}" placeholder="ex: Rua X, estaca 0 a 25"></label>
       <label>Frente de trabalho<select name="frente"><option value="">—</option>${frentes.map(x => `<option ${e && e.frente === x.nome ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>
     <div class="g2"><label>Responsável<input name="responsavel" value="${esc(e?.responsavel || '')}"></label><label>Observação<input name="obs" value="${esc(e?.obs || '')}"></label></div>
+    <div class="g2"><label>Empreiteiro responsável <small>(as medições dele somam esta frente)</small><select name="empreiteiro"><option value="">— nenhum (equipe própria) —</option>${(D.equipes || []).filter(q => ativo(q, 'ativa')).map(q => `<option value="${esc(q.codigo)}" ${e && e.empreiteiro === q.codigo ? 'selected' : ''}>${esc(q.nome)}${q.empresa ? ' · ' + esc(q.empresa) : ''}</option>`).join('')}</select></label>
+      <label>Contrato de execução<select name="ctipo" required><option value="">— escolha —</option><option ${e && e.contrato_tipo === 'Com contrato' ? 'selected' : ''}>Com contrato</option><option ${e && e.contrato_tipo === 'Sem contrato' ? 'selected' : ''}>Sem contrato</option></select></label></div>
+    <div class="g2" id="ctr" ${e && e.contrato_tipo === 'Com contrato' ? '' : 'hidden'}><label>Nº do contrato<input name="cnum" value="${esc(e?.contrato_numero || '')}" placeholder="ex: 015/2026"></label><label>Data do contrato<input type="date" name="cdata" value="${esc(e?.contrato_data || '')}"></label></div>
     ${e ? `<div class="aviso info">Serviços já cadastrados: ${e.itens.map(i => esc(i.servico)).join(', ')}. Para mudar quantidade ou datas deles, use <b>Alterar</b> no serviço.</div>` : ''}
     <h3 style="margin:6px 0 0">${e ? 'Incluir serviços' : 'Serviços da etapa'}</h3>
     <div class="g2"><label>Início previsto <small>(padrão dos serviços)</small><input type="date" name="ini" value="${hoje()}"></label><label>Término previsto<input type="date" name="fim"></label></div>
@@ -251,19 +254,20 @@ function mEtapa(e) {
       const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value }))
         .filter(x => x.servico || x.qtd_prevista);
       const semFvs = itens.find(x => !x.fvs_modelo);
-      if (semFvs) throw new Error('Escolha a FVS de ' + (semFvs.servico || 'cada serviço') + ' (ou marque "Sem FVS para este serviço").');
-      const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, itens, motivo: f.motivo?.value });
+      if (semFvs) throw new Error('Escolha a FVS de ' + (semFvs.servico || 'cada serviço') + ': todo serviço concluído precisa de FVS.');
+      const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, empreiteiro: f.empreiteiro.value, contrato_tipo: f.ctipo.value, contrato_numero: f.cnum.value, contrato_data: f.cdata.value, itens, motivo: f.motivo?.value });
       toast(r.msg); await carregarExec(true);
       location.hash = '#/exec/etapa/' + enc(r.codigo); if (e) rotear();
     }
   });
+  f.ctipo.onchange = () => { $('#ctr', f).hidden = f.ctipo.value !== 'Com contrato'; };
   const add = () => {
     const d = document.createElement('div');
     d.className = 'srv';
     d.innerHTML = `<label class="s">Serviço<input name="s" list="dl-srv" autocomplete="off" placeholder="Digite para buscar no catálogo"></label>
       <label>Qtd prevista<input name="q" type="number" step="any" min="0" inputmode="decimal"></label><label>Unid.<input name="u" placeholder="m²"></label>
       <label>Início<input type="date" name="i"></label><label>Término<input type="date" name="t"></label>
-      <label class="fvl">FVS deste serviço <small>(ficha de verificação — obrigatória)</small><select name="f">${fvsOpcoes()}</select></label><button type="button" class="rm" aria-label="Remover">${ic('x')}</button>`;
+      <label class="fvl">FVS deste serviço <small>(ficha de verificação — obrigatória para concluir e medir)</small><select name="f">${fvsOpcoes()}</select></label><button type="button" class="rm" aria-label="Remover">${ic('x')}</button>`;
     const s = $('[name=s]', d), u = $('[name=u]', d);
     const fsel = $('[name=f]', d);
     s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); u.value = c ? c.unidade : u.value; u.readOnly = !!c; d.classList.toggle('avulso', !c && !!s.value); if (c && c.fvs_sugerido && !fsel.value) fsel.value = c.fvs_sugerido; };
@@ -296,7 +300,8 @@ async function vEtapa(cod) {
   r.equipes.forEach(x => { const s = String(x.data).slice(0, 10); (eqDia[s] = eqDia[s] || []).push(x); });
   view(`<a href="#/exec" class="linkbtn">${ic('back')} Painel</a>
     <div class="card det-cab"><div class="l1"><span class="num">${esc(e.nome)}</span>${sxBadge(e.situacao)}<span class="dir big">${pct(e.pct)}</span></div>
-      <small>${esc([e.local, e.frente, e.responsavel && 'resp. ' + e.responsavel].filter(Boolean).join(' · '))}</small>${barra(e)}
+      <small>${esc([e.local, e.frente, e.responsavel && 'resp. ' + e.responsavel].filter(Boolean).join(' · '))}</small>
+      ${(() => { const q = (EX.d.equipes || []).find(x => x.codigo === e.empreiteiro); const t = [q && ('Empreiteiro: ' + q.nome + (q.empresa ? ' (' + q.empresa + ')' : '')), e.contrato_tipo === 'Com contrato' ? 'Contrato nº ' + e.contrato_numero + (e.contrato_data ? ' de ' + fd(e.contrato_data) : '') : e.contrato_tipo].filter(Boolean); return t.length ? `<small class="fv-ctr">${esc(t.join(' · '))}</small>` : ''; })()}${barra(e)}
       <small>Previsto ${fd(e.inicio)} → ${fd(e.termino)} · planejado até hoje ${pct(e.planejado)}</small>
       ${eng ? `<div class="acoes" style="margin-top:10px"><button class="btn sec peq" id="edE">${ic('plus')} Incluir serviço / editar</button><button class="btn sec peq" id="avE">${ic('alert')} Avisar a equipe</button></div>` : ''}</div>
     ${e.itens.map(i => `<div class="card item-ex sxb-${i.situacao}"><div class="l1"><b>${esc(i.servico)}</b>${sxBadge(i.situacao)}${i.pct > 100 ? '<span class="badge exc">acima do previsto</span>' : ''}<span class="dir">${pct(i.pct)}</span></div>
@@ -733,25 +738,37 @@ async function vDiarios(qs) {
   $$('[data-rdo]').forEach(b => { b.onclick = () => imprimirRdo(b.dataset.rdo); });
 }
 
-/* ---------- equipes ---------- */
+/* ---------- empreiteiros e equipes ---------- */
 async function vEquipes() {
-  titulo('Equipes');
+  titulo('Empreiteiros e equipes');
   const D = await carregarExec(true);
-  view(`<div class="cab"><h2>${plural(D.equipes.length, 'equipe', 'equipes')}</h2><button class="btn" id="novaEq">${ic('plus')} Nova equipe</button></div>
-    <div class="card" style="padding:4px 14px">${D.equipes.map(q => `<div class="arq" data-q="${esc(q.codigo)}" style="cursor:pointer"><span class="nome"><b>${esc(q.nome)}</b>${ativo(q, 'ativa') ? '' : ' <span class="badge b-canc">inativa</span>'}<br>
-      <small>${plural(num(q.pessoas), 'pessoa', 'pessoas')}${q.encarregado ? ' · ' + esc(q.encarregado) : ''}</small></span></div>`).join('') || '<p class="vazio">Nenhuma equipe. Cadastre as equipes que trabalham na obra (ex: Equipe Pavimentação · 8 pessoas).</p>'}</div>
-    <small>No diário, o encarregado marca qual equipe trabalhou em cada etapa; a quantidade de pessoas vem daqui e pode ser ajustada no dia.</small>`);
+  const tel = t => String(t || '').replace(/\D/g, '');
+  view(`<div class="cab"><h2>${plural(D.equipes.length, 'cadastro', 'cadastros')}</h2><button class="btn" id="novaEq">${ic('plus')} Novo empreiteiro / equipe</button></div>
+    <div class="eq-lista">${D.equipes.map(q => `<div class="card eq-card ${ativo(q, 'ativa') ? '' : 'inativo'}" data-q="${esc(q.codigo)}">
+      <div class="eq-t"><span class="eq-av">${esc((q.empresa || q.nome || '?').trim().charAt(0).toUpperCase())}</span><div><b>${esc(q.empresa || q.nome)}</b>${q.empresa ? `<small>${esc(q.nome)}</small>` : ''}</div>${ativo(q, 'ativa') ? '' : '<span class="badge b-canc">inativo</span>'}</div>
+      <dl class="kv">${q.responsavel ? `<dt>Responsável</dt><dd>${esc(q.responsavel)}</dd>` : ''}${q.telefone ? `<dt>Telefone</dt><dd><a href="tel:${esc(tel(q.telefone))}">${esc(q.telefone)}</a></dd>` : ''}${q.email ? `<dt>E-mail</dt><dd><a href="mailto:${esc(q.email)}">${esc(q.email)}</a></dd>` : ''}${q.documento ? `<dt>CNPJ / CPF</dt><dd>${esc(q.documento)}</dd>` : ''}
+        <dt>Equipe</dt><dd>${plural(num(q.pessoas), 'pessoa', 'pessoas')}${q.encarregado ? ' · enc. ' + esc(q.encarregado) : ''}</dd>
+        <dt>Frentes</dt><dd>${(D.etapas || []).filter(e => e.empreiteiro === q.codigo).map(e => esc(e.nome)).join(', ') || '—'}</dd></dl></div>`).join('') || '<div class="card vazio"><p>Nenhum cadastro. Cadastre os empreiteiros e as equipes que trabalham na obra (ex: Alas &amp; Cia · Equipe Pavimentação · 8 pessoas).</p></div>'}</div>
+    <small>No diário, o encarregado marca qual equipe trabalhou em cada etapa. O empreiteiro de cada frente é escolhido na própria etapa, e é por ele que as medições são montadas.</small>`);
   $('#novaEq').onclick = () => mEquipe(null, vEquipes);
-  $$('[data-q]').forEach(el => { el.onclick = () => mEquipe(D.equipes.find(q => q.codigo === el.dataset.q), vEquipes); });
+  $$('[data-q]').forEach(el => { el.onclick = ev => { if (ev.target.closest('a')) return; mEquipe(D.equipes.find(q => q.codigo === el.dataset.q), vEquipes); }; });
 }
 function mEquipe(q, depois) {
-  modal(q ? 'Editar equipe' : 'Nova equipe', `<label>Nome<input name="nome" required value="${esc(q?.nome || '')}" placeholder="ex: Equipe Pavimentação"></label>
+  modal(q ? 'Editar empreiteiro / equipe' : 'Novo empreiteiro / equipe', `
+    <div class="g2"><label>Empresa do empreiteiro<input name="empresa" value="${esc(q?.empresa || '')}" placeholder="ex: Alas &amp; Cia Ltda"></label><label>CNPJ / CPF <small>(opcional)</small><input name="documento" value="${esc(q?.documento || '')}"></label></div>
+    <div class="g2"><label>Responsável pela empresa<input name="responsavel" value="${esc(q?.responsavel || '')}" placeholder="nome de quem responde pela empresa"></label><label>Telefone<input name="telefone" type="tel" inputmode="tel" value="${esc(q?.telefone || '')}" placeholder="(51) 99999-0000"></label></div>
+    <label>E-mail<input name="email" type="email" inputmode="email" value="${esc(q?.email || '')}" placeholder="contato@empresa.com.br"></label>
+    <h3 style="margin:6px 0 0">Equipe em campo</h3>
+    <label>Nome da equipe<input name="nome" required value="${esc(q?.nome || '')}" placeholder="ex: Equipe Pavimentação"></label>
     <div class="g2"><label>Pessoas<input name="pessoas" type="number" min="0" inputmode="numeric" value="${esc(q?.pessoas ?? '')}"></label><label>Encarregado <small>(opcional)</small><input name="encarregado" value="${esc(q?.encarregado || '')}"></label></div>
-    ${q ? `<label class="ck"><input type="checkbox" name="ativa" ${ativo(q, 'ativa') ? 'checked' : ''}> Ativa</label>` : ''}`, {
-    ok: 'Salvar', onOk: async f => { toast((await api('exec_equipe_salvar', { codigo: q?.codigo, nome: f.nome.value, pessoas: f.pessoas.value, encarregado: f.encarregado.value, ativa: f.ativa ? f.ativa.checked : true })).msg); await carregarExec(true); depois && depois(); }
+    ${q ? `<label class="ck"><input type="checkbox" name="ativa" ${ativo(q, 'ativa') ? 'checked' : ''}> Ativo</label>` : ''}`, {
+    larga: true, ok: 'Salvar',
+    onOk: async f => {
+      toast((await api('exec_equipe_salvar', { codigo: q?.codigo, nome: f.nome.value, pessoas: f.pessoas.value, encarregado: f.encarregado.value, empresa: f.empresa.value, responsavel: f.responsavel.value, telefone: f.telefone.value, email: f.email.value, documento: f.documento.value, ativa: f.ativa ? f.ativa.checked : true })).msg);
+      await carregarExec(true); depois && depois();
+    }
   });
 }
-
 /* =====================================================================
  * RDO — página pronta para imprimir ou "Salvar como PDF" (cabeçalho, rodapé e marca d'água)
  * ===================================================================== */
