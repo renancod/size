@@ -44,7 +44,7 @@ function ctClausulas(d) {
     'GPS, GFIP/SEFIP quitadas, com a relação de trabalhadores e protocolo, inclusive do 13º salário;', 'Certidões negativas de débito: Dívida Ativa da União e tributos federais, FGTS (com a guia de pagamento), INSS, municipal e estadual.'];
   const C = [];
   C.push({ t: 'DO OBJETO', p: [
-    `O objeto deste contrato é a prestação, pela CONTRATADA à CONTRATANTE, de serviços de ${d.objeto.replace(/\.$/, '')}, no empreendimento ${obra}, observadas as quantidades, unidades, preços e demais condições da planilha de serviços (Anexo I), que integra este contrato para todos os efeitos.`,
+    `O objeto deste contrato consiste em ${d.objeto.replace(/\.$/, '').replace(/^./, c => c.toLowerCase())}, a ser prestado pela CONTRATADA à CONTRATANTE no empreendimento ${obra}, observadas as quantidades, unidades, preços e demais condições da planilha de serviços (Anexo I), que integra este contrato para todos os efeitos.`,
     ...(d.escopo ? [d.escopo] : []),
     'A CONTRATADA declara possuir as condições técnicas, comerciais e operacionais necessárias ao cumprimento do objeto, estando apta à prestação dos serviços.',
     'A prestação abrange os serviços previstos na planilha anexa e as frentes de trabalho indicadas pela CONTRATANTE, não se presumindo incluídos serviços, quantitativos ou frentes não previstos ou não autorizados previamente e por escrito pela CONTRATANTE.',
@@ -159,7 +159,9 @@ async function ctMinutaPdf(d) {
   if (d.administradora) txt('ADMINISTRADORA DA OBRA: ' + d.administradora.replace(/\.$/, '') + '.');
   txt('Têm entre si justo e combinado o presente instrumento particular de Contrato de Prestação de Serviços, que se regerá pelas cláusulas e condições seguintes:', { gap: 3 });
 
-  ctClausulas(d).forEach((c, ci) => {
+  const clausulas = ctClausulas(d);
+  clausulas.forEach((c, ci) => {
+    if (ci === clausulas.length - 1 && y + 100 > BOT) nova();   // a última cláusula nunca fica separada das assinaturas
     titulo(`${ci + 1}. ${c.t}:`);
     let k = 0;
     c.p.forEach(p => {
@@ -168,10 +170,15 @@ async function ctMinutaPdf(d) {
     });
   });
   // fechamento e assinaturas
-  if (y + 70 > BOT) nova();
+  if (y + 75 > BOT) nova();
   y += 4;
   txt(`${d.local_assinatura || 'Capão da Canoa/RS'}, ${d.data_assinatura ? ctDataExt(d.data_assinatura) : '____ de ______________ de ______'}.`, { gap: 12 });
-  const ass = (x, nome, papel) => { pdf.setDrawColor(60); pdf.line(x, y, x + 76, y); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.text(L(nome).slice(0, 44), x, y + 4.5); pdf.setFont('helvetica', 'normal'); pdf.text(papel, x, y + 8.5); };
+  const ass = (x, nome, papel) => {
+    pdf.setDrawColor(60); pdf.line(x, y, x + 76, y); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
+    const ls = pdf.splitTextToSize(L(nome), 76).slice(0, 2);
+    ls.forEach((l, k) => pdf.text(l, x, y + 4.5 + k * 4));
+    pdf.setFont('helvetica', 'normal'); pdf.text(papel, x, y + 4.5 + ls.length * 4);
+  };
   ass(ML, d.contratante_nome || 'CONTRATANTE', 'CONTRATANTE'); ass(ML + 94, nomeEmp, 'CONTRATADA');
   y += 24;
   pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.text('Testemunhas:', ML, y); y += 12;
