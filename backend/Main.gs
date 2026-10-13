@@ -119,6 +119,7 @@ const ROTAS = {
   contrato_status: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrStatus_ },
   contrato_aditivo: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrAditivo_ },
   contrato_anexo: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrAnexo_ },
+  contrato_minuta: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrMinuta_ },
   contrato_anexo_ver: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrAnexoVer_ },
 
   admin_dados: { admin: true, fn: adminDados_ },

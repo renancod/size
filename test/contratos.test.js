@@ -93,6 +93,12 @@ test('cadastro do contrato: rascunho, totais da planilha e ativação com as reg
   // contrato assinado vai para o Drive
   assert.equal(t.ctr('contrato_anexo', { id, arquivo: PDF }).pdf_nome, 'Contrato.pdf');
   assert.equal(t.ver('contrato_anexo_ver', { id }).mime, 'application/pdf');
+  // a minuta gerada no app fica guardada no Drive (pasta Contratos), só para quem gere contratos
+  assert.throws(() => t.ver('contrato_minuta', { id, pdf: PDF }), /permissão/);
+  assert.throws(() => t.ctr('contrato_minuta', { id }), /vazio/);
+  assert.match(t.ctr('contrato_minuta', { id, pdf: PDF }).msg, /Drive/);
+  const dm = t.ctr('contrato_detalhe', { id });
+  assert.ok(dm.minuta_em); assert.ok(dm.pasta_url); assert.ok(dm.historico.some(h => h.acao === 'Minuta salva no Drive' && /^MINUTA_/.test(h.nota)));
   t.ctr('contrato_status', { id, op: 'rescindir', motivo: 'obra encerrada pelo contratante' });
   assert.throws(() => t.ctr('contrato_salvar', { id, empreiteiro: emp, objeto: 'x' }), /não pode ser editado/);
   t.ctr('contrato_status', { id, op: 'reabrir', motivo: 'foi engano' });

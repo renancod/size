@@ -48,7 +48,7 @@ const SCHEMA_OBRA = {
   Contratos: ['id', 'numero', 'empreiteiro', 'empreiteiro_nome', 'status', 'objeto', 'escopo', 'data_assinatura', 'local_assinatura', 'vigencia_ini', 'vigencia_fim', 'prazo_txt',
     'valor_global', 'permuta_valor', 'permuta_desc', 'pag_forma', 'pag_periodicidade', 'pag_obs', 'fat_nf_pct', 'fat_recibo_pct', 'retencoes', 'reajuste',
     'multa1_pct', 'multa2_pct', 'multa_diaria', 'garantia', 'aviso_dias', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'foro',
-    'clausulas_extra', 'obs', 'pdf_id', 'pdf_nome', 'pasta_id', 'historico_json', 'criado_em', 'criado_por', 'atualizado_em'],
+    'clausulas_extra', 'obs', 'pdf_id', 'pdf_nome', 'minuta_id', 'minuta_em', 'pasta_id', 'historico_json', 'criado_em', 'criado_por', 'atualizado_em'],
   ContratoItens: ['id', 'contrato', 'ordem', 'grupo', 'codigo', 'servico_cod', 'servico', 'unidade', 'qtd', 'unitario', 'ativo'],
   ContratoAditivos: ['id', 'contrato', 'numero', 'data', 'tipo', 'descricao', 'valor', 'nova_vigencia', 'criado_por', 'criado_em'],
   MedicaoItens: ['medicao', 'item_id', 'etapa', 'etapa_nome', 'servico', 'unidade', 'qtd', 'concluido_em', 'complemento', 'contrato', 'fvs', 'rdos_json', 'dias_json']

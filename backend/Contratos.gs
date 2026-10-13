@@ -124,7 +124,7 @@ function ctrDetalhe_(q, ctx) {
   return Object.assign(ctrBase_(c), {
     itens: linhas, resumo: ctrResumo_(c, linhas, aditivos), aditivos: aditivos, historico: json_(c.historico_json, []),
     frentes: frentes.map(e => ({ codigo: e.codigo, nome: e.nome, local: e.local, pct: e.pct, situacao: e.situacao, servicos: e.itens.length, ativa: e.ativa })), sem_vinculo: semVinculo,
-    pasta_url: c.pasta_id ? 'https://drive.google.com/drive/folders/' + c.pasta_id : '',
+    pasta_url: c.pasta_id ? 'https://drive.google.com/drive/folders/' + c.pasta_id : '', minuta_em: fmtVal_(c.minuta_em),
     emp: { codigo: emp.codigo || c.empreiteiro, nome: emp.nome || c.empreiteiro_nome, empresa: emp.empresa || '', responsavel: emp.responsavel || '', telefone: emp.telefone || '', email: emp.email || '', documento: emp.documento || '', endereco: emp.endereco || '' },
     obra: { nome: ctx.obra.nome, sigla: ctx.obra.sigla, endereco: ctx.obra.endereco }, empresa: config_().EMPRESA || 'Size Engenharia',
     editavel: [CTR_ST_.rasc, CTR_ST_.vig].indexOf(c.status) >= 0 && pode_(ctx, 'contrato_gerir'), pode_gerir: pode_(ctx, 'contrato_gerir'), modelo: ctrModelo_(ctx)
@@ -250,6 +250,18 @@ function ctrAnexo_(q, ctx) {
   ctrHist_(c, ctx, 'Contrato assinado anexado', c.pdf_nome);
   T.update(c);
   return { msg: 'Contrato assinado arquivado no Drive.', pdf_nome: c.pdf_nome };
+}
+/* minuta gerada no app (PDF): fica guardada no Drive, na pasta do contrato, a cada vez que é baixada e ao ativar o contrato */
+function ctrMinuta_(q, ctx) {
+  const T = obraTab_(ctx, 'Contratos'), c = ctrAchar_(ctx, q.id), arq = q.pdf;
+  if (!arq || !arq.b64) throw new Error('PDF da minuta vazio.');
+  if (arq.b64.length > 14000000) throw new Error('Minuta maior que ~10 MB.');
+  const nome = 'MINUTA_' + stamp_() + '_' + limpa_('Contrato ' + ctrRotulo_(c) + ' ' + c.empreiteiro_nome) + '.pdf';
+  const file = ctrPasta_(ctx, c, T).createFile(Utilities.newBlob(Utilities.base64Decode(arq.b64), 'application/pdf', nome));
+  c.minuta_id = file.getId(); c.minuta_em = new Date();
+  ctrHist_(c, ctx, 'Minuta salva no Drive', nome);
+  T.update(c);
+  return { msg: 'Minuta salva no Drive (pasta Contratos).', minuta_em: fmtVal_(c.minuta_em), pasta_url: 'https://drive.google.com/drive/folders/' + c.pasta_id };
 }
 function ctrAnexoVer_(q, ctx) {
   const c = ctrAchar_(ctx, q.id);

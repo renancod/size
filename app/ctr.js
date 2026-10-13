@@ -250,6 +250,8 @@ async function vCtrDet(id) {
     <div class="card" id="ctAcao"></div>`);
   ctAcoes(d);
 }
+/* a minuta baixada também fica guardada no Drive, na pasta Contratos da obra */
+async function ctGuardaMinuta(d, blob) { return api('contrato_minuta', { id: d.id, pdf: { nome: 'Minuta.pdf', b64: await paraB64(blob) } }); }
 function ctAcoes(d) {
   const el = $('#ctAcao'), hist = d.historico.slice().reverse(), ger = d.pode_gerir;
   el.innerHTML = `<h3>Documento e situação</h3>
@@ -263,17 +265,29 @@ function ctAcoes(d) {
       ${ger && d.status === 'Vigente' ? `<button class="btn sec" id="ctEncerrar">Encerrar contrato</button><button class="btn perigo" id="ctRescindir">Rescindir</button>` : ''}
       ${ger && ['Encerrado', 'Rescindido', 'Cancelado'].includes(d.status) ? `<button class="btn sec" id="ctReabrir">Reabrir</button>` : ''}
     </div>
+    <small>${d.minuta_em ? `Minuta guardada no Drive em ${esc(fdh(d.minuta_em))}.` : 'A minuta é guardada no Drive (pasta Contratos) ao ativar o contrato e a cada vez que for baixada.'}</small>
     ${d.status === 'Vigente' ? '<small>Contrato vigente: pode ser escolhido nas frentes de trabalho do empreiteiro. Alterações exigem motivo e ficam no histórico.</small>' : ''}
     <details class="fv-hist"><summary>Histórico (${hist.length})</summary>${hist.map(h => `<div class="alt"><b>${esc(h.acao)}</b>${h.nota ? ': ' + esc(h.nota) : ''}<br><small>${esc(h.por)} · ${esc(fdh(h.q))}</small></div>`).join('')}</details>`;
   const lig = (id, fn) => { const b = $('#' + id); if (b) b.onclick = async e => { const bt = e.currentTarget, t = bt.innerHTML; bt.disabled = true; try { await fn(); } catch (x) { toast(x.message, 1); } if (document.body.contains(bt)) { bt.disabled = false; bt.innerHTML = t; } }; };
   const op = async (acao, motivo) => { toast((await api('contrato_status', { id: d.id, op: acao, motivo })).msg); await vCtrDet(d.id); };
   const pedeMotivo = (tit, acao, rot) => modal(tit, `<label>${rot}<textarea name="motivo" required minlength="5" rows="3"></textarea></label>`, { ok: 'Confirmar', onOk: f => op(acao, f.motivo.value) });
-  lig('ctMinuta', async () => { toast('Gerando a minuta…'); const b = await ctMinutaPdf(d); baixarBlob(b, 'Contrato ' + d.rotulo.replace(/[\\/:*?"<>|]/g, '-') + ' - ' + (d.emp.empresa || d.emp.nome).replace(/[\\/:*?"<>|]/g, '-') + '.pdf'); });
+  lig('ctMinuta', async () => {
+    toast('Gerando a minuta…');
+    const b = await ctMinutaPdf(d);
+    baixarBlob(b, 'Contrato ' + d.rotulo.replace(/[\\/:*?"<>|]/g, '-') + ' - ' + (d.emp.empresa || d.emp.nome).replace(/[\\/:*?"<>|]/g, '-') + '.pdf');
+    if (ger) { try { toast((await ctGuardaMinuta(d, b)).msg); await vCtrDet(d.id); } catch (x) { toast('Minuta baixada, mas não consegui guardar no Drive: ' + x.message, 1); } }
+  });
   lig('ctVer', async () => { const r = await api('contrato_anexo_ver', { id: d.id }); baixarBlob(new Blob([Uint8Array.from(atob(r.b64), c => c.charCodeAt(0))], { type: r.mime }), r.nome); });
   lig('ctAnexo', async () => modal('Contrato assinado', `${campoArquivo('arq', 'Arquivo do contrato assinado (PDF ou foto)', true)}<small>Fica na pasta Contratos desta obra, no Drive. Ao trocar, o arquivo anterior continua guardado na pasta.</small>`, {
     ok: 'Arquivar', onOk: async f => { const arq = await lerArquivo(f.arq); toast((await api('contrato_anexo', { id: d.id, arquivo: arq })).msg); await vCtrDet(d.id); }
   }));
-  lig('ctAtivar', async () => { if (confirm('Ativar este contrato? Ele passa a aparecer ao abrir frentes de trabalho do empreiteiro.')) await op('ativar'); });
+  lig('ctAtivar', async () => {
+    if (!confirm('Ativar este contrato? Ele passa a aparecer ao abrir frentes de trabalho do empreiteiro, e a minuta é guardada no Drive.')) return;
+    toast((await api('contrato_status', { id: d.id, op: 'ativar' })).msg);
+    try { const n = await api('contrato_detalhe', { id: d.id }); await ctGuardaMinuta(n, await ctMinutaPdf(n)); toast('Minuta guardada no Drive (pasta Contratos).'); }
+    catch (x) { toast('Contrato ativado, mas não consegui guardar a minuta no Drive: ' + x.message, 1); }
+    await vCtrDet(d.id);
+  });
   lig('ctCancelar', async () => { if (confirm('Cancelar este rascunho?')) await op('cancelar'); });
   lig('ctEncerrar', async () => { if (confirm('Encerrar o contrato? As frentes continuam, mas não dá mais para abrir frentes novas com ele.')) await op('encerrar'); });
   lig('ctRescindir', async () => pedeMotivo('Rescindir contrato', 'rescindir', 'Motivo da rescisão'));
