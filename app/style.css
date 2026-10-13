@@ -678,4 +678,4 @@ button.rel-chip{cursor:pointer}button.rel-chip:hover{background:rgba(255,255,255
 .md-pend{margin-top:14px;padding:12px;border-radius:12px;background:var(--warn-l);display:grid;gap:8px}.md-pend h4{margin:0;color:var(--warn);display:flex;gap:8px;align-items:center;font-size:.9rem}
 .md-pi{display:grid;gap:1px}.md-pi small{color:var(--mute)}.md-motivo{color:var(--warn)!important;font-weight:600}
 .md-tab td,.md-tab th{vertical-align:top}
-.md-total{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.md-total:last-child{border-bottom:0}.md-total b{color:var(--navy)}
+.md-total{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.md-total:last-child{border-bottom:0}.md-total b{color:var(--navy)}.linha-btn{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}

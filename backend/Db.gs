@@ -12,6 +12,7 @@ const SCHEMA_CENTRAL = {
   ServicosPadrao: ['codigo', 'grupo', 'servico', 'unidade', 'ativo', 'fvs_modelo'],
   FvsModelos: ['codigo', 'nome', 'categoria', 'tipo', 'revisao', 'data_rev', 'blocos_json', 'ativo', 'revisar', 'nota'],
   Unidades: ['unidade'],
+  Aparelhos: ['token', 'usuario_id', 'usuario', 'ua', 'criado_em', 'vistos'],
   Log: ['data', 'usuario', 'obra', 'acao', 'detalhe']
 };
 const SCHEMA_OBRA = {

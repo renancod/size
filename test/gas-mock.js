@@ -107,6 +107,7 @@ function criarGAS() {
       formatDate: (d, tz, f) => f.replace('yyyy', d.getFullYear()).replace('MM', pad(d.getMonth() + 1)).replace('dd', pad(d.getDate())).replace('HH', pad(d.getHours())).replace('mm', pad(d.getMinutes())),
       computeDigest: (alg, s) => bytes(crypto.createHash('sha256').update(String(s), 'utf8').digest()),
       computeHmacSha256Signature: (v, k) => bytes(crypto.createHmac('sha256', k).update(v).digest()),
+      computeRsaSha256Signature: (v, k) => bytes(crypto.sign('sha256', Buffer.from(v), k)),
       base64Encode: d => toBuf(d).toString('base64'),
       base64EncodeWebSafe: d => toBuf(d).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
       base64Decode: s => bytes(Buffer.from(s, 'base64')),
@@ -117,18 +118,27 @@ function criarGAS() {
     },
     CacheService: { getScriptCache: () => ({ get: k => { const e = cache[k]; if (!e) return null; if (e.exp < Date.now()) { delete cache[k]; return null; } return e.v; }, put: (k, v, s) => { cache[k] = { v: String(v), exp: Date.now() + (s || 600) * 1000 }; }, remove: k => { delete cache[k]; } }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    LockService: { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {} }) },
+    // Firebase falso: guarda cada mensagem enviada; _fcmResp(token) devolve o código HTTP (padrão 200)
+    UrlFetchApp: {
+      fetch: () => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify({ access_token: 'token-falso' }) }),
+      fetchAll: lista => lista.map(r => {
+        const m = JSON.parse(r.payload).message; G._fcm.push(m);
+        const cod = G._fcmResp ? G._fcmResp(m.token) : 200;
+        return { getResponseCode: () => cod, getContentText: () => cod === 200 ? '{}' : '{"error":{"status":"UNREGISTERED"}}' };
+      })
+    },
     Session: { getScriptTimeZone: () => 'America/Sao_Paulo', getEffectiveUser: () => ({ getEmail: () => 'adm@sizeengenhariaambiental.com.br' }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ s, setMimeType() { return this; }, getContent() { return this.s; } }) },
     ScriptApp: { getProjectTriggers: () => [], deleteTrigger: () => {}, newTrigger: () => { const b = { timeBased: () => b, everyMinutes: () => b, everyDays: () => b, atHour: () => b, create: () => {} }; return b; } },
     Logger: { log: (...a) => G._logs.push(a.join(' ')) },
-    _logs: [], _pastas: pastas, _cache: cache, _enviados: enviados, _threads: threads, _planilhas: planilhas, _arquivos: arquivos, Blob
+    _logs: [], _fcm: [], _fcmResp: null, _pastas: pastas, _cache: cache, _enviados: enviados, _threads: threads, _planilhas: planilhas, _arquivos: arquivos, Blob
   };
   G.console = console;
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Push.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());

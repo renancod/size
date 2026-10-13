@@ -133,7 +133,7 @@ http.createServer((req, res) => {
     return;
   }
   const u = decodeURIComponent(req.url.split('?')[0]);
-  if (u === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("const API_URL = '/api';"); }
+  if (u === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("const API_URL = '/api'; const FIREBASE_CFG = { projectId: 'demo', apiKey: '', messagingSenderId: '', appId: '', vapid: '' };"); }
   const f = path.join(raiz, u === '/' ? 'index.html' : u);
   if (!f.startsWith(raiz) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': TIPOS[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' });

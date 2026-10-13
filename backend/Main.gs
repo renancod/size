@@ -41,6 +41,9 @@ const ROTAS = {
   sessao: { fn: (q, ctx) => sessaoDe_(ctx.u) },
   trocarSenha: { lock: true, fn: trocarSenha_ },
   notificacoes: { fn: notificacoes_ },
+  push_registrar: { lock: true, fn: pushRegistrar_ },
+  push_remover: { lock: true, fn: pushRemover_ },
+  push_teste: { fn: pushTeste_ },
 
   obra_dados: { obra: true, fn: obraDados_ },
   pedidos_listar: { obra: true, fn: pedidosListar_ },

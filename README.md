@@ -82,3 +82,10 @@ Logins da demo: `admin`/`Admin#Size26`, `compras`, `estoque`, `fin`, `joao` (sen
 - **Fluxo:** rascunho → aguardando aprovação → aprovada (numerada **por empreiteiro**, travada, PDF em `Drive → obra → Medições → empreiteiro → Medição 001 · período`) → paga. Rascunho e devolvida não reservam serviços; enviada, aprovada e paga reservam.
 - **Permissões por obra:** `medicao_ver`, `medicao_lancar`, `medicao_aprovar` (administrador tem todas; as demais pessoas são liberadas na tela de acessos). O sino avisa quem aprova quando uma medição é enviada.
 - Valores (contrato × pago × saldo por etapa) e descontos ficam para a próxima etapa.
+
+## Avisos com o app fechado (push)
+O sino continua igual (app aberto: som, vibração e janelinha). Com os avisos de fundo ativados, o aparelho também recebe o aviso com o app fechado, via Firebase Cloud Messaging.
+- **No aparelho:** sino > "Ativar avisos neste aparelho". O app só pede a permissão e registra o aparelho (aba `Aparelhos`); quem mostra o aviso é o `sw.js`. iPhone: só iOS 16.4+ com o app instalado na tela inicial.
+- **No servidor:** `pushVarrer()` (gatilho de 5 em 5 min, criado sozinho no primeiro registro) calcula o mesmo que o sino (`notificacoes_`) para cada pessoa com aparelho registrado e envia só o que ainda não foi avisado àquele aparelho. Se o app estiver aberto, ele marca os avisos como vistos e não duplica.
+- **Configuração (uma vez):** em `app/config.js` preencher `FIREBASE_CFG` (apiKey, messagingSenderId, appId e a chave pública VAPID; não são segredos) e, no Apps Script, criar a propriedade do script `FCM_SA` com o JSON da conta de serviço do Firebase (segredo: nunca no GitHub). Depois, nova versão da implantação.
+- Quem sai do app deixa de receber os avisos dele naquele aparelho.

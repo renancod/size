@@ -1,6 +1,6 @@
 // Cache do app para abrir rápido e funcionar com sinal fraco na obra (os dados sempre vêm da API).
-const CACHE = 'size-v21';
-const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png', './fornecedor.html', './forn.js'];
+const CACHE = 'size-v22';
+const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './push.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png', './fornecedor.html', './forn.js'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
@@ -14,6 +14,18 @@ self.addEventListener('fetch', e => {
     caches.open(CACHE).then(cache => cache.put(e.request, c));
     return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));
+});
+
+/* Aviso vindo do servidor (Firebase) com o app aberto ou fechado. O servidor manda só dados
+ * (titulo, corpo, url, tag) e o aviso é montado aqui; sem a biblioteca do Firebase dentro do service worker. */
+self.addEventListener('push', e => {
+  let p = {};
+  try { p = e.data ? e.data.json() : {}; } catch (x) { p = { corpo: e.data ? e.data.text() : '' }; }
+  const d = (p.data && typeof p.data === 'object') ? p.data : (p.notification ? { titulo: p.notification.title, corpo: p.notification.body } : p);
+  e.waitUntil(self.registration.showNotification(d.titulo || 'Size Engenharia', {
+    body: d.corpo || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: d.tag || undefined, data: { url: d.url || './' },
+    vibrate: [200, 100, 200], renotify: !!d.tag
+  }));
 });
 
 self.addEventListener('notificationclick', e => {

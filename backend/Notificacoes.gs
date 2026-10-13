@@ -57,6 +57,8 @@ function notificacoes_(q, ctx) {
       notifExec_(c, x => itens.push(Object.assign({ obra: String(o.id), obra_nome: o.nome, resumo: '', situacao: '', prioridade: '' }, x, { id: o.id + '|' + x.id })));
     } catch (e) { /* execução não derruba os avisos de compras */ }
   });
+  // app aberto com os avisos de fundo ativos: o que ele já mostrou não precisa ir de novo por push
+  if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, itens);
   return { itens: itens, agora: fmtVal_(new Date()) };
 }
 

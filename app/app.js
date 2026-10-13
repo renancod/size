@@ -398,6 +398,9 @@ function telaLogin(msg) {
   };
 }
 function sair(msg) {
+  // o aparelho deixa de receber os avisos de quem saiu (a próxima pessoa que entrar registra de novo, se já tinha ativado)
+  if (S.token && LS.get('cs_fcm')) api('push_remover', { fcm: LS.get('cs_fcm') }).catch(() => { });
+  LS.del('cs_fcm_reg'); LS.del('cs_fcm_u');
   S.token = ''; S.sess = null; S.dados = null; S.ped = null; S.adm = null;
   clearInterval(NOTIF.timer);
   LS.del('cs_token'); LS.del('cs_sess');
@@ -488,7 +491,7 @@ const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() 
 async function buscarNotif() {
   if (!S.token || !S.sess) return;
   let r;
-  try { r = await api('notificacoes'); } catch (e) { return; }
+  try { r = await api('notificacoes', LS.get('cs_fcm') && pushLigado() ? { push: LS.get('cs_fcm') } : {}); } catch (e) { return; }
   const novos = r.itens.filter(i => !NOTIF.conhecidos.has(i.id));
   // na primeira vez que o aparelho usa o app, só registra; depois avisa tudo que for novo
   if (novos.length && (!NOTIF.primeira || NOTIF.conhecidos.size)) avisarNovos(novos);
@@ -501,7 +504,7 @@ async function buscarNotif() {
 function iniciarNotif() {
   clearInterval(NOTIF.timer);
   NOTIF.primeira = true;
-  buscarNotif();
+  buscarNotif().then(pushSincronizar);
   NOTIF.timer = setInterval(() => { if (!document.hidden) buscarNotif(); }, 60000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sess) buscarNotif(); });
@@ -563,7 +566,11 @@ function painelNotif() {
   const grupos = Object.keys(ETAPA_NOTIF).map(k => [k, NOTIF.itens.filter(i => i.etapa === k)]).filter(([, l]) => l.length);
   const variasObras = new Set(NOTIF.itens.map(i => i.obra)).size > 1;
   const perm = 'Notification' in window ? Notification.permission : 'indisponivel';
-  modal('Notificações', `${perm === 'default' ? `<button type="button" class="btn sec" id="ativarNotif">${ic('bell')} Avisar também quando o app estiver em segundo plano</button>` : ''}
+  const pp = pushPossivel(), ligado = pp && pushLigado();
+  modal('Notificações', `${pp && perm !== 'denied' ? (ligado ? `<div class="aviso info">${ic('check')} Avisos ativos neste aparelho, mesmo com o app fechado.</div>
+      <div class="linha-btn"><button type="button" class="btn sec" id="testeNotif">Enviar um teste</button> <button type="button" class="btn sec" id="desligaNotif">Desativar neste aparelho</button></div>`
+      : `<button type="button" class="btn" id="ligaNotif">${ic('bell')} Ativar avisos neste aparelho (mesmo com o app fechado)</button>`) : ''}
+    ${!pp && perm === 'default' ? `<button type="button" class="btn sec" id="ativarNotif">${ic('bell')} Avisar também quando o app estiver em segundo plano</button>` : ''}
     ${perm === 'denied' ? '<small>Os avisos do aparelho estão bloqueados nas configurações do navegador para este site.</small>' : ''}
     ${grupos.map(([k, l]) => `<div class="notif-grupo"><div class="notif-tit">${ic(ETAPA_NOTIF[k][1])}<b>${ETAPA_NOTIF[k][0]}</b><span>${l.length}</span></div>
       ${l.sort((a, b) => String(b.quando).localeCompare(String(a.quando))).map((i, n) => `<button type="button" class="notif" data-n="${esc(i.id)}">
@@ -571,6 +578,10 @@ function painelNotif() {
         <small>${esc(i.texto)}${i.resumo ? ' — ' + esc(i.resumo) : ''}</small></span><small>${fdh(i.quando)}</small></button>`).join('')}</div>`).join('')
     || '<p class="vazio">Nada pendente para você agora. 🎉</p>'}`, { semRodape: true });
   $$('#modal .notif').forEach(b => { b.onclick = () => abrirNotif(NOTIF.itens.find(i => i.id === b.dataset.n)); });
+  const clique = (id, fn, ok) => { const b = $(id); if (b) b.onclick = async () => { b.disabled = true; try { await fn(); toast(ok); } catch (e) { toast(e.message, 1); } painelNotif(); }; };
+  clique('#ligaNotif', pushAtivar, 'Pronto: este aparelho vai avisar das novidades, mesmo com o app fechado.');
+  clique('#desligaNotif', pushDesativar, 'Avisos desativados neste aparelho.');
+  clique('#testeNotif', () => api('push_teste'), 'Teste enviado. Se não aparecer em alguns segundos, desative e ative de novo.');
   if ($('#ativarNotif')) $('#ativarNotif').onclick = async () => {
     const r = await Notification.requestPermission();
     toast(r === 'granted' ? 'Pronto: o aparelho vai avisar das novidades.' : 'Os avisos do aparelho não foram permitidos.', r !== 'granted');
