@@ -98,13 +98,85 @@ function ctrModelo_(ctx) {
   };
 }
 
+/* ---------- responsabilidade técnica (ART, RRT, TRT…): condição para liberar o contrato para assinatura ---------- */
+const CTR_RT_TIPOS_ = ['ART', 'RRT', 'TRT', 'Outro documento com responsabilidade técnica'];
+const ctrRtEmitida_ = r => !!(r.arquivo_id && String(r.numero).trim());
+function ctrRtPub_(r) {
+  return {
+    id: r.id, tipo: r.tipo, descricao: r.descricao || '', numero: String(r.numero || ''), profissional: r.profissional || '', registro: r.registro || '', emissao: ymd_(r.emissao),
+    tem_arquivo: !!r.arquivo_id, arquivo_nome: r.arquivo_nome || '', emitida: ctrRtEmitida_(r), anexado_por: r.anexado_por || '', anexado_em: fmtVal_(r.anexado_em)
+  };
+}
+/* o contrato só é liberado para assinatura com todas as responsabilidades técnicas listadas emitidas (número + documento anexado) */
+function ctrLiberacao_(rts) {
+  const faltam = rts.filter(r => !ctrRtEmitida_(r)).map(r => r.tipo + (r.descricao ? ' - ' + r.descricao : ''));
+  return { liberado: rts.length > 0 && !faltam.length, total: rts.length, emitidas: rts.length - faltam.length, faltam: faltam, motivo: !rts.length ? 'cadastre as responsabilidades técnicas do contrato (ART, RRT, TRT…)' : faltam.length ? 'faltam emitir/anexar: ' + faltam.join('; ') : '' };
+}
+function ctrExigeLiberado_(ctx, c) {
+  const lib = ctrLiberacao_(obraTab_(ctx, 'ContratoRT').all().filter(r => String(r.contrato) === String(c.id)));
+  if (!lib.liberado) throw new Error('Contrato bloqueado para assinatura: ' + lib.motivo + '.');
+}
+function ctrRtAchar_(ctx, id, rtId) {
+  const c = ctrAchar_(ctx, id), T = obraTab_(ctx, 'ContratoRT'), r = T.all().find(x => String(x.id) === String(rtId) && String(x.contrato) === String(c.id));
+  if (!r) throw new Error('Responsabilidade técnica não encontrada neste contrato.');
+  return { c: c, T: T, r: r };
+}
+function ctrRtSalvar_(q, ctx) {
+  const c = ctrAchar_(ctx, q.id), T = obraTab_(ctx, 'ContratoRT');
+  if ([CTR_ST_.rasc, CTR_ST_.vig].indexOf(c.status) < 0) throw new Error('Contrato ' + c.status.toLowerCase() + ': não dá para mexer nas responsabilidades técnicas.');
+  const tipo = CTR_RT_TIPOS_.indexOf(q.tipo) >= 0 ? q.tipo : '', desc = String(q.descricao || '').trim();
+  if (!tipo) throw new Error('Escolha o tipo (ART, RRT, TRT ou outro documento).');
+  if (desc.length < 3) throw new Error('Descreva a atividade coberta (ex: execução da rede de água).');
+  let r = q.rt_id ? T.all().find(x => String(x.id) === String(q.rt_id) && String(x.contrato) === String(c.id)) : null;
+  if (q.rt_id && !r) throw new Error('Responsabilidade técnica não encontrada neste contrato.');
+  const nova = !r;
+  if (nova) r = { id: 'RT-' + Utilities.getUuid().slice(0, 6), contrato: c.id, criado_por: ctx.u.nome, criado_em: new Date() };
+  r.tipo = tipo; r.descricao = desc.slice(0, 300); r.numero = String(q.numero || '').trim().slice(0, 60); r.profissional = String(q.profissional || '').trim().slice(0, 150);
+  r.registro = String(q.registro || '').trim().slice(0, 60); r.emissao = dataDe_(q.emissao) || '';
+  if (nova) T.insert(r); else T.update(r);
+  ctrHist_(c, ctx, nova ? 'Responsabilidade técnica incluída' : 'Responsabilidade técnica alterada', r.tipo + ' · ' + r.descricao + (r.numero ? ' · nº ' + r.numero : ''));
+  obraTab_(ctx, 'Contratos').update(c);
+  return { msg: nova ? tipo + ' incluída na lista do contrato.' : tipo + ' atualizada.', rt_id: r.id };
+}
+function ctrRtArquivo_(q, ctx) {
+  const a = ctrRtAchar_(ctx, q.id, q.rt_id), arq = q.arquivo;
+  if ([CTR_ST_.rasc, CTR_ST_.vig].indexOf(a.c.status) < 0) throw new Error('Contrato ' + a.c.status.toLowerCase() + ': não dá para anexar.');
+  if (!arq || !arq.b64) throw new Error('Arquivo vazio.');
+  if (arq.b64.length > 14000000) throw new Error('Arquivo maior que ~10 MB.');
+  const nome = a.r.tipo.replace(/\s.*/, '') + '_' + limpa_(a.r.numero || a.r.id) + '_' + stamp_() + '_' + limpa_(arq.nome);
+  const pasta = subpasta_(ctrPasta_(ctx, a.c, obraTab_(ctx, 'Contratos')), 'Responsabilidade técnica');
+  const file = pasta.createFile(Utilities.newBlob(Utilities.base64Decode(arq.b64), arq.mime || 'application/pdf', nome));
+  a.r.arquivo_id = file.getId(); a.r.arquivo_nome = String(arq.nome || file.getName()).slice(0, 120); a.r.anexado_por = ctx.u.nome; a.r.anexado_em = new Date();
+  a.T.update(a.r);
+  ctrHist_(a.c, ctx, a.r.tipo + ' anexada', (a.r.numero ? 'nº ' + a.r.numero + ' · ' : '') + a.r.arquivo_nome);
+  obraTab_(ctx, 'Contratos').update(a.c);
+  const lib = ctrLiberacao_(obraTab_(ctx, 'ContratoRT').all().filter(r => String(r.contrato) === String(a.c.id)));
+  return { msg: lib.liberado ? 'Documento arquivado. Todas as responsabilidades técnicas estão emitidas: contrato liberado para assinatura.' : 'Documento arquivado.' + (!ctrRtEmitida_(a.r) ? ' Informe também o número do documento para contar como emitido.' : ''), liberado: lib.liberado };
+}
+function ctrRtRemover_(q, ctx) {
+  const a = ctrRtAchar_(ctx, q.id, q.rt_id);
+  if (a.c.status !== CTR_ST_.rasc) throw new Error('Só dá para retirar da lista enquanto o contrato é rascunho.');
+  if (a.r.arquivo_id) { try { DriveApp.getFileById(a.r.arquivo_id).setTrashed(true); } catch (e) { /* já apagado */ } }
+  a.T.removeWhere(x => String(x.id) === String(a.r.id));
+  ctrHist_(a.c, ctx, 'Responsabilidade técnica retirada', a.r.tipo + ' · ' + a.r.descricao);
+  obraTab_(ctx, 'Contratos').update(a.c);
+  return { msg: 'Retirada da lista do contrato.' };
+}
+function ctrRtVer_(q, ctx) {
+  const r = ctrRtAchar_(ctx, q.id, q.rt_id).r;
+  if (!r.arquivo_id) throw new Error('Ainda não há documento anexado.');
+  const file = DriveApp.getFileById(r.arquivo_id);
+  return { nome: r.arquivo_nome || file.getName(), mime: file.getMimeType(), b64: Utilities.base64Encode(file.getBlob().getBytes()) };
+}
+
 /* ---------- leitura ---------- */
 function ctrListar_(q, ctx) {
   if (obraTab_(ctx, 'Contratos').all().some(c => !String(c.numero).trim()) && pode_(ctx, 'contrato_gerir')) { const L = LockService.getScriptLock(); L.waitLock(20000); try { ctrNumerarPendentes_(ctx); } finally { L.releaseLock(); } }
-  const C = obraTab_(ctx, 'Contratos').all(), I = ctrAtivos_(ctx), A = obraTab_(ctx, 'ContratoAditivos').all(), met = ctrMetricas_(ctx);
+  const C = obraTab_(ctx, 'Contratos').all(), I = ctrAtivos_(ctx), A = obraTab_(ctx, 'ContratoAditivos').all(), met = ctrMetricas_(ctx), RT = obraTab_(ctx, 'ContratoRT').all();
   const lista = C.map(c => {
     const linhas = ctrLinhas_(I.filter(i => String(i.contrato) === String(c.id)), met), res = ctrResumo_(c, linhas, A.filter(a => String(a.contrato) === String(c.id)));
-    return Object.assign(ctrBase_(c), { itens: linhas.length, resumo: res, a_programar: r2_(linhas.reduce((t, l) => t + Math.max(0, l.a_programar), 0)) });
+    const lib = ctrLiberacao_(RT.filter(r => String(r.contrato) === String(c.id)));
+    return Object.assign(ctrBase_(c), { itens: linhas.length, resumo: res, a_programar: r2_(linhas.reduce((t, l) => t + Math.max(0, l.a_programar), 0)), rt: { liberado: lib.liberado, total: lib.total, emitidas: lib.emitidas } });
   }).sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
   return {
     contratos: lista,
@@ -122,7 +194,9 @@ function ctrDetalhe_(q, ctx) {
   const frentes = calc.etapas.filter(e => String(e.contrato_id) === String(c.id)), semVinculo = [];
   frentes.forEach(e => e.itens.forEach(i => { if (!i.contrato_item) semVinculo.push({ etapa: e.codigo, etapa_nome: e.nome, servico: i.servico, unidade: i.unidade, executado: i.executado }); }));
   const emp = obraTab_(ctx, 'Equipes').all().find(x => String(x.codigo) === String(c.empreiteiro)) || {};
+  const rts = obraTab_(ctx, 'ContratoRT').all().filter(r => String(r.contrato) === String(c.id));
   return Object.assign(ctrBase_(c), {
+    rts: rts.map(ctrRtPub_), liberacao: ctrLiberacao_(rts),
     itens: linhas, resumo: ctrResumo_(c, linhas, aditivos), aditivos: aditivos, historico: json_(c.historico_json, []),
     frentes: frentes.map(e => ({ codigo: e.codigo, nome: e.nome, local: e.local, pct: e.pct, situacao: e.situacao, servicos: e.itens.length, ativa: e.ativa })), sem_vinculo: semVinculo,
     pasta_url: c.pasta_id ? 'https://drive.google.com/drive/folders/' + c.pasta_id : '', minuta_em: fmtVal_(c.minuta_em),
@@ -220,6 +294,7 @@ function ctrStatus_(q, ctx) {
     if (!c.empreiteiro) throw new Error('Escolha o empreiteiro.');
     if (!c.vigencia_ini) throw new Error('Informe o início da vigência.');
     if (!ctrAtivos_(ctx, c.id).length && !(num_(c.valor_global) > 0)) throw new Error('Cadastre a planilha de serviços (ou informe o valor global) antes de ativar.');
+    ctrExigeLiberado_(ctx, c);                                      // sem as responsabilidades técnicas emitidas não vai para assinatura
     novo = S.vig;
   } else if (acao === 'encerrar') { if (c.status !== S.vig) throw new Error('Só contrato vigente pode ser encerrado.'); novo = S.enc; }
   else if (acao === 'rescindir') { if (c.status !== S.vig) throw new Error('Só contrato vigente pode ser rescindido.'); exige(); novo = S.resc; }
@@ -274,6 +349,7 @@ function ctrMinuta_(q, ctx) {
   const T = obraTab_(ctx, 'Contratos'), c = ctrAchar_(ctx, q.id), arq = q.pdf;
   if (!arq || !arq.b64) throw new Error('PDF da minuta vazio.');
   if (arq.b64.length > 14000000) throw new Error('Minuta maior que ~10 MB.');
+  if (c.status === CTR_ST_.rasc) ctrExigeLiberado_(ctx, c);       // minuta para assinatura só com as responsabilidades técnicas emitidas
   const nome = 'MINUTA_' + stamp_() + '_' + limpa_('Contrato ' + ctrRotulo_(c) + ' ' + c.empreiteiro_nome) + '.pdf';
   const file = ctrPasta_(ctx, c, T).createFile(Utilities.newBlob(Utilities.base64Decode(arq.b64), 'application/pdf', nome));
   c.minuta_id = file.getId(); c.minuta_em = new Date();

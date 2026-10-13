@@ -40,8 +40,15 @@ function contratoVigente(t, extra = {}) {
     empreiteiro: emp, numero: '015/2026', objeto: 'Mão de obra para rede de água', vigencia_ini: dia(-20), vigencia_fim: dia(300), data_assinatura: dia(-21),
     pag_forma: 'Por medição', pag_periodicidade: 'Semanal', contratante_nome: 'SPE Prime Beach', itens: ITENS
   }, extra));
+  liberar(t, id);
   t.ctr('contrato_status', { id, op: 'ativar' });
   return { emp, id };
+}
+/* responsabilidade técnica emitida (ART com número e documento): libera o contrato para assinatura */
+function liberar(t, id) {
+  const { rt_id } = t.ctr('contrato_rt_salvar', { id, tipo: 'ART', descricao: 'Execução da rede de água', numero: '1234567', profissional: 'Eng. Fulano de Tal', registro: 'CREA-RS 12345', emissao: dia(-3) });
+  t.ctr('contrato_rt_arquivo', { id, rt_id, arquivo: PDF });
+  return rt_id;
 }
 function aprovarFvs(t, itemId) {
   const id = t.eng('fvs_listar').fvs.find(f => f.item_id === itemId).id;
@@ -78,6 +85,9 @@ test('cadastro do contrato: rascunho, totais da planilha e ativação com as reg
   assert.equal(t.ver('contratos').pode_gerir, false);                          // só consulta
   assert.throws(() => t.ver('contrato_salvar', { id, empreiteiro: emp, objeto: 'x' }), /permissão/);
   assert.equal(t.ctr('contrato_detalhe', { id }).itens.length, 3, 'salvar sem a planilha não mexe nos itens');
+  assert.throws(() => t.ctr('contrato_status', { id, op: 'ativar' }), /bloqueado para assinatura.*responsabilidades técnicas/);
+  assert.throws(() => t.ctr('contrato_minuta', { id, pdf: PDF }), /bloqueado para assinatura/);
+  liberar(t, id);
   t.ctr('contrato_status', { id, op: 'ativar' });
   assert.equal(t.ctr('contrato_detalhe', { id }).status, 'Vigente');
   // vigente: alteração só com motivo (fica no histórico)
@@ -205,4 +215,48 @@ test('número do contrato automático por obra: 01, 02, 03… sem repetir nem re
   t.G.rodar('(() => { const o = central_("Obras").all().find(x => x.sigla === "LS"); const ctx = { ss: SpreadsheetApp.openById(o.planilha_id) }; const T = ' + T + '; T.all().forEach(c => { c.numero = ""; T.update(c); }); })()');
   const d = novo();
   assert.deepEqual([num(a), num(b), num(c), num(d)], ['01', '02', '03', '04']);
+});
+
+test('responsabilidade técnica (ART/RRT/TRT) é condição: só libera para assinatura com todas emitidas', () => {
+  const t = preparar();
+  const emp = t.eng('exec_equipe_salvar', { nome: 'Equipe VN', empresa: 'VN Ltda' }).codigo;
+  const { id } = t.ctr('contrato_salvar', { empreiteiro: emp, objeto: 'Rede de água', vigencia_ini: dia(0), itens: ITENS });
+  let d = t.ctr('contrato_detalhe', { id });
+  assert.equal(d.liberacao.liberado, false); assert.match(d.liberacao.motivo, /cadastre as responsabilidades técnicas/);
+  assert.equal(t.ctr('contratos').contratos[0].rt.liberado, false);
+  // validações do cadastro
+  assert.throws(() => t.ctr('contrato_rt_salvar', { id, tipo: 'XYZ', descricao: 'Rede' }), /Escolha o tipo/);
+  assert.throws(() => t.ctr('contrato_rt_salvar', { id, tipo: 'ART', descricao: '' }), /Descreva/);
+  assert.throws(() => t.ver('contrato_rt_salvar', { id, tipo: 'ART', descricao: 'Rede de água' }), /permissão/);
+  // duas responsabilidades exigidas: uma ART (execução) e um RRT
+  const art = t.ctr('contrato_rt_salvar', { id, tipo: 'ART', descricao: 'Execução da rede de água', profissional: 'Eng. Fulano', registro: 'CREA-RS 1' }).rt_id;
+  const rrt = t.ctr('contrato_rt_salvar', { id, tipo: 'RRT', descricao: 'Projeto de drenagem', profissional: 'Arq. Beltrana', registro: 'CAU A1' }).rt_id;
+  d = t.ctr('contrato_detalhe', { id });
+  assert.equal(d.rts.length, 2); assert.equal(d.liberacao.total, 2); assert.equal(d.liberacao.emitidas, 0);
+  assert.throws(() => t.ctr('contrato_status', { id, op: 'ativar' }), /faltam emitir\/anexar: ART - Execução.*RRT - Projeto/);
+  // documento anexado SEM número ainda não conta como emitido
+  assert.match(t.ctr('contrato_rt_arquivo', { id, rt_id: art, arquivo: PDF }).msg, /Informe também o número/);
+  assert.equal(t.ctr('contrato_detalhe', { id }).liberacao.emitidas, 0);
+  t.ctr('contrato_rt_salvar', { id, rt_id: art, tipo: 'ART', descricao: 'Execução da rede de água', numero: '2026123', profissional: 'Eng. Fulano', registro: 'CREA-RS 1', emissao: dia(-1) });
+  assert.equal(t.ctr('contrato_detalhe', { id }).liberacao.emitidas, 1);
+  assert.throws(() => t.ctr('contrato_minuta', { id, pdf: PDF }), /bloqueado.*RRT - Projeto/);
+  // a segunda: número + documento → liberado
+  t.ctr('contrato_rt_salvar', { id, rt_id: rrt, tipo: 'RRT', descricao: 'Projeto de drenagem', numero: 'SI123', profissional: 'Arq. Beltrana', registro: 'CAU A1' });
+  assert.equal(t.ctr('contrato_rt_arquivo', { id, rt_id: rrt, arquivo: PDF }).liberado, true);
+  d = t.ctr('contrato_detalhe', { id });
+  assert.equal(d.liberacao.liberado, true); assert.equal(t.ctr('contratos').contratos[0].rt.liberado, true);
+  assert.equal(d.rts.find(r => r.id === art).arquivo_nome, 'Contrato.pdf');
+  assert.equal(t.ver('contrato_rt_ver', { id, rt_id: art }).mime, 'application/pdf');          // quem só consulta baixa
+  assert.match(t.ctr('contrato_minuta', { id, pdf: PDF }).msg, /Drive/);                       // minuta liberada
+  // incluir nova exigência volta a bloquear; retirar só em rascunho
+  const nova = t.ctr('contrato_rt_salvar', { id, tipo: 'TRT', descricao: 'Instalações elétricas' }).rt_id;
+  assert.equal(t.ctr('contrato_detalhe', { id }).liberacao.liberado, false);
+  t.ctr('contrato_rt_remover', { id, rt_id: nova });
+  assert.equal(t.ctr('contrato_detalhe', { id }).liberacao.liberado, true);
+  t.ctr('contrato_status', { id, op: 'ativar' });
+  assert.throws(() => t.ctr('contrato_rt_remover', { id, rt_id: art }), /Só dá para retirar/);
+  assert.ok(t.ctr('contrato_detalhe', { id }).historico.some(h => /Responsabilidade técnica incluída/.test(h.acao)));
+  // contrato vigente ainda aceita novas exigências/documentos; encerrado não
+  t.ctr('contrato_status', { id, op: 'encerrar' });
+  assert.throws(() => t.ctr('contrato_rt_salvar', { id, tipo: 'ART', descricao: 'Extra' }), /não dá para mexer/);
 });

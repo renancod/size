@@ -57,6 +57,7 @@ function ctCartao(c) {
     <div class="fv-l1"><span class="fv-num">${esc(c.rotulo)}</span>${ctBadge(c.status)}</div>
     <b class="fv-serv">${esc(c.empreiteiro_nome)}</b>
     <small>${esc(c.objeto.length > 110 ? c.objeto.slice(0, 107) + '…' : c.objeto)}</small>
+    ${c.status === 'Rascunho' ? `<span class="ct-rtflag ${c.rt.liberado ? 'ok' : 'pend'}">${c.rt.liberado ? 'Liberado para assinatura' : c.rt.total ? `RT/ART: ${c.rt.emitidas} de ${c.rt.total} emitidas` : 'RT/ART: nenhuma cadastrada'}</span>` : ''}
     <div class="ct-val"><b>${ctM(r.contratado)}</b><small>${plural(c.itens, 'serviço', 'serviços')}${c.vigencia_fim ? ' · até ' + fd(c.vigencia_fim) : ''}</small></div>
     <div class="ct-tres"><span>Executado <b>${pct(r.pct_exec)}</b>${ctBar(r.pct_exec)}</span><span>Medido <b>${pct(r.pct_med)}</b>${ctBar(r.pct_med, 'med')}</span><span>Pago <b>${pct(r.pct_pago)}</b>${ctBar(r.pct_pago, 'pg')}</span></div></a>`;
 }
@@ -78,7 +79,7 @@ async function ctForm(id) {
   const m = d || Object.assign({}, L.modelo, { vigencia_ini: hoje() });
   const empSel = d ? d.empreiteiro : (new URLSearchParams(location.hash.split('?')[1] || '').get('emp') || '');
   view(`<a href="${id ? '#/ctr/' + esc(id) : '#/ctr'}" class="linkbtn">${ic('back')} ${id ? 'Contrato' : 'Contratos'}</a>
-    <div class="fv-hero fvs-exec"><div><span class="rel-sel">${ic('file')} Contrato de empreiteiro</span><h2>${id ? 'Editar contrato ' + esc(d.rotulo) : 'Novo contrato'}</h2><p>Monte o contrato com a planilha de serviços. Depois de ativar, ele aparece ao abrir a frente de trabalho do empreiteiro e dá para baixar a minuta em PDF.</p></div></div>
+    <div class="fv-hero fvs-exec"><div><span class="rel-sel">${ic('file')} Contrato de empreiteiro</span><h2>${id ? 'Editar contrato ' + esc(d.rotulo) : 'Novo contrato'}</h2><p>Monte o contrato com a planilha de serviços. Depois de salvar, cadastre e anexe as responsabilidades técnicas (ART, RRT, TRT…): sem elas emitidas o contrato não é liberado para assinatura.</p></div></div>
     <form id="ctF" class="ct-form" autocomplete="off">
     <section class="card rel-sec"><div class="rel-h"><b>1</b><div><h3>Partes</h3><small>Quem contrata e quem executa</small></div></div>
       <div class="g2"><label>Empreiteiro (contratado)<select name="empreiteiro" required><option value="">— escolha —</option>${L.empreiteiros.map(e => `<option value="${esc(e.codigo)}" ${(m.empreiteiro || empSel) === e.codigo ? 'selected' : ''}>${esc(e.empresa ? e.empresa + ' · ' + e.nome : e.nome)}</option>`).join('')}</select><small>CNPJ e endereço vêm do cadastro do empreiteiro (<a href="#/med/empreiteiros">editar</a>).</small></label>
@@ -247,21 +248,74 @@ async function vCtrDet(id) {
     <div class="card"><h3>Aditivos</h3>
       ${d.aditivos.map(a => `<div class="alt"><b>Aditivo nº ${a.numero}</b> · ${esc(a.tipo)} · ${fd(a.data)}${a.valor ? ' · <b>' + ctM(a.valor) + '</b>' : ''}${a.nova_vigencia ? ' · nova vigência até ' + fd(a.nova_vigencia) : ''}<br><small>${esc(a.descricao)} — ${esc(a.criado_por)}</small></div>`).join('') || '<small>Nenhum aditivo registrado.</small>'}
       ${d.status === 'Vigente' && d.pode_gerir ? `<div class="acoes" style="margin-top:8px"><button class="btn sec" id="ctAditivo">${ic('plus')} Registrar aditivo</button></div>` : ''}</div>
+    <div class="card" id="ctRt"></div>
     <div class="card" id="ctAcao"></div>`);
+  ctRtDesenha(d);
   ctAcoes(d);
 }
+/* ---------- responsabilidade técnica (ART, RRT, TRT…): condição para liberar o contrato para assinatura ---------- */
+function ctRtDesenha(d) {
+  const el = $('#ctRt'), L = d.liberacao, pode = d.pode_gerir && ['Rascunho', 'Vigente'].includes(d.status), rasc = d.status === 'Rascunho';
+  el.innerHTML = `<h3>Responsabilidade técnica <small>(condição para liberar o contrato para assinatura)</small></h3>
+    <div class="aviso ${L.liberado ? 'ok' : 'warn'}">${L.liberado ? `${ic('check')} <b>Liberado para assinatura:</b> todas as responsabilidades técnicas estão emitidas (${L.emitidas} de ${L.total}).` : `${ic('alert')} <b>Bloqueado para assinatura:</b> ${esc(L.motivo)}.`}</div>
+    ${d.rts.map(r => `<div class="ct-rt ${r.emitida ? 'ok' : 'pend'}"><div class="ct-rt-t"><b>${esc(r.tipo)}</b> · ${esc(r.descricao)}
+        <small>${r.numero ? 'nº ' + esc(r.numero) : '<span class="ct-av">sem número</span>'}${r.profissional ? ' · ' + esc(r.profissional) : ''}${r.registro ? ' (' + esc(r.registro) + ')' : ''}${r.emissao ? ' · emitida em ' + fd(r.emissao) : ''}</small>
+        <small>${r.tem_arquivo ? `${ic('clip')} ${esc(r.arquivo_nome)}${r.anexado_por ? ' · anexado por ' + esc(r.anexado_por) : ''}` : '<span class="ct-av">documento ainda não anexado</span>'}</small></div>
+      <div class="ct-rt-a"><span class="badge fvb fvb-${r.emitida ? 'ok' : 'aprov'}">${r.emitida ? 'Emitida' : 'Pendente'}</span>
+        ${r.tem_arquivo ? `<button type="button" class="btn sec peq" data-rt-ver="${esc(r.id)}">${ic('eye')} Ver</button>` : ''}
+        ${pode ? `<button type="button" class="btn sec peq" data-rt-anexar="${esc(r.id)}">${ic('send')} ${r.tem_arquivo ? 'Trocar' : 'Anexar'}</button><button type="button" class="btn sec peq" data-rt-editar="${esc(r.id)}">${ic('edit')}</button>` : ''}
+        ${pode && rasc ? `<button type="button" class="btn sec peq" data-rt-remover="${esc(r.id)}" aria-label="Retirar">${ic('x')}</button>` : ''}</div></div>`).join('') || '<small>Nenhuma responsabilidade técnica cadastrada. Inclua a ART, o RRT, o TRT (ou outro documento com responsabilidade técnica) exigido para este contrato.</small>'}
+    ${pode ? `<div class="acoes" style="margin-top:8px"><button class="btn sec" id="ctRtNova">${ic('plus')} Incluir ART / RRT / TRT</button></div>` : ''}
+    <small>O contrato só é liberado para assinatura (minuta e ativação) com <b>todas</b> as responsabilidades técnicas da lista emitidas: número informado e documento anexado. Os documentos ficam no Drive, em Contratos → pasta do contrato → Responsabilidade técnica.</small>`;
+  const rt = id => d.rts.find(r => r.id === id), volta = async () => { await vCtrDet(d.id); };
+  const nova = $('#ctRtNova'); if (nova) nova.onclick = () => mRt(d, null, volta);
+  $$('[data-rt-editar]', el).forEach(b => { b.onclick = () => mRt(d, rt(b.dataset.rtEditar), volta); });
+  $$('[data-rt-anexar]', el).forEach(b => {
+    b.onclick = () => modal(`${rt(b.dataset.rtAnexar).tipo} · anexar documento`, `${campoArquivo('arq', 'Documento emitido (PDF ou foto)', true)}<small>Confira se o número da ${esc(rt(b.dataset.rtAnexar).tipo)} está preenchido: só conta como emitida com número e documento.</small>`, {
+      ok: 'Arquivar', onOk: async f => { const arq = await lerArquivo(f.arq); const r = await api('contrato_rt_arquivo', { id: d.id, rt_id: b.dataset.rtAnexar, arquivo: arq }); toast(r.msg); await volta(); }
+    });
+  });
+  $$('[data-rt-ver]', el).forEach(b => {
+    b.onclick = async () => { try { const r = await api('contrato_rt_ver', { id: d.id, rt_id: b.dataset.rtVer }); baixarBlob(new Blob([Uint8Array.from(atob(r.b64), c => c.charCodeAt(0))], { type: r.mime }), r.nome); } catch (x) { toast(x.message, 1); } };
+  });
+  $$('[data-rt-remover]', el).forEach(b => {
+    b.onclick = async () => { if (!confirm('Retirar esta responsabilidade técnica da lista do contrato (o documento anexado vai para a lixeira do Drive)?')) return; try { toast((await api('contrato_rt_remover', { id: d.id, rt_id: b.dataset.rtRemover })).msg); await volta(); } catch (x) { toast(x.message, 1); } };
+  });
+}
+function mRt(d, r, depois) {
+  modal(r ? `Editar ${r.tipo}` : 'Incluir responsabilidade técnica', `
+    <div class="g2"><label>Tipo<select name="tipo" required>${['ART', 'RRT', 'TRT', 'Outro documento com responsabilidade técnica'].map(x => `<option ${r && r.tipo === x ? 'selected' : ''}>${x}</option>`).join('')}</select><small>ART (CREA) · RRT (CAU) · TRT (CFT/CRT)</small></label>
+      <label>Nº do documento <small>(quando emitido)</small><input name="numero" value="${esc(r ? r.numero : '')}" placeholder="ex: 1720260123456"></label></div>
+    <label>Atividade / serviço coberto<input name="descricao" required value="${esc(r ? r.descricao : '')}" placeholder="ex: execução da rede de água (PEAD)"></label>
+    <div class="g2"><label>Profissional responsável<input name="profissional" value="${esc(r ? r.profissional : '')}" placeholder="nome do engenheiro / arquiteto / técnico"></label>
+      <label>Registro no conselho<input name="registro" value="${esc(r ? r.registro : '')}" placeholder="ex: CREA-RS 123456"></label></div>
+    <label>Data de emissão<input type="date" name="emissao" value="${esc(r ? r.emissao : '')}"></label>
+    ${campoArquivo('arq', r && r.tem_arquivo ? 'Trocar o documento emitido' : 'Documento emitido (PDF ou foto)', false)}
+    <small>Pode incluir só a exigência agora e anexar o documento depois, quando for emitido.</small>`, {
+    ok: 'Salvar', larga: true,
+    onOk: async f => {
+      const s = await api('contrato_rt_salvar', { id: d.id, rt_id: r ? r.id : undefined, tipo: f.tipo.value, descricao: f.descricao.value, numero: f.numero.value, profissional: f.profissional.value, registro: f.registro.value, emissao: f.emissao.value });
+      let msg = s.msg;
+      const arq = await lerArquivo(f.arq);
+      if (arq) msg = (await api('contrato_rt_arquivo', { id: d.id, rt_id: s.rt_id, arquivo: arq })).msg;
+      toast(msg); await depois();
+    }
+  });
+}
+
 /* a minuta baixada também fica guardada no Drive, na pasta Contratos da obra */
 async function ctGuardaMinuta(d, blob) { return api('contrato_minuta', { id: d.id, pdf: { nome: 'Minuta.pdf', b64: await paraB64(blob) } }); }
 function ctAcoes(d) {
   const el = $('#ctAcao'), hist = d.historico.slice().reverse(), ger = d.pode_gerir;
+  const bloq = d.status === 'Rascunho' && !d.liberacao.liberado, motivoBloq = 'Contrato bloqueado para assinatura: ' + d.liberacao.motivo + '.';
   el.innerHTML = `<h3>Documento e situação</h3>
     <div class="acoes fv-acoes">
-      <button class="btn" id="ctMinuta">${ic('download')} Baixar minuta do contrato (PDF)</button>
+      ${bloq ? `<button class="btn sec" id="ctMinuta">${ic('alert')} Minuta bloqueada: falta emitir a responsabilidade técnica</button>` : `<button class="btn" id="ctMinuta">${ic('download')} Baixar minuta do contrato (PDF)</button>`}
       ${d.tem_pdf ? `<button class="btn sec" id="ctVer">${ic('eye')} Ver contrato assinado</button>` : ''}
       ${ger ? `<button class="btn sec" id="ctAnexo">${ic('send')} ${d.tem_pdf ? 'Trocar o contrato assinado' : 'Anexar contrato assinado'}</button>` : ''}
       ${d.pasta_url ? `<a class="btn sec" href="${esc(d.pasta_url)}" target="_blank" rel="noopener">${ic('pasta')} Abrir pasta no Drive</a>` : ''}
       ${d.editavel ? `<a class="btn sec" href="#/ctr/editar/${esc(d.id)}">${ic('edit')} Editar contrato e planilha</a>` : ''}
-      ${ger && d.status === 'Rascunho' ? `<button class="btn" id="ctAtivar">${ic('check')} Ativar contrato</button><button class="btn perigo" id="ctCancelar">Cancelar rascunho</button>` : ''}
+      ${ger && d.status === 'Rascunho' ? `<button class="btn ${bloq ? 'sec' : ''}" id="ctAtivar">${ic('check')} Ativar contrato${bloq ? ' (bloqueado)' : ''}</button><button class="btn perigo" id="ctCancelar">Cancelar rascunho</button>` : ''}
       ${ger && d.status === 'Vigente' ? `<button class="btn sec" id="ctEncerrar">Encerrar contrato</button><button class="btn perigo" id="ctRescindir">Rescindir</button>` : ''}
       ${ger && ['Encerrado', 'Rescindido', 'Cancelado'].includes(d.status) ? `<button class="btn sec" id="ctReabrir">Reabrir</button>` : ''}
     </div>
@@ -272,6 +326,7 @@ function ctAcoes(d) {
   const op = async (acao, motivo) => { toast((await api('contrato_status', { id: d.id, op: acao, motivo })).msg); await vCtrDet(d.id); };
   const pedeMotivo = (tit, acao, rot) => modal(tit, `<label>${rot}<textarea name="motivo" required minlength="5" rows="3"></textarea></label>`, { ok: 'Confirmar', onOk: f => op(acao, f.motivo.value) });
   lig('ctMinuta', async () => {
+    if (bloq) throw new Error(motivoBloq);
     toast('Gerando a minuta…');
     const b = await ctMinutaPdf(d);
     baixarBlob(b, 'Contrato ' + d.rotulo.replace(/[\\/:*?"<>|]/g, '-') + ' - ' + (d.emp.empresa || d.emp.nome).replace(/[\\/:*?"<>|]/g, '-') + '.pdf');
@@ -282,6 +337,7 @@ function ctAcoes(d) {
     ok: 'Arquivar', onOk: async f => { const arq = await lerArquivo(f.arq); toast((await api('contrato_anexo', { id: d.id, arquivo: arq })).msg); await vCtrDet(d.id); }
   }));
   lig('ctAtivar', async () => {
+    if (bloq) throw new Error(motivoBloq);
     if (!confirm('Ativar este contrato? Ele passa a aparecer ao abrir frentes de trabalho do empreiteiro, e a minuta é guardada no Drive.')) return;
     toast((await api('contrato_status', { id: d.id, op: 'ativar' })).msg);
     try { const n = await api('contrato_detalhe', { id: d.id }); await ctGuardaMinuta(n, await ctMinutaPdf(n)); toast('Minuta guardada no Drive (pasta Contratos).'); }
