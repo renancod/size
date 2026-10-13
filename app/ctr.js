@@ -82,7 +82,7 @@ async function ctForm(id) {
     <form id="ctF" class="ct-form" autocomplete="off">
     <section class="card rel-sec"><div class="rel-h"><b>1</b><div><h3>Partes</h3><small>Quem contrata e quem executa</small></div></div>
       <div class="g2"><label>Empreiteiro (contratado)<select name="empreiteiro" required><option value="">— escolha —</option>${L.empreiteiros.map(e => `<option value="${esc(e.codigo)}" ${(m.empreiteiro || empSel) === e.codigo ? 'selected' : ''}>${esc(e.empresa ? e.empresa + ' · ' + e.nome : e.nome)}</option>`).join('')}</select><small>CNPJ e endereço vêm do cadastro do empreiteiro (<a href="#/med/empreiteiros">editar</a>).</small></label>
-        ${CT_TXT('numero', 'Nº do contrato', m.numero, { ph: 'ex: 015/2026', dica: '(opcional)' })}</div>
+        <div class="ct-num"><small>Nº do contrato</small><b>${d ? esc(d.rotulo) : 'automático'}</b><small>${d ? 'numeração automática desta obra' : 'o próximo número da obra (01, 02, 03…) é dado ao salvar'}</small></div></div>
       <div class="g2">${CT_TXT('contratante_nome', 'Contratante', m.contratante_nome, { ph: 'ex: SPE Prime Beach Curumim Ltda', req: true })}${CT_TXT('contratante_doc', 'CNPJ do contratante', m.contratante_doc)}</div>
       ${CT_TXT('contratante_end', 'Endereço do contratante', m.contratante_end, { ph: 'rua, nº, bairro, cidade/UF, CEP' })}
       ${CT_TXT('administradora', 'Administradora da obra', m.administradora, { area: 2, dica: '(representa a contratante perante o contratado; deixe em branco se não houver)' })}</section>
@@ -137,7 +137,7 @@ async function ctForm(id) {
 }
 function ctColher(F) {
   const o = {};
-  ['empreiteiro', 'numero', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'objeto', 'escopo', 'data_assinatura', 'local_assinatura', 'vigencia_ini', 'vigencia_fim', 'prazo_txt',
+  ['empreiteiro', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'objeto', 'escopo', 'data_assinatura', 'local_assinatura', 'vigencia_ini', 'vigencia_fim', 'prazo_txt',
     'pag_forma', 'pag_periodicidade', 'pag_obs', 'permuta_desc', 'retencoes', 'reajuste', 'garantia', 'foro', 'clausulas_extra', 'obs'].forEach(k => { o[k] = F.elements[k].value; });
   ['valor_global', 'permuta_valor', 'fat_nf_pct', 'fat_recibo_pct', 'multa1_pct', 'multa2_pct', 'multa_diaria', 'aviso_dias'].forEach(k => { const v = F.elements[k].value.trim(); o[k] = v === '' ? '' : ctPn(v); });
   o.itens = $$('.ct-li', F).map(r => ({ id: r.dataset.id || undefined, grupo: $('[name=g]', r).value, codigo: $('[name=c]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: ctPn($('[name=q]', r).value), unitario: ctPn($('[name=p]', r).value) }))

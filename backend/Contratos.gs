@@ -100,6 +100,7 @@ function ctrModelo_(ctx) {
 
 /* ---------- leitura ---------- */
 function ctrListar_(q, ctx) {
+  if (obraTab_(ctx, 'Contratos').all().some(c => !String(c.numero).trim()) && pode_(ctx, 'contrato_gerir')) { const L = LockService.getScriptLock(); L.waitLock(20000); try { ctrNumerarPendentes_(ctx); } finally { L.releaseLock(); } }
   const C = obraTab_(ctx, 'Contratos').all(), I = ctrAtivos_(ctx), A = obraTab_(ctx, 'ContratoAditivos').all(), met = ctrMetricas_(ctx);
   const lista = C.map(c => {
     const linhas = ctrLinhas_(I.filter(i => String(i.contrato) === String(c.id)), met), res = ctrResumo_(c, linhas, A.filter(a => String(a.contrato) === String(c.id)));
@@ -139,6 +140,20 @@ function ctrParaFrentes_(ctx) {
   }));
 }
 
+/* número do contrato: automático por obra (01, 02, 03…), nunca repete e nunca é reaproveitado (nem de contrato cancelado) */
+const ctrNumTxt_ = n => ('0' + n).slice(-Math.max(2, String(n).length));
+function ctrProximoNumero_(ctx) {
+  return obraTab_(ctx, 'Contratos').all().reduce((m, c) => /^\d+$/.test(String(c.numero)) ? Math.max(m, parseInt(c.numero, 10)) : m, 0) + 1;
+}
+/* contratos criados antes da numeração automática recebem número, na ordem em que foram criados */
+function ctrNumerarPendentes_(ctx) {
+  const T = obraTab_(ctx, 'Contratos'), E = obraTab_(ctx, 'Etapas');
+  T.all().filter(c => !String(c.numero).trim()).forEach(c => {
+    c.numero = ctrNumTxt_(ctrProximoNumero_(ctx)); T.update(c);
+    E.all().filter(e => String(e.contrato_id) === String(c.id)).forEach(e => { e.contrato_numero = c.numero; E.update(e); });
+  });
+}
+
 /* ---------- gravação ---------- */
 function ctrNum_(v, rot) { const n = num_(v); if (n < 0) throw new Error(rot + ' não pode ser negativo.'); return n; }
 function ctrSalvar_(q, ctx) {
@@ -152,9 +167,12 @@ function ctrSalvar_(q, ctx) {
   if (!String(q.objeto || '').trim()) throw new Error('Informe o objeto do contrato (ex: mão de obra para assentamento de rede de água).');
   const ligadas = c ? obraTab_(ctx, 'Etapas').all().filter(e => String(e.contrato_id) === String(c.id)) : [];
   if (c && String(c.empreiteiro) !== String(emp.codigo) && ligadas.length) throw new Error('Há frentes de trabalho ligadas a este contrato: não dá para trocar o empreiteiro.');
-  if (nova) c = { id: T.proxCodigo('id', 'CT-', 3), status: CTR_ST_.rasc, historico_json: '[]', criado_em: new Date(), criado_por: ctx.u.nome };
+  if (nova) {
+    ctrNumerarPendentes_(ctx);
+    c = { id: T.proxCodigo('id', 'CT-', 3), numero: ctrNumTxt_(ctrProximoNumero_(ctx)), status: CTR_ST_.rasc, historico_json: '[]', criado_em: new Date(), criado_por: ctx.u.nome };
+  }
   c.empreiteiro = emp.codigo; c.empreiteiro_nome = emp.nome;
-  Object.keys(CTR_TXT_).forEach(k => { if (q[k] !== undefined) c[k] = String(q[k] || '').trim().slice(0, CTR_TXT_[k]); });
+  Object.keys(CTR_TXT_).forEach(k => { if (k !== 'numero' && q[k] !== undefined) c[k] = String(q[k] || '').trim().slice(0, CTR_TXT_[k]); });   // o número é automático
   CTR_NUM_.forEach(k => { if (q[k] !== undefined) c[k] = q[k] === '' || q[k] == null ? '' : ctrNum_(q[k], k); });
   CTR_DATAS_.forEach(k => { if (q[k] !== undefined) c[k] = dataDe_(q[k]) || ''; });
   if (c.vigencia_ini && c.vigencia_fim && ymd_(c.vigencia_fim) < ymd_(c.vigencia_ini)) throw new Error('O fim da vigência está antes do início.');
@@ -190,7 +208,7 @@ function ctrSalvar_(q, ctx) {
   // as frentes ligadas mostram o rótulo atual do contrato (número/data)
   obraTab_(ctx, 'Etapas').all().filter(e => String(e.contrato_id) === String(c.id)).forEach(e => { e.contrato_numero = ctrRotulo_(c); e.contrato_data = c.data_assinatura || ''; obraTab_(ctx, 'Etapas').update(e); });
   log_(ctx, nova ? 'contrato_criar' : 'contrato_editar', c.id + ' ' + emp.nome);
-  return { msg: nova ? 'Contrato ' + ctrRotulo_(c) + ' salvo como rascunho. Quando estiver tudo certo, ative o contrato.' : 'Contrato salvo.', id: c.id };
+  return { msg: nova ? 'Contrato nº ' + ctrRotulo_(c) + ' salvo como rascunho. Quando estiver tudo certo, ative o contrato.' : 'Contrato salvo.', id: c.id };
 }
 function ctrStatus_(q, ctx) {
   const T = obraTab_(ctx, 'Contratos'), c = ctrAchar_(ctx, q.id), acao = String(q.op || ''), motivo = String(q.motivo || '').trim(), S = CTR_ST_;

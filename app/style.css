@@ -701,3 +701,4 @@ button.rel-chip{cursor:pointer}button.rel-chip:hover{background:rgba(255,255,255
 .ct-pick{display:grid;gap:6px;padding:12px;border-radius:12px;background:var(--teal-l);margin:8px 0}.ct-pick>b{color:var(--teal);display:flex;gap:8px;align-items:center}.ct-pick>small{color:var(--teal)}
 .ct-it{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;border:1px solid #B9D8D4;background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--navy);font:inherit}.ct-it small{color:var(--mute);display:block}.ct-it span{flex:1}
 .ct-dica{display:block;margin:4px 0 8px;color:var(--mute)}.srv.do-contrato .s input,.srv.do-contrato .u input{background:var(--gray-l)}
+.ct-num{display:grid;gap:2px;align-content:center;padding:10px 14px;border-radius:12px;background:var(--gray-l)}.ct-num b{color:var(--navy);font-size:1.3rem}.ct-num small{color:var(--mute)}

@@ -65,6 +65,7 @@ test('cadastro do contrato: rascunho, totais da planilha e ativação com as reg
 
   const { id } = t.ctr('contrato_salvar', { empreiteiro: emp, objeto: 'Rede de água', numero: '015/2026', valor_global: '590738,48', itens: ITENS });
   assert.equal(id, 'CT-001');
+  assert.equal(t.ctr('contrato_detalhe', { id }).rotulo, '01', 'número automático, mesmo que se tente digitar outro');
   const d = t.ctr('contrato_detalhe', { id });
   assert.equal(d.status, 'Rascunho');
   assert.equal(d.itens.length, 3);
@@ -122,7 +123,7 @@ test('frente de trabalho ligada ao contrato: serviços nascem da planilha, empre
     itens: [{ contrato_item: i1.id, servico: 'qualquer coisa', qtd_prevista: 60, inicio: dia(-9), termino: dia(5), fvs_modelo: 'FVS.03' }, { contrato_item: i2.id, qtd_prevista: 5, inicio: dia(-9), termino: dia(5), fvs_modelo: 'FVS.03' }]
   });
   const e = t.eng('exec_dados').etapas.find(x => x.codigo === r.codigo);
-  assert.equal(e.contrato_id, id); assert.equal(e.contrato_tipo, 'Com contrato'); assert.equal(e.contrato_numero, '015/2026');
+  assert.equal(e.contrato_id, id); assert.equal(e.contrato_tipo, 'Com contrato'); assert.equal(e.contrato_numero, '01');
   assert.equal(e.itens[0].servico, 'Assentamento de tubo PEAD DN 63');          // nome e unidade vêm do contrato
   assert.equal(e.itens[0].unidade, 'M/L'); assert.equal(e.itens[0].contrato_item, i1.id);
   assert.equal(t.eng('exec_dados').contratos[0].itens[0].a_programar, 40);        // 100 − 60 já programado
@@ -180,4 +181,28 @@ test('contratado × executado × medido × pago acompanha os diários e as medi�
   // a lista traz o resumo de cada contrato
   const lista = t.ctr('contratos');
   assert.equal(lista.contratos[0].resumo.pago, 3220); assert.equal(lista.modelo.multa1_pct, 10); assert.equal(lista.modelo.contratante_nome, 'SPE Prime Beach');
+});
+
+test('número do contrato automático por obra: 01, 02, 03… sem repetir nem reaproveitar', () => {
+  const t = preparar();
+  const emp = t.eng('exec_equipe_salvar', { nome: 'Equipe VN', empresa: 'VN Ltda' }).codigo;
+  const novo = () => t.ctr('contrato_salvar', { empreiteiro: emp, objeto: 'Rede', numero: '999', itens: ITENS }).id;
+  const num = id => t.ctr('contrato_detalhe', { id }).rotulo;
+  const a = novo(), b = novo();
+  assert.deepEqual([num(a), num(b)], ['01', '02']);
+  t.ctr('contrato_salvar', { id: a, empreiteiro: emp, objeto: 'Rede 2', numero: '77' });          // editar não muda o número
+  assert.equal(num(a), '01');
+  t.ctr('contrato_status', { id: b, op: 'cancelar' });                                             // cancelado não libera o número
+  const c = novo();
+  assert.equal(num(c), '03');
+  // outra obra começa de novo no 01
+  const obra2 = t.adm('admin_obra_criar', { nome: 'Outra Obra', sigla: 'OO', endereco: 'Rua Y' }).id;
+  const emp2 = t.adm('exec_equipe_salvar', { obra: obra2, nome: 'Equipe Z', empresa: 'Z Ltda' }).codigo;
+  const r = t.adm('contrato_salvar', { obra: obra2, empreiteiro: emp2, objeto: 'Rede', itens: ITENS });
+  assert.equal(t.adm('contrato_detalhe', { obra: obra2, id: r.id }).rotulo, '01');
+  // contrato antigo, sem número, é numerado na ordem de criação antes do próximo
+  const T = 'obraTab_(ctx, "Contratos")';
+  t.G.rodar('(() => { const o = central_("Obras").all().find(x => x.sigla === "LS"); const ctx = { ss: SpreadsheetApp.openById(o.planilha_id) }; const T = ' + T + '; T.all().forEach(c => { c.numero = ""; T.update(c); }); })()');
+  const d = novo();
+  assert.deepEqual([num(a), num(b), num(c), num(d)], ['01', '02', '03', '04']);
 });
