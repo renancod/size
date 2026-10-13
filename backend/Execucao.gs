@@ -195,7 +195,7 @@ function calcExec_(ctx, ate) {
     let sem = 0;
     if (sit !== 'concluido' && ini && hoje >= ini) for (let s = addDias_(ultimo || addDias_(ini, -1), 1); s <= ontem; s = addDias_(s, 1)) if (util(s) && !parado[s]) sem++;
     const r = {
-      id: i.id, etapa: i.etapa, servico: i.servico, servico_cod: i.servico_cod, grupo: i.grupo, unidade: i.unidade, ordem: i.ordem,
+      id: i.id, etapa: i.etapa, servico: i.servico, servico_cod: i.servico_cod, grupo: i.grupo, unidade: i.unidade, ordem: i.ordem, contrato_item: String(i.contrato_item || ''),
       prevista: prev, original: num_(i.qtd_original) || prev, inicio: ini, termino: fim, inicio_original: ymd_(i.inicio_original) || ini, termino_original: ymd_(i.termino_original) || fim,
       executado: r2_(exec), saldo: r2_(saldo), pct: prev ? r2_(exec / prev * 100) : 0, planejado: r2_(planejado), media: r2_(media), media7: r2_(media7),
       ritmo: ritmo === null ? null : r2_(ritmo), projecao: projecao, dias_trab: n, dias_restantes: restam, primeiro: primeiro, ultimo: ultimo,
@@ -212,7 +212,7 @@ function calcExec_(ctx, ate) {
     const sit = li.length ? li.reduce((m, i) => SEVERIDADE_[i.situacao] > SEVERIDADE_[m] ? i.situacao : m, li.every(i => i.situacao === 'concluido') ? 'concluido' : 'nao_iniciado') : 'nao_iniciado';
     return {
       codigo: e.codigo, nome: e.nome, local: e.local, frente: e.frente, responsavel: e.responsavel, obs: e.obs, ativa: !/^n/i.test(String(e.ativa)),
-      empreiteiro: String(e.empreiteiro || ''), contrato_tipo: e.contrato_tipo || '', contrato_numero: e.contrato_numero || '', contrato_data: ymd_(e.contrato_data),
+      empreiteiro: String(e.empreiteiro || ''), contrato_tipo: e.contrato_tipo || '', contrato_numero: e.contrato_numero || '', contrato_data: ymd_(e.contrato_data), contrato_id: String(e.contrato_id || ''),
       pct: li.length ? r2_(li.reduce((t, i) => t + Math.min(100, i.pct), 0) / li.length) : 0,
       planejado: li.length ? r2_(li.reduce((t, i) => t + i.planejado, 0) / li.length) : 0,
       inicio: li.map(i => i.inicio).filter(Boolean).sort()[0] || '', termino: li.map(i => i.termino).filter(Boolean).sort().pop() || '',
@@ -235,6 +235,7 @@ function execDados_(q, ctx) {
   return {
     hoje: c.hoje, etapas: c.etapas, alertas: c.alertas,
     equipes: obraTab_(ctx, 'Equipes').all().map(pub_),
+    contratos: ctrParaFrentes_(ctx),
     catalogo: (() => { const mods = {}; garantirFvsModelos_().all().forEach(m => { if (!/^n/i.test(String(m.ativo))) mods[m.codigo] = m; }); return cat.all().filter(s => !/^n/i.test(String(s.ativo))).map(s => Object.assign(pub_(s), { fvs_sugerido: fvsSugerido_(s, mods) })); })(),
     fvs_modelos: garantirFvsModelos_().all().filter(m => !/^n/i.test(String(m.ativo))).map(m => ({ codigo: m.codigo, nome: m.nome, categoria: m.categoria, tipo: m.tipo, revisao: m.revisao })),
     fvs: obraTab_(ctx, 'Fvs').all().filter(f => f.status !== FVS_ST_.canc).map(f => ({ id: f.id, item_id: f.item_id, etapa: f.etapa, status: f.status, modelo: f.modelo, tipo: f.tipo, numero_txt: f.numero === '' ? '' : numFvs_(num_(f.numero)) })),
@@ -274,14 +275,30 @@ function execEtapaSalvar_(q, ctx) {
     e.contrato_tipo = t; e.contrato_numero = t === 'Com contrato' ? String(q.contrato_numero || '').trim().slice(0, 60) : ''; e.contrato_data = t === 'Com contrato' ? (dataDe_(q.contrato_data) || '') : '';
     if (t === 'Com contrato' && !e.contrato_numero) throw new Error('Informe o número do contrato (ou escolha "Sem contrato").');
   }
+  // contrato cadastrado (módulo Contratos): a frente se liga a um contrato vigente do empreiteiro; "-" = sem contrato; "__legado" = mantém o número digitado antes
+  if (q.contrato_id !== undefined && String(q.contrato_id) !== '__legado') {
+    const cid = String(q.contrato_id || '').trim(), antes = String(e.contrato_id || '');
+    if (cid !== antes && !nova && medEtapaMedida_(ctx, e.codigo)) throw new Error('Esta frente já tem serviços em medição: não dá para trocar o contrato.');
+    if (cid && cid !== '-') {
+      const c = ctrAchar_(ctx, cid);
+      if (cid !== antes && c.status !== CTR_ST_.vig) throw new Error('O contrato ' + ctrRotulo_(c) + ' não está vigente.');
+      if (String(c.empreiteiro) !== String(e.empreiteiro || '')) throw new Error('O contrato ' + ctrRotulo_(c) + ' é de outro empreiteiro.');
+      e.contrato_id = c.id; e.contrato_tipo = 'Com contrato'; e.contrato_numero = ctrRotulo_(c); e.contrato_data = c.data_assinatura || '';
+    } else { e.contrato_id = ''; e.contrato_tipo = 'Sem contrato'; e.contrato_numero = ''; e.contrato_data = ''; }
+  }
   if (q.ativa !== undefined) e.ativa = q.ativa ? 'Sim' : 'Não';
   const novos = [].concat(q.itens || []).filter(x => x && !x.id);
   if (nova && !novos.length) throw new Error('Inclua pelo menos um serviço na etapa.');
   const cat = garantirCatalogo_().all();
   let ordem = I.all().filter(i => String(i.etapa) === String(e.codigo)).reduce((m, i) => Math.max(m, num_(i.ordem)), 0);
+  const itensContrato = e.contrato_id ? ctrAtivos_(ctx, e.contrato_id) : [];
   const linhas = novos.map(x => {
+    // serviço vindo da planilha do contrato: nome, unidade e catálogo seguem o contrato
+    const ci = x.contrato_item ? itensContrato.find(i => String(i.id) === String(x.contrato_item)) : null;
+    if (x.contrato_item && !ci) throw new Error('O serviço escolhido não pertence ao contrato desta frente.');
+    if (ci) { x = Object.assign({}, x, { servico: ci.servico, unidade: ci.unidade, servico_cod: ci.servico_cod || x.servico_cod }); }
     const sc = x.servico_cod ? cat.find(s => String(s.codigo) === String(x.servico_cod)) : cat.find(s => norm_(s.servico) === norm_(x.servico));
-    const servico = sc ? sc.servico : String(x.servico || '').trim(), unidade = sc ? sc.unidade : String(x.unidade || '').trim();
+    const servico = ci ? ci.servico : sc ? sc.servico : String(x.servico || '').trim(), unidade = ci ? ci.unidade : sc ? sc.unidade : String(x.unidade || '').trim();
     if (!servico) throw new Error('Informe o serviço de cada item.');
     if (!unidade) throw new Error('Informe a unidade de ' + servico + '.');
     const qtd = num_(x.qtd_prevista);
@@ -291,7 +308,8 @@ function execEtapaSalvar_(q, ctx) {
     if (ymd_(fim) < ymd_(ini)) throw new Error('O término de ' + servico + ' está antes do início.');
     return {
       id: e.codigo + '-' + Utilities.getUuid().slice(0, 6), etapa: e.codigo, servico_cod: sc ? sc.codigo : '', servico: servico, grupo: sc ? sc.grupo : 'Avulso',
-      unidade: unidade, qtd_prevista: qtd, qtd_original: qtd, inicio: ini, termino: fim, inicio_original: ini, termino_original: fim, ativo: 'Sim', ordem: ++ordem
+      unidade: unidade, qtd_prevista: qtd, qtd_original: qtd, inicio: ini, termino: fim, inicio_original: ini, termino_original: fim, ativo: 'Sim', ordem: ++ordem,
+      contrato_item: ci ? ci.id : ''
     };
   });
   if (nova) E.insert(e); else E.update(e);
@@ -334,7 +352,7 @@ function execEquipeSalvar_(q, ctx) {
   const nova = !e;
   if (nova) e = { codigo: T.proxCodigo('codigo', 'EQ', 2) };
   e.nome = nome; e.pessoas = Math.max(0, Math.round(num_(q.pessoas))); e.encarregado = String(q.encarregado || '').trim();
-  ['empresa', 'responsavel', 'telefone', 'email', 'documento'].forEach(k => { if (q[k] !== undefined) e[k] = String(q[k] || '').trim().slice(0, 120); });
+  ['empresa', 'responsavel', 'telefone', 'email', 'documento', 'endereco'].forEach(k => { if (q[k] !== undefined) e[k] = String(q[k] || '').trim().slice(0, k === 'endereco' ? 250 : 120); });
   if (e.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.email)) throw new Error('E-mail do empreiteiro inválido.');
   e.ativa = q.ativa === false ? 'Não' : 'Sim';
   if (nova) T.insert(e); else T.update(e);

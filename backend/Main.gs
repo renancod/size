@@ -113,6 +113,13 @@ const ROTAS = {
   fvs_reabrir: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsReabrir_ },
   fvs_cancelar: { obra: true, perm: 'fvs_aprovar', lock: true, fn: fvsCancelar_ },
   exec_relatorio_email: { obra: true, perm: 'exec_planejar', fn: execRelatorioEmail_ },
+  contratos: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrListar_ },
+  contrato_detalhe: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrDetalhe_ },
+  contrato_salvar: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrSalvar_ },
+  contrato_status: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrStatus_ },
+  contrato_aditivo: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrAditivo_ },
+  contrato_anexo: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrAnexo_ },
+  contrato_anexo_ver: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrAnexoVer_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },
@@ -166,7 +173,9 @@ const PERMISSOES = {
   fvs_aprovar: 'FVS (qualidade): aprovar ou devolver fichas e editar os modelos',
   medicao_ver: 'Medições: consultar',
   medicao_lancar: 'Medições: montar e enviar para aprovação',
-  medicao_aprovar: 'Medições: aprovar, devolver e marcar como paga'
+  medicao_aprovar: 'Medições: aprovar, devolver e marcar como paga',
+  contrato_ver: 'Contratos: consultar (valores, planilha, saldo)',
+  contrato_gerir: 'Contratos: cadastrar, editar, aditivos, ativar e arquivar o contrato assinado'
 };
 const PERFIS_PADRAO = [
   ['Admin', Object.keys(PERMISSOES).join(','), 'Tudo na obra'],
@@ -261,7 +270,7 @@ function login_(q) {
     throw new Error('Usuário ou senha incorretos.');
   }
   cache.remove(kf);
-  try { atualizarPerfisFvs_(); atualizarPerfisMed_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
+  try { atualizarPerfisFvs_(); atualizarPerfisMed_(); atualizarPerfisCtr_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
   u.ultimo_acesso = new Date();
   T.update(u);
   return Object.assign({ token: token_(u) }, sessaoDe_(u));

@@ -29,9 +29,9 @@ const SCHEMA_OBRA = {
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],
   // módulo Execução / Diário de obra
-  Etapas: ['codigo', 'nome', 'local', 'frente', 'responsavel', 'obs', 'ativa', 'criado_em', 'criado_por', 'empreiteiro', 'contrato_tipo', 'contrato_numero', 'contrato_data'],
-  EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo'],
-  Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa', 'empresa', 'responsavel', 'telefone', 'email', 'documento'],
+  Etapas: ['codigo', 'nome', 'local', 'frente', 'responsavel', 'obs', 'ativa', 'criado_em', 'criado_por', 'empreiteiro', 'contrato_tipo', 'contrato_numero', 'contrato_data', 'contrato_id'],
+  EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo', 'contrato_item'],
+  Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa', 'empresa', 'responsavel', 'telefone', 'email', 'documento', 'endereco'],
   Diarios: ['numero', 'data', 'status', 'condicao', 'aditivo', 'responsavel_id', 'responsavel', 'chuva_manha', 'chuva_tarde', 'chuva_trabalho', 'chuva_dia',
     'tmin', 'tmax', 'vento', 'sugestao', 'ocorrencias', 'obs', 'enviado_por', 'enviado_em', 'revisado_por', 'revisado_em', 'clima_final', 'clima_json', 'criado_em', 'atualizado_em'],
   Producao: ['id', 'diario', 'data', 'etapa', 'item_id', 'servico', 'unidade', 'qtd', 'obs', 'usuario_id', 'usuario', 'lancado_em', 'atualizado_em', 'cliente_id'],
@@ -44,6 +44,13 @@ const SCHEMA_OBRA = {
     'anexos_json', 'vistorias_json', 'historico_json', 'preenchido_por', 'enviado_em', 'enviado_por', 'aprovado_por', 'aprovado_em', 'motivo', 'hash', 'pasta_id', 'pdf_id', 'auto_aprovada', 'criado_em', 'criado_por', 'atualizado_em'],
   // Medições de empreiteiros (por frente de trabalho; só serviços concluídos e com FVS aprovada)
   Medicoes: ['id', 'numero', 'empreiteiro', 'empreiteiro_nome', 'de', 'ate', 'status', 'obs', 'criado_em', 'criado_por', 'enviado_em', 'enviado_por', 'aprovado_em', 'aprovado_por', 'motivo', 'hash', 'pasta_id', 'pdf_id', 'pago_em', 'pago_obs', 'auto_aprovada', 'historico_json', 'atualizado_em'],
+  // Contratos de empreiteiros (planilha de serviços contratados; a frente de trabalho se liga a um contrato e a itens dele)
+  Contratos: ['id', 'numero', 'empreiteiro', 'empreiteiro_nome', 'status', 'objeto', 'escopo', 'data_assinatura', 'local_assinatura', 'vigencia_ini', 'vigencia_fim', 'prazo_txt',
+    'valor_global', 'permuta_valor', 'permuta_desc', 'pag_forma', 'pag_periodicidade', 'pag_obs', 'fat_nf_pct', 'fat_recibo_pct', 'retencoes', 'reajuste',
+    'multa1_pct', 'multa2_pct', 'multa_diaria', 'garantia', 'aviso_dias', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'foro',
+    'clausulas_extra', 'obs', 'pdf_id', 'pdf_nome', 'pasta_id', 'historico_json', 'criado_em', 'criado_por', 'atualizado_em'],
+  ContratoItens: ['id', 'contrato', 'ordem', 'grupo', 'codigo', 'servico_cod', 'servico', 'unidade', 'qtd', 'unitario', 'ativo'],
+  ContratoAditivos: ['id', 'contrato', 'numero', 'data', 'tipo', 'descricao', 'valor', 'nova_vigencia', 'criado_por', 'criado_em'],
   MedicaoItens: ['medicao', 'item_id', 'etapa', 'etapa_nome', 'servico', 'unidade', 'qtd', 'concluido_em', 'complemento', 'contrato', 'fvs', 'rdos_json', 'dias_json']
 };
 

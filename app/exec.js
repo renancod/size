@@ -232,17 +232,27 @@ function mAbrirFvs(i) {
 }
 
 /* ---------- nova etapa / incluir serviços ---------- */
-function mEtapa(e) {
+/* opções do contrato da frente: contratos vigentes do empreiteiro (ou o que já está ligado) + "sem contrato" */
+function ctrOpcoes(emp, atual, e) {
+  const cts = (EX.d.contratos || []).filter(c => c.empreiteiro === emp && (c.status === 'Vigente' || c.id === atual));
+  return `<option value="">— escolha —</option><option value="-" ${atual === '-' ? 'selected' : ''}>Sem contrato</option>
+    ${e && e.contrato_tipo === 'Com contrato' && !e.contrato_id ? `<option value="__legado" ${atual === '__legado' ? 'selected' : ''}>Contrato nº ${esc(e.contrato_numero)} (informado antes, sem cadastro)</option>` : ''}
+    ${cts.map(c => `<option value="${esc(c.id)}" ${c.id === atual ? 'selected' : ''}>Contrato ${esc(c.rotulo)}${c.objeto ? ' · ' + esc(c.objeto.slice(0, 60)) : ''}${c.status !== 'Vigente' ? ' (' + esc(c.status.toLowerCase()) + ')' : ''}</option>`).join('')}`;
+}
+function mEtapa(e, pre) {
   const D = EX.d, frentes = (S.dados.frentes || []).filter(x => ativo(x, 'ativa'));
+  pre = pre || {};
+  const empIni = e ? e.empreiteiro : (pre.empreiteiro || ''), ctrIni = e ? (e.contrato_id || (e.contrato_tipo === 'Com contrato' ? '__legado' : e.contrato_tipo === 'Sem contrato' ? '-' : '')) : (pre.contrato || '');
   const cat = D.catalogo.slice().sort((a, b) => (a.grupo + a.servico).localeCompare(b.grupo + b.servico));
   const f = modal(e ? 'Editar etapa · incluir serviços' : 'Nova etapa', `
     <label>Etapa<input name="nome" required value="${esc(e?.nome || '')}" placeholder="ex: Pavimentação · Rua X"></label>
     <div class="g2"><label>Local / trecho<input name="local" value="${esc(e?.local || '')}" placeholder="ex: Rua X, estaca 0 a 25"></label>
       <label>Frente de trabalho<select name="frente"><option value="">—</option>${frentes.map(x => `<option ${e && e.frente === x.nome ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>
     <div class="g2"><label>Responsável<input name="responsavel" value="${esc(e?.responsavel || '')}"></label><label>Observação<input name="obs" value="${esc(e?.obs || '')}"></label></div>
-    <div class="g2"><label>Empreiteiro responsável <small>(as medições dele somam esta frente)</small><select name="empreiteiro"><option value="">— nenhum (equipe própria) —</option>${(D.equipes || []).filter(q => ativo(q, 'ativa')).map(q => `<option value="${esc(q.codigo)}" ${e && e.empreiteiro === q.codigo ? 'selected' : ''}>${esc(q.nome)}${q.empresa ? ' · ' + esc(q.empresa) : ''}</option>`).join('')}</select></label>
-      <label>Contrato de execução<select name="ctipo" required><option value="">— escolha —</option><option ${e && e.contrato_tipo === 'Com contrato' ? 'selected' : ''}>Com contrato</option><option ${e && e.contrato_tipo === 'Sem contrato' ? 'selected' : ''}>Sem contrato</option></select></label></div>
-    <div class="g2" id="ctr" ${e && e.contrato_tipo === 'Com contrato' ? '' : 'hidden'}><label>Nº do contrato<input name="cnum" value="${esc(e?.contrato_numero || '')}" placeholder="ex: 015/2026"></label><label>Data do contrato<input type="date" name="cdata" value="${esc(e?.contrato_data || '')}"></label></div>
+    <div class="g2"><label>Empreiteiro responsável <small>(as medições dele somam esta frente)</small><select name="empreiteiro"><option value="">— nenhum (equipe própria) —</option>${(D.equipes || []).filter(q => ativo(q, 'ativa')).map(q => `<option value="${esc(q.codigo)}" ${empIni === q.codigo ? 'selected' : ''}>${esc(q.nome)}${q.empresa ? ' · ' + esc(q.empresa) : ''}</option>`).join('')}</select></label>
+      <label>Contrato de execução <small>(a planilha dele alimenta os serviços)</small><select name="ctr" required>${ctrOpcoes(empIni, ctrIni, e)}</select></label></div>
+    ${can('contrato_gerir') ? '<small class="ct-dica">Contrato novo? Cadastre em <a href="#/ctr/novo">Medições → Contratos</a> e ative; ele aparece aqui.</small>' : ''}
+    <div id="ctItens"></div>
     ${e ? `<div class="aviso info">Serviços já cadastrados: ${e.itens.map(i => esc(i.servico)).join(', ')}. Para mudar quantidade ou datas deles, use <b>Alterar</b> no serviço.</div>` : ''}
     <h3 style="margin:6px 0 0">${e ? 'Incluir serviços' : 'Serviços da etapa'}</h3>
     <div class="g2"><label>Início previsto <small>(padrão dos serviços)</small><input type="date" name="ini" value="${hoje()}"></label><label>Término previsto<input type="date" name="fim"></label></div>
@@ -251,19 +261,21 @@ function mEtapa(e) {
     <datalist id="dl-srv">${cat.map(s => `<option value="${esc(s.servico)}">${esc(s.grupo)} · ${esc(s.unidade)}</option>`).join('')}</datalist>`, {
     larga: true, ok: e ? 'Salvar' : 'Criar etapa',
     onOk: async f => {
-      const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value }))
+      const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value, contrato_item: d.dataset.ci || undefined }))
         .filter(x => x.servico || x.qtd_prevista);
+      if (!f.ctr.value) throw new Error('Escolha o contrato desta frente (ou "Sem contrato").');
       const semFvs = itens.find(x => !x.fvs_modelo);
       if (semFvs) throw new Error('Escolha a FVS de ' + (semFvs.servico || 'cada serviço') + ': todo serviço concluído precisa de FVS.');
-      const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, empreiteiro: f.empreiteiro.value, contrato_tipo: f.ctipo.value, contrato_numero: f.cnum.value, contrato_data: f.cdata.value, itens, motivo: f.motivo?.value });
+      const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, empreiteiro: f.empreiteiro.value, contrato_id: f.ctr.value, itens, motivo: f.motivo?.value });
       toast(r.msg); await carregarExec(true);
       location.hash = '#/exec/etapa/' + enc(r.codigo); if (e) rotear();
     }
   });
-  f.ctipo.onchange = () => { $('#ctr', f).hidden = f.ctipo.value !== 'Com contrato'; };
-  const add = () => {
+  const add = ci => {
+    if (ci) ctSemVazio();
     const d = document.createElement('div');
     d.className = 'srv';
+    if (ci) d.dataset.ci = ci.id;
     d.innerHTML = `<label class="s">Serviço<input name="s" list="dl-srv" autocomplete="off" placeholder="Digite para buscar no catálogo"></label>
       <label>Qtd prevista<input name="q" type="number" step="any" min="0" inputmode="decimal"></label><label>Unid.<input name="u" placeholder="m²"></label>
       <label>Início<input type="date" name="i"></label><label>Término<input type="date" name="t"></label>
@@ -271,11 +283,36 @@ function mEtapa(e) {
     const s = $('[name=s]', d), u = $('[name=u]', d);
     const fsel = $('[name=f]', d);
     s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); u.value = c ? c.unidade : u.value; u.readOnly = !!c; d.classList.toggle('avulso', !c && !!s.value); if (c && c.fvs_sugerido && !fsel.value) fsel.value = c.fvs_sugerido; };
-    $('.rm', d).onclick = () => d.remove();
+    $('.rm', d).onclick = () => { d.remove(); ctPainel(); };
     $('#srvs', f).appendChild(d);
+    if (ci) {                                   // serviço da planilha do contrato: nome e unidade vêm dele
+      s.value = ci.servico; s.onchange(); s.readOnly = true; u.value = ci.unidade; u.readOnly = true;
+      $('[name=q]', d).value = Math.max(0, ci.a_programar);
+      const cs = D.catalogo.find(x => String(x.codigo) === String(ci.servico_cod));
+      if (cs && cs.fvs_sugerido && !fsel.value) fsel.value = cs.fvs_sugerido;
+      d.classList.remove('avulso'); d.classList.add('do-contrato');
+    }
     return s;
   };
+  // painel "serviços do contrato": mostra o que ainda falta programar e põe na frente com um toque
+  const ctPainel = () => {
+    const box = $('#ctItens', f), c = (D.contratos || []).find(x => x.id === f.ctr.value);
+    if (!c) { box.innerHTML = ''; return; }
+    const usados = new Set($$('.srv[data-ci]', f).map(d => d.dataset.ci));
+    const livres = c.itens.filter(i => !usados.has(i.id));
+    box.innerHTML = `<div class="ct-pick"><b>${ic('file')} Serviços do contrato ${esc(c.rotulo)}</b>
+      <small>Toque para incluir na frente. A quantidade já vem com o que falta programar do contrato.</small>
+      ${livres.length ? livres.map(i => `<button type="button" class="ct-it" data-ci="${esc(i.id)}"><span>${esc(i.codigo ? i.codigo + ' · ' : '')}${esc(i.servico)}</span><small>${nf(i.a_programar)} ${esc(i.unidade)} a programar · contratado ${nf(i.qtd)}</small>${ic('plus')}</button>`).join('') : '<small>Todos os serviços do contrato já estão nesta frente.</small>'}
+      ${livres.length > 1 ? '<button type="button" class="btn sec peq" id="ctTodos">Incluir todos os que ainda têm saldo</button>' : ''}</div>`;
+    $$('.ct-it', box).forEach(b => { b.onclick = () => { add(c.itens.find(i => i.id === b.dataset.ci)); ctPainel(); }; });
+    const t = $('#ctTodos', box);
+    if (t) t.onclick = () => { livres.filter(i => i.a_programar > 0).forEach(i => add(i)); ctPainel(); };
+  };
+  const ctSemVazio = () => { const v = $('#srvs', f).children; if (v.length === 1 && !$('[name=s]', v[0]).value && !$('[name=q]', v[0]).value) v[0].remove(); };
+  f.empreiteiro.onchange = () => { f.ctr.innerHTML = ctrOpcoes(f.empreiteiro.value, '', e); ctPainel(); };
+  f.ctr.onchange = () => { $$('.srv[data-ci]', f).forEach(d => d.remove()); ctPainel(); };
   add();
+  ctPainel();
   $('#addSrv', f).onclick = () => add().focus();
   f.ini.onchange = () => { if (!f.fim.value || f.fim.value < f.ini.value) f.fim.value = f.ini.value; };
 }
@@ -301,7 +338,7 @@ async function vEtapa(cod) {
   view(`<a href="#/exec" class="linkbtn">${ic('back')} Painel</a>
     <div class="card det-cab"><div class="l1"><span class="num">${esc(e.nome)}</span>${sxBadge(e.situacao)}<span class="dir big">${pct(e.pct)}</span></div>
       <small>${esc([e.local, e.frente, e.responsavel && 'resp. ' + e.responsavel].filter(Boolean).join(' · '))}</small>
-      ${(() => { const q = (EX.d.equipes || []).find(x => x.codigo === e.empreiteiro); const t = [q && ('Empreiteiro: ' + q.nome + (q.empresa ? ' (' + q.empresa + ')' : '')), e.contrato_tipo === 'Com contrato' ? 'Contrato nº ' + e.contrato_numero + (e.contrato_data ? ' de ' + fd(e.contrato_data) : '') : e.contrato_tipo].filter(Boolean); return t.length ? `<small class="fv-ctr">${esc(t.join(' · '))}</small>` : ''; })()}${barra(e)}
+      ${(() => { const q = (EX.d.equipes || []).find(x => x.codigo === e.empreiteiro); const t = [q && ('Empreiteiro: ' + q.nome + (q.empresa ? ' (' + q.empresa + ')' : '')), e.contrato_tipo === 'Com contrato' ? 'Contrato nº ' + e.contrato_numero + (e.contrato_data ? ' de ' + fd(e.contrato_data) : '') : e.contrato_tipo].filter(Boolean); return t.length ? `<small class="fv-ctr">${esc(t.join(' · '))}${e.contrato_id && can(['contrato_ver', 'contrato_gerir']) ? ` · <a href="#/ctr/${esc(e.contrato_id)}">ver contrato</a>` : ''}</small>` : ''; })()}${barra(e)}
       <small>Previsto ${fd(e.inicio)} → ${fd(e.termino)} · planejado até hoje ${pct(e.planejado)}</small>
       ${eng ? `<div class="acoes" style="margin-top:10px"><button class="btn sec peq" id="edE">${ic('plus')} Incluir serviço / editar</button><button class="btn sec peq" id="avE">${ic('alert')} Avisar a equipe</button></div>` : ''}</div>
     ${e.itens.map(i => `<div class="card item-ex sxb-${i.situacao}"><div class="l1"><b>${esc(i.servico)}</b>${sxBadge(i.situacao)}${i.pct > 100 ? '<span class="badge exc">acima do previsto</span>' : ''}<span class="dir">${pct(i.pct)}</span></div>
@@ -757,14 +794,14 @@ function mEquipe(q, depois) {
   modal(q ? 'Editar empreiteiro / equipe' : 'Novo empreiteiro / equipe', `
     <div class="g2"><label>Empresa do empreiteiro<input name="empresa" value="${esc(q?.empresa || '')}" placeholder="ex: Alas &amp; Cia Ltda"></label><label>CNPJ / CPF <small>(opcional)</small><input name="documento" value="${esc(q?.documento || '')}"></label></div>
     <div class="g2"><label>Responsável pela empresa<input name="responsavel" value="${esc(q?.responsavel || '')}" placeholder="nome de quem responde pela empresa"></label><label>Telefone<input name="telefone" type="tel" inputmode="tel" value="${esc(q?.telefone || '')}" placeholder="(51) 99999-0000"></label></div>
-    <label>E-mail<input name="email" type="email" inputmode="email" value="${esc(q?.email || '')}" placeholder="contato@empresa.com.br"></label>
+    <div class="g2"><label>E-mail<input name="email" type="email" inputmode="email" value="${esc(q?.email || '')}" placeholder="contato@empresa.com.br"></label><label>Endereço da empresa <small>(vai no contrato)</small><input name="endereco" value="${esc(q?.endereco || '')}" placeholder="rua, nº, bairro, cidade/UF, CEP"></label></div>
     <h3 style="margin:6px 0 0">Equipe em campo</h3>
     <label>Nome da equipe<input name="nome" required value="${esc(q?.nome || '')}" placeholder="ex: Equipe Pavimentação"></label>
     <div class="g2"><label>Pessoas<input name="pessoas" type="number" min="0" inputmode="numeric" value="${esc(q?.pessoas ?? '')}"></label><label>Encarregado <small>(opcional)</small><input name="encarregado" value="${esc(q?.encarregado || '')}"></label></div>
     ${q ? `<label class="ck"><input type="checkbox" name="ativa" ${ativo(q, 'ativa') ? 'checked' : ''}> Ativo</label>` : ''}`, {
     larga: true, ok: 'Salvar',
     onOk: async f => {
-      toast((await api('exec_equipe_salvar', { codigo: q?.codigo, nome: f.nome.value, pessoas: f.pessoas.value, encarregado: f.encarregado.value, empresa: f.empresa.value, responsavel: f.responsavel.value, telefone: f.telefone.value, email: f.email.value, documento: f.documento.value, ativa: f.ativa ? f.ativa.checked : true })).msg);
+      toast((await api('exec_equipe_salvar', { codigo: q?.codigo, nome: f.nome.value, pessoas: f.pessoas.value, encarregado: f.encarregado.value, empresa: f.empresa.value, responsavel: f.responsavel.value, telefone: f.telefone.value, email: f.email.value, documento: f.documento.value, endereco: f.endereco.value, ativa: f.ativa ? f.ativa.checked : true })).msg);
       await carregarExec(true); depois && depois();
     }
   });

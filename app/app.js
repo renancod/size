@@ -230,12 +230,12 @@ const MODULOS = [
   },
   {
     id: 'medicoes', t: 'Medições', i: 'sliders2', home: '#/med',
-    desc: 'Medição de empreiteiros por frente de trabalho: serviços concluídos com FVS aprovada, numeração, aprovação e PDF no Drive',
-    rotas: /^#\/med/,
+    desc: 'Contratos de empreiteiros (planilha, aditivos, minuta em PDF) e medições por frente de trabalho: contratado × executado × medido × pago, FVS aprovada, numeração e PDF no Drive',
+    rotas: /^#\/(med|ctr)/,
     itens: [
       { h: '#/med', t: 'Medições', i: 'sliders2', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar']) },
-      { h: '#/med/empreiteiros', t: 'Empreiteiros', i: 'users', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar']) },
-      { breve: true, t: 'Contratos', i: 'file', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar']) }
+      { h: '#/ctr', t: 'Contratos', i: 'file', ok: () => can(['contrato_ver', 'contrato_gerir']) },
+      { h: '#/med/empreiteiros', t: 'Empreiteiros', i: 'users', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar', 'contrato_ver', 'contrato_gerir']) }
     ]
   }
 ];
