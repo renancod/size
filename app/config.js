@@ -5,8 +5,8 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyPtW1Wk2G6CthUUTCle5kH
 // Preencha apiKey, messagingSenderId, appId e a chave pública VAPID (Firebase > Configurações do projeto).
 const FIREBASE_CFG = {
   projectId: 'app-size-6857f',
-  apiKey: '',
-  messagingSenderId: '',
-  appId: '',
-  vapid: ''
+  apiKey: 'AIzaSyA-NhdXufRvBfAcnbWMh1pZXjhjimBArac',
+  messagingSenderId: '188854873140',
+  appId: '1:188854873140:web:551c3b3e5c9e985b1b6e61',
+  vapid: 'BCZiC1VJsxGAkzqCqOJdvLRvV38RIhZhi8iHAYeau513ZosnZ0X_rln8X1dXsEdRUCHpmSmxYszcjxkhb-WRH64'
 };
