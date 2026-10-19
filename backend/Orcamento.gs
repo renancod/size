@@ -161,6 +161,7 @@ function orcCalc_(ctx, calc) {
       material_comprado: r2_(valorFrente[cod] || 0),
       servicos: its.length, materiais: materiais.filter(m => m.orcado).length, falta_comprar: materiais.filter(m => m.situacao === 'comprar' || m.situacao === 'parcial').length
     };
+    if (!obraAtiva_(ctx)) { alertas.length = 0; res.falta_comprar = 0; }       // obra desativada: sem pendência de material nem alerta
     alertas.forEach(a => alertasGeral.push(Object.assign({ frente: cod, frente_nome: f.nome }, a)));
     return { codigo: cod, nome: f.nome, descricao: f.descricao || '', ativa: !/^n/i.test(String(f.ativa)), itens: its, materiais: materiais, resumo: res, alertas: alertas };
   });

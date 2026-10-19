@@ -12,7 +12,7 @@
  *    dias anteriores e mudanças de quantidade/datas só o engenheiro, com motivo (tudo fica registrado).
  */
 const CONDICOES_ = ['Trabalhável', 'Parcial', 'Parado por chuva'];
-const SEVERIDADE_ = { concluido: 0, nao_iniciado: 1, no_ritmo: 2, atencao: 3, atrasado: 4 };
+const SEVERIDADE_ = { concluido: 0, nao_iniciado: 1, desativada: 1.5, no_ritmo: 2, atencao: 3, atrasado: 4 };
 
 /* ---------- datas como texto aaaa-mm-dd (sem fuso) ---------- */
 function ymd_(v) {
@@ -190,6 +190,7 @@ function calcExec_(ctx, ate) {
     else if (projecao && fim && projecao > fim) sit = 'atrasado';
     else if (ritmo === null || (ritmo > 0 && ritmo > media * 1.1)) sit = 'atencao';
     else sit = 'no_ritmo';
+    if (sit !== 'concluido' && !obraAtiva_(ctx)) sit = 'desativada';     // obra desativada: não está atrasada nem no ritmo
     const hd = dias.reduce((t, s) => t + (homem[s + '|' + i.etapa] || 0), 0), ed = dias.reduce((t, s) => t + (equipesDia[s + '|' + i.etapa] || 0), 0);
     // dias úteis sem lançamento desde o último (até ontem), com a etapa em andamento
     let sem = 0;
@@ -219,8 +220,10 @@ function calcExec_(ctx, ate) {
       situacao: sit, itens: li
     };
   });
-  return { hoje: hoje, etapas: ets, alertas: alertas, util: util, parado: parado };
+  // obra desativada: os números continuam (histórico), mas não há alerta de atraso nem pendência
+  return { hoje: hoje, etapas: ets, alertas: obraAtiva_(ctx) ? alertas : [], util: util, parado: parado };
 }
+function obraAtiva_(ctx) { return !ctx.obra || sim_(ctx.obra.ativa); }
 function r2_(n) { return Math.round(num_(n) * 100) / 100; }
 function nfmt_(n) { return Number(r2_(n)).toLocaleString('pt-BR'); }
 function fmtBr_(s) { return s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) : ''; }

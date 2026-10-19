@@ -132,6 +132,9 @@ const S = { token: LS.get('cs_token'), sess: null, obraId: LS.get('cs_obra'), da
 const admin = () => !!(S.sess && S.sess.usuario.admin);
 const can = p => admin() || [].concat(p).some(x => S.dados && S.dados.permissoes.includes(x));
 const obraAtual = () => (S.sess?.obras || []).find(o => o.id === S.obraId);
+/* obra desativada (só o admin abre): dá para consultar, mas não há pendências, alertas nem contadores */
+const obraInativa = () => !!obraAtual() && !obraAtual().ativa;
+const AVISO_INATIVA = '<div class="aviso warn">Obra <b>desativada</b>: dá para consultar o histórico, mas pendências, alertas e atrasos não aparecem.</div>';
 
 async function api(acao, d = {}) {
   let r;
@@ -260,7 +263,7 @@ const NAV_GERAL = [
 ];
 /* pendências do usuário no módulo Compras (soma do que ele pode agir) */
 function pendenciasCompras() {
-  if (!S.ped) return 0;
+  if (!S.ped || obraInativa()) return 0;
   return [['cotar', 'compras_cotar'], ['aprovar', 'compras_aprovar'], ['liberar', 'compras_liberar'], ['receber', 'pedido_receber'], ['pagar', 'financeiro']]
     .filter(([, p]) => can(p)).reduce((s, [k]) => s + conta(k), 0);
 }
@@ -340,7 +343,7 @@ function marcarMenu() {
 function contadores() {
   $$('#nav .cont').forEach(c => {
     const k = c.dataset.c;
-    const n = /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
+    const n = obraInativa() ? 0 : /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
     c.textContent = n; c.hidden = !n;
   });
 }
@@ -437,7 +440,9 @@ function telaTrocarSenha() {
 
 async function iniciar() {
   if (S.sess.usuario.trocar_senha) return telaTrocarSenha();
-  if (!S.sess.obras.some(o => o.id === S.obraId)) S.obraId = S.sess.obras[0]?.id || '';
+  // ao entrar, abre uma obra ativa (a desativada só se for escolhida no menu)
+  const atual = S.sess.obras.find(o => o.id === S.obraId);
+  if (!atual || (!atual.ativa && S.sess.obras.some(o => o.ativa))) S.obraId = (S.sess.obras.find(o => o.ativa) || S.sess.obras[0])?.id || '';
   if (S.obraId) LS.set('cs_obra', S.obraId);
   S.dados = null;
   if (S.obraId) { try { await recarregarDados(); } catch (e) { toast(e.message, 1); } }
@@ -624,6 +629,7 @@ async function vHome() {
   const pend = pendenciasCompras();
   view(`<div class="cab"><h2>Olá, ${esc(S.sess.usuario.nome.split(' ')[0])}</h2>${obraAtual() ? `<span class="badge">${esc(obraAtual().nome)}</span>` : ''}</div>
     ${S.offline ? '<div class="aviso warn">Sem sinal: mostrando os dados guardados no aparelho. O diário de obra funciona e envia sozinho quando o sinal voltar.</div>' : ''}
+    ${obraInativa() ? AVISO_INATIVA : ''}
     <div class="modulos">${MODULOS.filter(modOk).map(m => m.breve
       ? `<div class="modulo breve"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small><span class="badge">em breve</span></div>`
       : `<a class="modulo" href="${m.home}"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small>
@@ -641,9 +647,11 @@ async function vInicio() {
     ['receber', 'pedido_receber'], ['pagar', 'financeiro'], ['nf', ['financeiro', 'compras_cotar']], ['urgentes', null]
   ].filter(([, p]) => !p || can(p));
   const meus = ps.filter(p => String(p.solicitante_id) === S.sess.usuario.id && FILTROS.andamento.f(p));
-  const atrasados = ps.filter(p => FILTROS.andamento.f(p) && p.necessidade && vencido(p.necessidade) && !['Recebido', 'Concluído'].includes(p.situacao));
-  view(`<div class="cab"><h2>Olá, ${esc(S.sess.usuario.nome.split(' ')[0])}</h2>${can('pedido_abrir') ? `<a class="btn" href="#/novo">${ic('plus')} Novo pedido</a>` : ''}</div>
-    ${S.todos ? `<div class="kpis">${cards.map(([k]) => { const n = conta(k); return `<a class="kpi ${n ? '' : 'zero'} ${k === 'urgentes' && n ? 'quente' : ''}" href="#/pedidos?k=${k}"><b>${n}</b><span>${FILTROS[k].t}</span></a>`; }).join('')}</div>` : ''}
+  const inat = obraInativa();
+  const atrasados = inat ? [] : ps.filter(p => FILTROS.andamento.f(p) && p.necessidade && vencido(p.necessidade) && !['Recebido', 'Concluído'].includes(p.situacao));
+  view(`<div class="cab"><h2>Olá, ${esc(S.sess.usuario.nome.split(' ')[0])}</h2>${can('pedido_abrir') && !inat ? `<a class="btn" href="#/novo">${ic('plus')} Novo pedido</a>` : ''}</div>
+    ${inat ? AVISO_INATIVA : ''}
+    ${S.todos && !inat ? `<div class="kpis">${cards.map(([k]) => { const n = conta(k); return `<a class="kpi ${n ? '' : 'zero'} ${k === 'urgentes' && n ? 'quente' : ''}" href="#/pedidos?k=${k}"><b>${n}</b><span>${FILTROS[k].t}</span></a>`; }).join('')}</div>` : ''}
     ${atrasados.length && S.todos ? `<div class="card"><h3>Atrasados (data de necessidade vencida)</h3><div class="lista">${atrasados.slice(0, 8).map(p => cartao(p)).join('')}</div></div>` : ''}
     <div class="card"><h3>Meus pedidos em andamento</h3>${meus.length ? `<div class="lista">${meus.slice(0, 20).map(p => cartao(p)).join('')}</div>` : '<p class="vazio">Nenhum pedido seu em andamento.</p>'}</div>`);
   ligarCartoes();

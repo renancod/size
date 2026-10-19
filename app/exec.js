@@ -11,7 +11,7 @@ Object.assign(IC, {
 });
 const DSEM = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const SX = {
-  atrasado: ['Atrasado', 'alert'], atencao: ['Atenção', 'clock'], no_ritmo: ['No ritmo', 'check'], nao_iniciado: ['Não iniciado', 'minus'], concluido: ['Concluído', 'check']
+  atrasado: ['Atrasado', 'alert'], atencao: ['Atenção', 'clock'], no_ritmo: ['No ritmo', 'check'], nao_iniciado: ['Não iniciado', 'minus'], concluido: ['Concluído', 'check'], desativada: ['Obra desativada', 'minus']
 };
 const sxBadge = s => `<span class="badge sx sx-${s}">${SX[s] ? SX[s][0] : esc(s)}</span>`;
 const pct = n => (Math.round(num(n) * 10) / 10).toLocaleString('pt-BR') + '%';
@@ -41,7 +41,7 @@ async function carregarExec(forcar) {
 }
 function contExec(k) {
   if (k === 'exec-fila') return EX.fila;
-  if (!EX.d || EX.obra !== S.obraId) return k === 'mod-execucao' ? EX.fila : 0;
+  if (!EX.d || EX.obra !== S.obraId || obraInativa()) return k === 'mod-execucao' ? EX.fila : 0;
   const alertas = can('exec_planejar') ? EX.d.alertas.length : 0;
   const revisar = can('exec_planejar') ? EX.d.diarios.filter(d => d.status === 'Enviado').length : 0;
   const avisos = can('exec_lancar') ? EX.d.avisos.filter(a => a.status === 'Aberto').length : 0;
@@ -168,9 +168,10 @@ async function vExec() {
     ['Próximas', lista.filter(e => e.situacao === 'nao_iniciado' && (!ini(e) || ini(e) > fimSem))]];
   const listaHtml = blocos.filter(b => b[1].length).map(([t, l]) => `${t ? `<h3 class="bloco-t">${t} <span class="contagem">${l.length}</span></h3>` : ''}<div class="exec-lista">${l.map(cartaoEtapa).join('')}</div>`).join('');
   const geral = ets.length ? ets.reduce((t, e) => t + Math.min(100, e.pct), 0) / ets.length : 0;
-  const revisar = D.diarios.filter(d => d.status === 'Enviado');
+  const inat = obraInativa(), revisar = inat ? [] : D.diarios.filter(d => d.status === 'Enviado');
+  if (inat) D.avisos = [];                      // obra desativada: sem avisos nem diários a revisar
   view(comEtapas(grupos, `<div class="cab"><h2>${F[FX][0]}</h2><span class="contagem">${esc(S.dados.obra.nome)}</span></div>
-    ${filaInfo()}${EX.offline ? '<div class="aviso warn">Sem sinal: mostrando o último dado guardado.</div>' : ''}
+    ${filaInfo()}${EX.offline ? '<div class="aviso warn">Sem sinal: mostrando o último dado guardado.</div>' : ''}${inat ? AVISO_INATIVA : ''}
     <div class="kpis"><div class="kpi destaque"><b>${pct(geral)}</b><span>Média das etapas</span></div>
       <a class="kpi ${D.alertas.length ? 'quente' : 'zero'}" href="#/exec" id="kAl"><b>${D.alertas.length}</b><span>Alertas</span></a>
       <a class="kpi ${revisar.length ? '' : 'zero'}" href="#/diarios?k=Enviado"><b>${revisar.length}</b><span>Diários a revisar</span></a>

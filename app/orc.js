@@ -52,7 +52,7 @@ async function vObra() {
   const D = await carregarOrc(), R = D.resumo;
   const com = D.frentes.filter(f => f.itens.length || f.materiais.some(m => m.orcado));   // frente só com compras fora do orçamento não entra no painel
   const al = D.alertas;
-  view(comEtapas(orGrupos(D, 'painel'), `<div class="cab"><h2>Painel da obra</h2><span class="contagem">${esc(D.obra.nome)}</span></div>
+  view(comEtapas(orGrupos(D, 'painel'), `<div class="cab"><h2>Painel da obra</h2><span class="contagem">${esc(D.obra.nome)}</span></div>${obraInativa() ? AVISO_INATIVA : ''}
     ${!com.length ? `<div class="card vazio"><p><b>Comece pelo orçamento da obra.</b><br>Para cada frente geral (ex: Rede de Esgoto), cadastre o que precisa executar (ex: 2.500 m de rede), o valor de material e o de mão de obra, e os materiais. As frentes de execução passam a consumir esse saldo e o painel mostra o que falta comprar.</p>
       ${orGere() ? `<div class="acoes"><a class="btn" href="#/obra/orcamento">${ic('plus')} Montar o orçamento</a></div>` : ''}</div>` : `
     <div class="ct-res or-res">
@@ -66,7 +66,7 @@ async function vObra() {
   orLigar(D);
 }
 function orCartao(f) {
-  const r = f.resumo, falta = f.materiais.filter(m => m.situacao === 'comprar' || m.situacao === 'parcial');
+  const r = f.resumo, falta = obraInativa() ? [] : f.materiais.filter(m => m.situacao === 'comprar' || m.situacao === 'parcial');
   return `<a class="card etapa-card or-card" href="#/obra/frente/${enc(f.codigo)}">
     <div class="l1"><b>${esc(f.nome)}</b>${falta.length ? `<span class="badge fvb fvb-dev">${plural(falta.length, 'material a comprar', 'materiais a comprar')}</span>` : ''}<span class="dir">${pct(r.pct_exec)}</span></div>
     <small>${r.v_total ? 'Orçado ' + orM(r.v_total) + ' · ' : ''}${plural(r.servicos, 'serviço', 'serviços')}${r.mo_contratado ? ' · MO contratada ' + orM(r.mo_contratado) : ''}</small>
@@ -86,7 +86,7 @@ async function vObraFrente(cod) {
   const r = f.resumo, ger = orGere();
   const grupos = [], porG = {};
   f.itens.forEach(i => { const g = i.grupo || 'Serviços'; if (!porG[g]) { porG[g] = []; grupos.push(g); } porG[g].push(i); });
-  view(comEtapas(orGrupos(D, f.codigo), `<a href="#/obra" class="linkbtn">${ic('back')} Painel da obra</a>
+  view(comEtapas(orGrupos(D, f.codigo), `<a href="#/obra" class="linkbtn">${ic('back')} Painel da obra</a>${obraInativa() ? AVISO_INATIVA : ''}
     <div class="fv-hero fvs-exec"><div><span class="rel-sel">${ic('grid')} Frente geral · ${esc(f.codigo)}</span><h2>${esc(f.nome)}</h2><p>${esc(f.descricao || 'Tudo o que esta frente precisa executar, quanto já foi para frentes de execução, o executado e os materiais.')}</p></div>
       <div class="fv-hero-d"><b class="or-pct">${pct(r.pct_exec)}</b><small>executado${r.v_total ? ' (pelo valor)' : ''}</small></div></div>
     ${f.alertas.length ? `<div class="card"><h3>${ic('alert')} Atenção</h3>${f.alertas.map(a => `<div class="alerta or-al or-al-${a.tipo}">${ic(OR_AL[a.tipo] || 'alert')}<span><small>${esc(a.texto)}</small></span></div>`).join('')}</div>` : ''}
@@ -111,7 +111,7 @@ async function vObraFrente(cod) {
       ${f.materiais.length ? `<div class="ct-rol"><table class="tab ct-tab or-tab"><thead><tr><th>Material</th><th>Un.</th><th class="n">Necessário</th><th class="n">Comprado</th><th class="n">Em compra</th><th class="n">Recebido</th><th class="n">Consumo (diários)</th><th class="n">Saídas</th><th class="n">Falta comprar</th><th></th></tr></thead><tbody>
       ${f.materiais.map(m => `<tr class="${ger && m.orcado ? 'click' : ''}" data-om="${esc(m.chave)}"><td><b>${esc(m.descricao)}</b><div class="ct-mini">${m.necessario ? orBar(m.pct_comprado, 'pg') : ''}<small>${m.composicao.map(c => c.orc_item ? `${nf(c.coef)} ${esc(m.unidade)}/${esc(c.unidade_srv)} em ${esc(c.servico)}` : `${nf(c.qtd)} ${esc(m.unidade)} direto na frente`).join(' · ') || 'comprado para a frente, sem previsão no orçamento'}</small></div></td>
         <td>${esc(m.unidade)}</td><td class="n">${nf(m.necessario)}</td><td class="n">${nf(m.comprado)}</td><td class="n">${nf(m.em_compra)}</td><td class="n">${nf(m.recebido)}</td>
-        <td class="n">${m.consumo_teorico == null ? '—' : nf(m.consumo_teorico)}</td><td class="n">${nf(m.consumo_real)}</td><td class="n ${m.falta_comprar ? 'atrasado' : ''}"><b>${nf(m.falta_comprar)}</b></td><td>${orSit(m.situacao)}</td></tr>`).join('')}
+        <td class="n">${m.consumo_teorico == null ? '—' : nf(m.consumo_teorico)}</td><td class="n">${nf(m.consumo_real)}</td><td class="n ${m.falta_comprar && !obraInativa() ? 'atrasado' : ''}"><b>${nf(m.falta_comprar)}</b></td><td>${obraInativa() ? '' : orSit(m.situacao)}</td></tr>`).join('')}
       </tbody></table></div>` : `<p class="vazio">Nenhum material.${ger ? ' Inclua o material de cada serviço (ex: tubo PVC 150, 1,05 m por metro de rede) ou direto na frente (ex: 420 anéis).' : ''}</p>`}</div>
     ${ger ? `<div class="acoes"><button class="btn sec" id="orEdF">${ic('edit')} Editar frente geral</button></div>` : ''}`));
   orLigar(D);

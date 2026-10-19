@@ -207,6 +207,22 @@ test('trocar o nome da frente geral acompanha pedidos, estoque e frentes de exec
   assert.equal(frente(t.adm('orc_dados'), 'Esgoto Sanitário').itens.length, 2);
 });
 
+test('obra desativada: sem atraso, sem alerta e sem pendência de material (o histórico continua)', () => {
+  const t = preparar();
+  const { rede } = orcar(t);
+  t.eng('exec_etapa_salvar', { nome: 'Atrasada', local: 'Rua X', contrato_id: '-', itens: [{ orc_item: rede.id, qtd_prevista: 100, inicio: dia(-30), termino: dia(-10), fvs_modelo: 'FVS.03' }] });
+  assert.equal(t.adm('exec_dados').etapas[0].situacao, 'atrasado');
+  assert.ok(t.adm('exec_dados').alertas.length);
+  assert.ok(t.adm('orc_dados').alertas.length);
+  t.raiz('admin_obra_salvar', { id: t.obra, nome: 'Loteamento Sul', ativa: false });
+  const ex = t.adm('exec_dados'), o = t.adm('orc_dados');
+  assert.equal(ex.etapas[0].situacao, 'desativada');
+  assert.equal(ex.alertas.length, 0);
+  assert.equal(o.alertas.length, 0); assert.equal(o.resumo.falta_comprar, 0);
+  assert.equal(frente(o, 'Rede de Esgoto').itens[0].programado, 100);      // números continuam para consulta
+  assert.throws(() => t.eng('exec_dados'), /desativada/);                   // quem não é admin nem abre a obra
+});
+
 test('remover serviço sem uso tira as composições dele', () => {
   const t = preparar();
   const { pv, fr } = orcar(t);
