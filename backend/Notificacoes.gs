@@ -6,7 +6,8 @@
 function notificacoes_(q, ctx) {
   const itens = [], limiteMeus = Date.now() - 10 * 864e5, hojeStr = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
   const fd = d => d instanceof Date ? Utilities.formatDate(d, tz_(), 'dd/MM') : '';
-  central_('Obras').all().filter(o => sim_(o.ativa) || ctx.admin).forEach(o => {
+  // obra desativada não gera aviso para ninguém (nem admin): o sino e o push vêm daqui
+  central_('Obras').all().filter(o => sim_(o.ativa)).forEach(o => {
     const perms = permsDe_(ctx.u, o.id);
     if (!perms || !o.planilha_id) return;
     const c = { u: ctx.u, admin: ctx.admin, obra: o, perms: perms, ss: SpreadsheetApp.openById(o.planilha_id) };

@@ -94,3 +94,17 @@ test('quem sai deixa de receber e outra pessoa pode registrar o mesmo aparelho',
   assert.equal(t.sol('push_teste').enviados, 1);
   assert.throws(() => t.compras('push_registrar', { fcm: 'curto' }), /inválido/);
 });
+
+test('obra desativada não avisa ninguém, nem o administrador', () => {
+  const t = preparar();
+  t.configurar();
+  t.adm('push_registrar', { fcm: TOK('e'), ids: [] });
+  t.G.rodar('pushVarrer()'); // inicializa
+  pedido(t, 'Tubo PVC');
+  assert.ok(t.adm('notificacoes').itens.some(i => i.obra === String(t.obra)), 'obra ativa: admin vê o aviso');
+  // pedido que ficou pendente quando a obra foi desativada não pode continuar gerando aviso
+  t.adm('admin_obra_salvar', { id: t.obra, nome: 'Loteamento Sul', ativa: false });
+  assert.equal(t.adm('notificacoes').itens.filter(i => i.obra === String(t.obra)).length, 0);
+  t.G.rodar('pushVarrer()');
+  assert.equal(t.G._fcm.length, 0);
+});
