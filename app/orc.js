@@ -30,7 +30,7 @@ function orSemAcesso() { view('<div class="card vazio"><p>Você não tem acesso 
 /* menu lateral comum das telas do orçamento */
 function orGrupos(D, aqui) {
   const fr = D.frentes.filter(f => f.ativa || f.itens.length);
-  const g = [{ t: 'Obra', itens: [{ k: 'v:painel', t: 'Painel da obra', i: 'chart', on: aqui === 'painel' }, { k: 'v:orc', t: 'Orçamento (quantidades)', i: 'list', on: aqui === 'orc' }, { k: 'v:fin', t: 'Valores (financeiro)', i: 'money', on: aqui === 'fin' }] },
+  const g = [{ t: 'Obra', itens: [{ k: 'v:painel', t: 'Painel da obra', i: 'chart', on: aqui === 'painel' }, { k: 'v:orc', t: 'Orçamento (quantidades)', i: 'list', on: aqui === 'orc' }, { k: 'v:fin', t: 'Valores (financeiro)', i: 'money', on: aqui === 'fin' }, { k: 'v:rel', t: 'Relatório da obra', i: 'file', on: aqui === 'rel' }] },
     { t: 'Frentes gerais', itens: fr.map(f => ({ k: 'fr:' + f.codigo, t: f.nome, i: 'grid', n: f.resumo.falta_comprar || undefined, cl: f.resumo.falta_comprar ? 'quente' : '', on: aqui === f.codigo })) }];
   if (orGere()) g.push({ t: 'Ações', itens: [{ k: 'a:frente', t: 'Nova frente geral', i: 'plus', cl: 'acao' }] });
   return g;
@@ -40,6 +40,7 @@ function orLigar(D) {
     if (k === 'v:painel') location.hash = '#/obra';
     else if (k === 'v:orc') location.hash = '#/obra/orcamento';
     else if (k === 'v:fin') location.hash = '#/obra/financeiro';
+    else if (k === 'v:rel') location.hash = '#/obra/relatorio';
     else if (k.startsWith('fr:')) location.hash = '#/obra/frente/' + enc(k.slice(3));
     else if (k === 'a:frente') mOrFrente();
   });

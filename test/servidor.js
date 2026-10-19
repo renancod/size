@@ -116,8 +116,8 @@ console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diari
 // ---- orçamento da obra: Rede de Esgoto (2.500 m) e Rede de Água, com materiais, uma frente de execução consumindo o saldo e compras ----
 {
   const o = (acao, x = {}) => adm(acao, { obra, ...x });
-  const esg = o('orc_frente_salvar', { nome: 'Rede de Esgoto', descricao: 'Rede coletora, poços de visita e ligações domiciliares' }).codigo;
-  const agua = o('orc_frente_salvar', { nome: 'Rede de Água' }).codigo;
+  const esg = o('orc_frente_salvar', { nome: 'Rede de Esgoto', descricao: 'Rede coletora, poços de visita e ligações domiciliares', preco: 380000, custo_direto: 240000, adm_local: 15000, indiretas: 18000, tributos: 30000 }).codigo;
+  const agua = o('orc_frente_salvar', { nome: 'Rede de Água', preco: 120000, custo_direto: 80000, adm_local: 5000, indiretas: 6000, tributos: 9500 }).codigo;
   o('orc_itens_salvar', { frente: esg, itens: [
     { grupo: '1. Rede coletora', codigo: '1.1', servico: 'Rede coletora PVC DN 150', unidade: 'm', qtd: 2500, unit_material: 45, unit_mo: 18 },
     { grupo: '1. Rede coletora', codigo: '1.2', servico: 'Poço de visita de esgoto', unidade: 'un', qtd: 30, unit_material: 1200, unit_mo: 650 },

@@ -248,7 +248,8 @@ const MODULOS = [
     itens: [
       { h: '#/obra', t: 'Painel da obra', i: 'chart', ok: () => can(['orc_ver', 'orc_gerir']) },
       { h: '#/obra/orcamento', t: 'Orçamento (quantidades)', i: 'list', ok: () => can(['orc_ver', 'orc_gerir']) },
-      { h: '#/obra/financeiro', t: 'Valores (financeiro)', i: 'money', ok: () => can(['orc_ver', 'orc_gerir']) }
+      { h: '#/obra/financeiro', t: 'Valores (financeiro)', i: 'money', ok: () => can(['orc_ver', 'orc_gerir']) },
+      { h: '#/obra/relatorio', t: 'Relatório da obra', i: 'file', ok: () => can(['orc_ver', 'orc_gerir', 'exec_planejar']) }
     ]
   }
 ];
