@@ -113,6 +113,39 @@ eng('exec_diario_salvar', { data: d(-1), motivo: 'dados de exemplo', lancamentos
 }
 console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diarios.length);
 
+// ---- orçamento da obra: Rede de Esgoto (2.500 m) e Rede de Água, com materiais, uma frente de execução consumindo o saldo e compras ----
+{
+  const o = (acao, x = {}) => adm(acao, { obra, ...x });
+  const esg = o('orc_frente_salvar', { nome: 'Rede de Esgoto', descricao: 'Rede coletora, poços de visita e ligações domiciliares' }).codigo;
+  const agua = o('orc_frente_salvar', { nome: 'Rede de Água' }).codigo;
+  o('orc_itens_salvar', { frente: esg, itens: [
+    { grupo: '1. Rede coletora', codigo: '1.1', servico: 'Rede coletora PVC DN 150', unidade: 'm', qtd: 2500, unit_material: 45, unit_mo: 18 },
+    { grupo: '1. Rede coletora', codigo: '1.2', servico: 'Poço de visita de esgoto', unidade: 'un', qtd: 30, unit_material: 1200, unit_mo: 650 },
+    { grupo: '2. Ligações', codigo: '2.1', servico: 'Ligação domiciliar de esgoto', unidade: 'un', qtd: 150, unit_material: 120, unit_mo: 80 }] });
+  o('orc_itens_salvar', { frente: agua, itens: [{ codigo: '1.1', servico: 'Rede de água PEAD', unidade: 'm', qtd: 1800, unit_material: 22, unit_mo: 12 }, { codigo: '1.2', servico: 'Ligação domiciliar de água', unidade: 'un', qtd: 150, unit_material: 90, unit_mo: 60 }] });
+  const mat = (descricao, unidade) => o('cad_salvar', { tipo: 'materiais', dados: { descricao, unidade, categoria: 'Saneamento' } }).item.codigo;
+  const tubo = mat('Tubo PVC esgoto DN 150', 'm'), anel = mat('Anel de borracha DN 150', 'un'), tampao = mat('Tampão de ferro fundido', 'un'), pead = mat('Tubo PEAD 63mm', 'm');
+  const its = o('orc_dados').frentes.find(f => f.codigo === esg).itens, [rede, pv] = its;
+  o('orc_material_salvar', { orc_item: rede.id, material_cod: tubo, coef: 1.05 });
+  o('orc_material_salvar', { orc_item: pv.id, material_cod: tampao, coef: 1 });
+  o('orc_material_salvar', { frente: esg, material_cod: anel, qtd: 420 });
+  o('orc_material_salvar', { orc_item: o('orc_dados').frentes.find(f => f.codigo === agua).itens[0].id, material_cod: pead, coef: 1.03 });
+  const ex = eng('exec_etapa_salvar', { nome: 'Esgoto · Rua das Flores', local: 'Rua das Flores', frente: 'Rede de Esgoto', contrato_id: '-', itens: [
+    { orc_item: rede.id, qtd_prevista: 250, inicio: d(-6), termino: d(10), fvs_modelo: 'FVS.03' }, { orc_item: pv.id, qtd_prevista: 4, inicio: d(-6), termino: d(10), fvs_modelo: 'FVS.03' }] }).codigo;
+  const ie = eng('exec_dados').etapas.find(e => e.codigo === ex).itens;
+  [-3, -2, -1].forEach(n => { const w = new Date(d(n) + 'T12:00').getDay(); if (w > 0 && w < 6) eng('exec_diario_salvar', { data: d(n), motivo: 'dados de exemplo', lancamentos: [{ item_id: ie[0].id, qtd: 30 }, { item_id: ie[1].id, qtd: n === -1 ? 1 : 0 }] }); });
+  const pt = est('pedido_criar', { frente: 'Rede de Esgoto', prioridade: 'Alta', necessidade: d(5), itens: [{ descricao: 'Tubo PVC esgoto DN 150', material_cod: tubo, qtd: 1000, unidade: 'm' }, { descricao: 'Anel de borracha DN 150', material_cod: anel, qtd: 200, unidade: 'un' }] }).numero;
+  com('orcamento_salvar', { pedido: pt, fornecedor_cod: 'F001', valor: '48.500,00', arquivo: PDF });
+  com('orcamento_salvar', { pedido: pt, fornecedor_cod: 'F002', valor: '49.900,00', arquivo: PDF });
+  com('orcamento_salvar', { pedido: pt, fornecedor_cod: 'F003', valor: '51.000,00', arquivo: PDF });
+  com('pedido_definir', { numero: pt, orcamento: com('pedido_detalhe', { numero: pt }).orcamentos[0].id, condicao: 'Faturado', prazo_fat: 30 });
+  ger('pedido_aprovar', { numero: pt });
+  com('pedido_liberar', { numero: pt, previsao: d(2) });
+  est('pedido_receber', { numero: pt, itens: { 1: 600, 2: 200 } });
+  est('estoque_movimentar', { tipo: 'Saída', material_cod: tubo, qtd: 80, frente: 'Rede de Esgoto' });
+  console.log('Orçamento da obra: frentes', esg, agua, '· frente de execução', ex, '· pedido', pt);
+}
+
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');
 console.log('Portal (cotação PB-0002):', local(com('forn_link', { fornecedor: 'F003', numeros: [p2] }).url));
 console.log('Portal (compra PB-0005):', local(com('forn_link', { fornecedor: 'F001', numeros: [p5] }).url));

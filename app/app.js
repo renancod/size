@@ -237,6 +237,16 @@ const MODULOS = [
       { h: '#/ctr', t: 'Contratos', i: 'file', ok: () => can(['contrato_ver', 'contrato_gerir']) },
       { h: '#/med/empreiteiros', t: 'Empreiteiros', i: 'users', ok: () => can(['medicao_ver', 'medicao_lancar', 'medicao_aprovar', 'contrato_ver', 'contrato_gerir']) }
     ]
+  },
+  {
+    id: 'obra', t: 'Orçamento da obra', i: 'building', home: '#/obra',
+    desc: 'Frentes gerais com o que cada uma precisa executar, valores de material e mão de obra, saldo consumido pelas frentes de execução e o que falta comprar',
+    rotas: /^#\/obra/,
+    itens: [
+      { h: '#/obra', t: 'Painel da obra', i: 'chart', ok: () => can(['orc_ver', 'orc_gerir']) },
+      { h: '#/obra/orcamento', t: 'Orçamento (quantidades)', i: 'list', ok: () => can(['orc_ver', 'orc_gerir']) },
+      { h: '#/obra/financeiro', t: 'Valores (financeiro)', i: 'money', ok: () => can(['orc_ver', 'orc_gerir']) }
+    ]
   }
 ];
 const modOk = m => !m.itens || m.itens.some(n => n.ok());
@@ -330,7 +340,7 @@ function marcarMenu() {
 function contadores() {
   $$('#nav .cont').forEach(c => {
     const k = c.dataset.c;
-    const n = /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
+    const n = /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
     c.textContent = n; c.hidden = !n;
   });
 }
@@ -1028,7 +1038,9 @@ function mLiberar(d) {
 
 function mReceber(d) {
   const p = d.pedido, falta = i => Math.max(0, num(i.qtd) - num(i.qtd_recebida));
+  const frentes = (S.dados.frentes || []).filter(x => ativo(x, 'ativa') || x.nome === p.frente);
   const f = modal('Receber material', `
+    <label>Frente que recebeu o material <small>(conta no orçamento da obra: comprado × recebido)</small><select name="frente"><option value="">${p.frente ? '' : '— sem frente —'}</option>${frentes.map(x => `<option ${x.nome === p.frente ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
     <div class="acoes"><button type="button" class="btn sec peq" id="tudo">Recebi tudo</button><button type="button" class="btn sec peq" id="zera">Zerar</button></div>
     <div>${d.itens.map(i => `<div class="rec ${falta(i) ? '' : 'feito'}"><div><b>${esc(i.descricao)}</b><small>Pedido ${nf(i.qtd)} ${esc(i.unidade)} · já recebido ${nf(i.qtd_recebida)} · falta ${nf(falta(i))}</small></div>
       <input name="q_${i.item}" type="number" step="any" min="0" max="${falta(i)}" inputmode="decimal" placeholder="0" ${falta(i) ? '' : 'disabled'} data-falta="${falta(i)}"></div>`).join('')}</div>
@@ -1042,7 +1054,7 @@ function mReceber(d) {
       const itens = {};
       d.itens.forEach(i => { const v = f['q_' + i.item].value; if (v) itens[i.item] = v; });
       if (f.encerrar.checked && !f.obs.value.trim()) throw new Error('Explique na observação por que o restante não virá.');
-      return depois(await api('pedido_receber', { numero: p.numero, itens, nf_numero: f.nfn.value, nf_data: f.nfd.value, nf: await lerArquivo(f.nf), foto: await lerArquivo(f.foto), obs: f.obs.value, encerrar: f.encerrar.checked }));
+      return depois(await api('pedido_receber', { numero: p.numero, itens, frente: f.frente.value, nf_numero: f.nfn.value, nf_data: f.nfd.value, nf: await lerArquivo(f.nf), foto: await lerArquivo(f.foto), obs: f.obs.value, encerrar: f.encerrar.checked }));
     }
   });
   $('#tudo').onclick = () => $$('input[data-falta]', f).forEach(x => { if (!x.disabled) x.value = x.dataset.falta; });
@@ -1339,13 +1351,15 @@ async function vObras() {
     <label>Sigla (2 a 5 letras)<input name="sigla" required maxlength="5" style="text-transform:uppercase" placeholder="ex: PB"></label><small>Os pedidos da obra ficam numerados com a sigla: PB-0001, PB-0002…</small>
     <label>Endereço (vai nos e-mails aos fornecedores)<input name="endereco"></label>
     <label>E-mail do financeiro desta obra <small>(opcional — recebe os avisos de pagamento)</small><input name="email_financeiro" placeholder="financeiro@…"></label>
-    <div class="aviso info">Cria a planilha da obra (pedidos, fornecedores, materiais, estoque, frentes) já com os ${A.padrao.length} materiais padrão e as frentes padrão. Leva uns segundos.</div>`, {
+    <label>Frentes gerais da obra <small>(uma por linha · ex: Rede de Esgoto, Rede de Água, Pavimentação)</small><textarea name="frentes" rows="5" placeholder="Rede de Esgoto&#10;Rede de Água&#10;Drenagem pluvial&#10;Pavimentação">${esc((A.frentes_padrao || []).join('\n'))}</textarea></label>
+    <small>Depois de criar, você monta o orçamento de cada frente (o que executar, valores de material e mão de obra) em <b>Orçamento da obra</b>.</small>
+    <div class="aviso info">Cria a planilha da obra (pedidos, fornecedores, materiais, estoque, frentes) já com os ${A.padrao.length} materiais padrão e as frentes gerais acima. Leva uns segundos.</div>`, {
     ok: 'Criar obra',
     onOk: async f => {
-      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value });
+      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, frentes: f.frentes.value.split(/\r?\n|;/).map(s => s.trim()).filter(Boolean) });
       toast(r.msg);
       await recarregarSessao();
-      if (!S.obraId) { await trocarObra(r.id); location.hash = '#/admin/obras'; } else vObras();
+      if (!S.obraId || confirm('Obra criada. Abrir agora para montar o orçamento?')) { await trocarObra(r.id); location.hash = '#/obra/orcamento'; } else vObras();
     }
   });
   $$('[data-o]').forEach(b => {

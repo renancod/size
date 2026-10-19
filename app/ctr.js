@@ -95,7 +95,7 @@ async function ctForm(id) {
       ${CT_TXT('prazo_txt', 'Prazo estimado de execução', m.prazo_txt, { ph: 'ex: 4 meses, possivelmente de setembro a dezembro de 2026', dica: '(texto do contrato)' })}</section>
     <section class="card rel-sec"><div class="rel-h"><b>3</b><div><h3>Planilha de serviços</h3><small>Etapa/grupo, serviço, unidade, quantidade e preço unitário</small></div></div>
       <div id="ctLin"></div>
-      <div class="ct-bt"><button type="button" class="btn sec" id="ctAdd">${ic('plus')} Serviço</button><button type="button" class="btn sec" id="ctColar">${ic('file')} Colar do Excel</button></div>
+      <div class="ct-bt"><button type="button" class="btn sec" id="ctAdd">${ic('plus')} Serviço</button><button type="button" class="btn sec" id="ctOrc">${ic('building')} Puxar do orçamento da obra</button><button type="button" class="btn sec" id="ctColar">${ic('file')} Colar do Excel</button></div>
       <div class="ct-soma" id="ctSoma"></div>
       <div class="g2">${CT_TXT('valor_global', 'Valor global do contrato (R$)', ctV(m.valor_global), { dica: '(preço global; se vazio vale a soma da planilha)', ph: 'ex: 590.738,48' })}<div id="ctDif" class="ct-dif"></div></div></section>
     <section class="card rel-sec"><div class="rel-h"><b>4</b><div><h3>Pagamento e medição</h3></div></div>
@@ -120,6 +120,9 @@ async function ctForm(id) {
   ctSoma(F);
   $('#ctAdd').onclick = () => ctLinha(F, cat).querySelector('[name=s]').focus();
   $('#ctColar').onclick = () => ctColar(F, cat);
+  $('#ctOrc').onclick = () => ctDoOrcamento(F, cat);
+  const orcPre = new URLSearchParams(location.hash.split('?')[1] || '').get('orc');
+  if (orcPre && !d) ctDoOrcamento(F, cat, orcPre);
   F.valor_global.oninput = () => ctSoma(F);
   $('#ctCancel').onclick = () => { location.hash = id ? '#/ctr/' + id : '#/ctr'; };
   F.onsubmit = async ev => {
@@ -141,14 +144,14 @@ function ctColher(F) {
   ['empreiteiro', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'objeto', 'escopo', 'data_assinatura', 'local_assinatura', 'vigencia_ini', 'vigencia_fim', 'prazo_txt',
     'pag_forma', 'pag_periodicidade', 'pag_obs', 'permuta_desc', 'retencoes', 'reajuste', 'garantia', 'foro', 'clausulas_extra', 'obs'].forEach(k => { o[k] = F.elements[k].value; });
   ['valor_global', 'permuta_valor', 'fat_nf_pct', 'fat_recibo_pct', 'multa1_pct', 'multa2_pct', 'multa_diaria', 'aviso_dias'].forEach(k => { const v = F.elements[k].value.trim(); o[k] = v === '' ? '' : ctPn(v); });
-  o.itens = $$('.ct-li', F).map(r => ({ id: r.dataset.id || undefined, grupo: $('[name=g]', r).value, codigo: $('[name=c]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: ctPn($('[name=q]', r).value), unitario: ctPn($('[name=p]', r).value) }))
+  o.itens = $$('.ct-li', F).map(r => ({ id: r.dataset.id || undefined, grupo: $('[name=g]', r).value, codigo: $('[name=c]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: ctPn($('[name=q]', r).value), unitario: ctPn($('[name=p]', r).value), orc_item: r.dataset.orc || '' }))
     .filter(x => x.servico || x.qtd || x.id);
   return o;
 }
 /* uma linha da planilha */
 function ctLinha(F, cat, i) {
   const r = document.createElement('div');
-  r.className = 'ct-li'; r.dataset.id = i && i.id ? i.id : ''; r.dataset.cod = (i && i.servico_cod) || '';
+  r.className = 'ct-li'; r.dataset.id = i && i.id ? i.id : ''; r.dataset.cod = (i && i.servico_cod) || ''; r.dataset.orc = (i && i.orc_item) || '';
   const ant = $$('.ct-li', F).pop();
   r.innerHTML = `<label class="g">Etapa / grupo<input name="g" list="dl-ctg" value="${esc(i ? i.grupo : ant ? $('[name=g]', ant).value : '')}" placeholder="ex: 1.1 Rede de Água"></label>
     <label class="c">Item<input name="c" value="${esc(i ? i.codigo : '')}" placeholder="1.1.2"></label>
@@ -156,8 +159,11 @@ function ctLinha(F, cat, i) {
     <label class="u">Unid.<input name="u" value="${esc(i ? i.unidade : '')}" placeholder="M/L"></label>
     <label class="q">Quantidade<input name="q" inputmode="decimal" value="${i ? esc(String(i.qtd).replace('.', ',')) : ''}"></label>
     <label class="p">Unitário (R$)<input name="p" inputmode="decimal" value="${i ? esc(String(i.unitario).replace('.', ',')) : ''}"></label>
-    <span class="t"><small>Total</small><b>R$ 0,00</b></span><button type="button" class="rm" aria-label="Remover linha">${ic('x')}</button>`;
+    <span class="t"><small>Total</small><b>R$ 0,00</b></span><button type="button" class="rm" aria-label="Remover linha">${ic('x')}</button>
+    ${i && i.orc_item ? `<small class="or-ref">${ic('building')} Do orçamento da obra${i.orc_unit_mo != null || i.ref_mo != null ? ` · mão de obra orçada ${ctM(i.ref_mo != null ? i.ref_mo : i.orc_unit_mo)}/${esc(i.unidade)}` : ''} <button type="button" class="linkbtn" data-solta>desvincular</button></small>` : ''}`;
   $('#ctLin').appendChild(r);
+  const solta = $('[data-solta]', r);
+  if (solta) solta.onclick = () => { r.dataset.orc = ''; solta.parentNode.remove(); };
   const s = $('[name=s]', r), u = $('[name=u]', r);
   s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); r.dataset.cod = c ? c.codigo : ''; if (c && !u.value) u.value = c.unidade; };
   const calc = () => { $('.t b', r).textContent = ctM(ctPn($('[name=q]', r).value) * ctPn($('[name=p]', r).value)); ctSoma(F); };
@@ -186,6 +192,28 @@ function ctColar(F, cat) {
       vazia.forEach(r => r.remove());
       itens.forEach(i => { const r = ctLinha(F, cat, Object.assign({ id: '', servico_cod: '' }, i)); const c = cat.find(x => norm(x.servico) === norm(i.servico)); if (c) r.dataset.cod = c.codigo; });
       ctSoma(F); toast(plural(itens.length, 'serviço incluído', 'serviços incluídos') + '. Confira os valores antes de salvar.');
+    }
+  });
+}
+/* puxa os serviços do orçamento da obra: quantidade que falta contratar e o valor de mão de obra de referência (dá para mudar) */
+async function ctDoOrcamento(F, cat, frentePre) {
+  let L;
+  try { L = await api('orc_para_contrato'); } catch (x) { return toast(x.message, 1); }
+  if (!L.length) return toast('O orçamento da obra ainda não tem serviços. Cadastre em Orçamento da obra.', 1);
+  const ja = new Set($$('.ct-li', F).map(r => r.dataset.orc).filter(Boolean));
+  modal('Puxar do orçamento da obra', `<small>Marque os serviços. A quantidade vem com o que <b>falta contratar</b> e o preço com a <b>mão de obra orçada</b>: confira e ajuste ao valor negociado.</small>
+    ${L.map(fr => `<details class="or-ctf" ${!frentePre || frentePre === fr.codigo ? 'open' : ''}><summary><b>${esc(fr.nome)}</b> <small>${plural(fr.itens.length, 'serviço', 'serviços')}</small></summary>
+      ${fr.itens.map(i => `<label class="ck or-ctl ${ja.has(i.id) ? 'or-ja' : ''}"><input type="checkbox" name="oi" value="${esc(i.id)}" ${ja.has(i.id) ? 'disabled' : frentePre === fr.codigo && i.a_contratar > 0 ? 'checked' : ''}>
+        <span><b>${esc(i.codigo ? i.codigo + ' · ' : '')}${esc(i.servico)}</b><small>${ja.has(i.id) ? 'já está nesta planilha' : `${nf(Math.max(0, i.a_contratar))} ${esc(i.unidade)} a contratar de ${nf(i.qtd)}${i.contratado ? ' (' + nf(i.contratado) + ' já contratado)' : ''} · MO orçada ${ctM(i.unit_mo)}/${esc(i.unidade)}`}</small></span></label>`).join('')}</details>`).join('')}`, {
+    larga: true, ok: 'Incluir na planilha',
+    onOk: f => {
+      const ids = $$('[name=oi]:checked', f).map(x => x.value);
+      if (!ids.length) throw new Error('Marque pelo menos um serviço.');
+      $$('.ct-li', F).filter(r => !$('[name=s]', r).value && !$('[name=q]', r).value).forEach(r => r.remove());
+      L.forEach(fr => fr.itens.filter(i => ids.includes(i.id)).forEach(i => {
+        ctLinha(F, cat, { id: '', grupo: i.grupo || fr.nome, codigo: i.codigo, servico: i.servico, servico_cod: i.servico_cod, unidade: i.unidade, qtd: i.a_contratar > 0 ? i.a_contratar : i.qtd, unitario: i.unit_mo, orc_item: i.id, ref_mo: i.unit_mo });
+      }));
+      ctSoma(F); toast(plural(ids.length, 'serviço incluído', 'serviços incluídos') + ' do orçamento. Ajuste o preço ao valor negociado.');
     }
   });
 }
@@ -237,10 +265,11 @@ async function vCtrDet(id) {
       ${d.emp.responsavel || d.emp.telefone ? `<dt>Contato</dt><dd>${esc([d.emp.responsavel, d.emp.telefone, d.emp.email].filter(Boolean).join(' · '))}</dd>` : ''}
       <dt>Pagamento</dt><dd>${esc(d.pag_forma || '—')} · medição ${esc((d.pag_periodicidade || '').toLowerCase())}${d.pag_obs ? '<br>' + esc(d.pag_obs) : ''}${d.permuta_valor ? `<br>Permuta: ${ctM(d.permuta_valor)}${d.permuta_desc ? ' · ' + esc(d.permuta_desc) : ''}` : ''}${d.fat_nf_pct !== '' || d.fat_recibo_pct !== '' ? `<br>Faturamento: ${d.fat_nf_pct || 0}% nota fiscal · ${d.fat_recibo_pct || 0}% recibo` : ''}</dd>
       ${d.data_assinatura ? `<dt>Assinatura</dt><dd>${fd(d.data_assinatura)}${d.local_assinatura ? ' · ' + esc(d.local_assinatura) : ''}</dd>` : ''}
-      <dt>Preço global</dt><dd>${r.valor_global ? ctM(r.valor_global) : 'não informado (vale a soma da planilha)'} · soma da planilha ${ctM(r.soma_itens)}${r.diferenca ? ` <small>(diferença ${ctM(r.diferenca)})</small>` : ''}</dd></dl></div>
+      <dt>Preço global</dt><dd>${r.valor_global ? ctM(r.valor_global) : 'não informado (vale a soma da planilha)'} · soma da planilha ${ctM(r.soma_itens)}${r.diferenca ? ` <small>(diferença ${ctM(r.diferenca)})</small>` : ''}</dd>
+      ${d.orcamento ? `<dt>Orçamento da obra</dt><dd>${plural(d.orcamento.linhas, 'serviço ligado', 'serviços ligados')}: mão de obra orçada ${ctM(d.orcamento.orcado)} · contratada ${ctM(d.orcamento.contratado)} <b class="${d.orcamento.diferenca > 0 ? 'atrasado' : 'ct-ok'}">(${d.orcamento.diferenca > 0 ? '+' : ''}${ctM(d.orcamento.diferenca)} · ${d.orcamento.diferenca > 0 ? '+' : ''}${pct(d.orcamento.pct)})</b></dd>` : ''}</dl></div>
     <div class="card"><h3>Planilha: contratado × executado × medido</h3>
       <div class="ct-rol"><table class="tab ct-tab"><thead><tr><th>Serviço</th><th>Un.</th><th class="n">Contratado</th><th class="n">Executado</th><th class="n">Medido</th><th class="n">Saldo</th><th class="n">R$ unit.</th><th class="n">R$ contratado</th><th class="n">R$ medido</th></tr></thead><tbody>
-      ${grupos.map(g => `<tr class="ct-g"><td colspan="9">${esc(g)}</td></tr>${porG[g].map(i => `<tr class="${i.acima ? 'ct-acima' : ''}"><td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}${esc(i.servico)}<div class="ct-mini">${ctBar(i.pct_exec)}<small>${pct(i.pct_exec)} executado${i.programado ? ' · ' + nf(i.programado) + ' em frentes' : ''}</small></div></td><td>${esc(i.unidade)}</td><td class="n">${nf(i.qtd)}</td><td class="n">${nf(i.executado)}</td><td class="n">${nf(i.medido)}</td><td class="n">${nf(i.saldo)}</td><td class="n">${ctM(i.unitario)}</td><td class="n">${ctM(i.total)}</td><td class="n">${ctM(i.v_med)}</td></tr>`).join('')}`).join('') || '<tr><td colspan="9">Sem itens na planilha.</td></tr>'}
+      ${grupos.map(g => `<tr class="ct-g"><td colspan="9">${esc(g)}</td></tr>${porG[g].map(i => `<tr class="${i.acima ? 'ct-acima' : ''}"><td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}${esc(i.servico)}<div class="ct-mini">${ctBar(i.pct_exec)}<small>${pct(i.pct_exec)} executado${i.programado ? ' · ' + nf(i.programado) + ' em frentes' : ''}</small>${i.orc_unit_mo != null ? `<small class="${i.unitario > i.orc_unit_mo + 0.004 ? 'atrasado' : 'ct-ok'}">orçado ${ctM(i.orc_unit_mo)}/${esc(i.unidade)}</small>` : ''}</div></td><td>${esc(i.unidade)}</td><td class="n">${nf(i.qtd)}</td><td class="n">${nf(i.executado)}</td><td class="n">${nf(i.medido)}</td><td class="n">${nf(i.saldo)}</td><td class="n">${ctM(i.unitario)}</td><td class="n">${ctM(i.total)}</td><td class="n">${ctM(i.v_med)}</td></tr>`).join('')}`).join('') || '<tr><td colspan="9">Sem itens na planilha.</td></tr>'}
       </tbody></table></div></div>
     <div class="card"><h3>Frentes de trabalho deste contrato</h3>
       ${d.frentes.map(f => `<a class="ct-fr" href="#/exec/etapa/${esc(f.codigo)}"><span><b>${esc(f.nome)}</b><small>${esc(f.local || '')} · ${plural(f.servicos, 'serviço', 'serviços')}</small></span><b>${pct(f.pct)}</b></a>`).join('') || '<small>Nenhuma frente aberta com este contrato ainda.</small>'}

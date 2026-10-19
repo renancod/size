@@ -247,12 +247,12 @@ function mEtapa(e, pre) {
   const f = modal(e ? 'Editar etapa · incluir serviços' : 'Nova etapa', `
     <label>Etapa<input name="nome" required value="${esc(e?.nome || '')}" placeholder="ex: Pavimentação · Rua X"></label>
     <div class="g2"><label>Local / trecho<input name="local" value="${esc(e?.local || '')}" placeholder="ex: Rua X, estaca 0 a 25"></label>
-      <label>Frente de trabalho<select name="frente"><option value="">—</option>${frentes.map(x => `<option ${e && e.frente === x.nome ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>
+      <label>Frente geral <small>(do orçamento da obra)</small><select name="frente"><option value="">—</option>${frentes.map(x => `<option ${(e ? e.frente : pre.frente) === x.nome ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>
     <div class="g2"><label>Responsável<input name="responsavel" value="${esc(e?.responsavel || '')}"></label><label>Observação<input name="obs" value="${esc(e?.obs || '')}"></label></div>
     <div class="g2"><label>Empreiteiro responsável <small>(as medições dele somam esta frente)</small><select name="empreiteiro"><option value="">— nenhum (equipe própria) —</option>${(D.equipes || []).filter(q => ativo(q, 'ativa')).map(q => `<option value="${esc(q.codigo)}" ${empIni === q.codigo ? 'selected' : ''}>${esc(q.nome)}${q.empresa ? ' · ' + esc(q.empresa) : ''}</option>`).join('')}</select></label>
       <label>Contrato de execução <small>(a planilha dele alimenta os serviços)</small><select name="ctr" required>${ctrOpcoes(empIni, ctrIni, e)}</select></label></div>
     ${can('contrato_gerir') ? '<small class="ct-dica">Contrato novo? Cadastre em <a href="#/ctr/novo">Medições → Contratos</a> e ative; ele aparece aqui.</small>' : ''}
-    <div id="ctItens"></div>
+    <div id="ctItens"></div><div id="orItens"></div>
     ${e ? `<div class="aviso info">Serviços já cadastrados: ${e.itens.map(i => esc(i.servico)).join(', ')}. Para mudar quantidade ou datas deles, use <b>Alterar</b> no serviço.</div>` : ''}
     <h3 style="margin:6px 0 0">${e ? 'Incluir serviços' : 'Serviços da etapa'}</h3>
     <div class="g2"><label>Início previsto <small>(padrão dos serviços)</small><input type="date" name="ini" value="${hoje()}"></label><label>Término previsto<input type="date" name="fim"></label></div>
@@ -261,7 +261,7 @@ function mEtapa(e, pre) {
     <datalist id="dl-srv">${cat.map(s => `<option value="${esc(s.servico)}">${esc(s.grupo)} · ${esc(s.unidade)}</option>`).join('')}</datalist>`, {
     larga: true, ok: e ? 'Salvar' : 'Criar etapa',
     onOk: async f => {
-      const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value, contrato_item: d.dataset.ci || undefined }))
+      const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value, contrato_item: d.dataset.ci || undefined, orc_item: d.dataset.orc || undefined }))
         .filter(x => x.servico || x.qtd_prevista);
       if (!f.ctr.value) throw new Error('Escolha o contrato desta frente (ou "Sem contrato").');
       const semFvs = itens.find(x => !x.fvs_modelo);
@@ -271,11 +271,13 @@ function mEtapa(e, pre) {
       location.hash = '#/exec/etapa/' + enc(r.codigo); if (e) rotear();
     }
   });
-  const add = ci => {
-    if (ci) ctSemVazio();
+  const add = (ci, oi) => {
+    if (ci || oi) ctSemVazio();
     const d = document.createElement('div');
     d.className = 'srv';
     if (ci) d.dataset.ci = ci.id;
+    if (ci && ci.orc_item) d.dataset.orcCt = ci.orc_item;
+    if (oi) d.dataset.orc = oi.id;
     d.innerHTML = `<label class="s">Serviço<input name="s" list="dl-srv" autocomplete="off" placeholder="Digite para buscar no catálogo"></label>
       <label>Qtd prevista<input name="q" type="number" step="any" min="0" inputmode="decimal"></label><label>Unid.<input name="u" placeholder="m²"></label>
       <label>Início<input type="date" name="i"></label><label>Término<input type="date" name="t"></label>
@@ -283,17 +285,46 @@ function mEtapa(e, pre) {
     const s = $('[name=s]', d), u = $('[name=u]', d);
     const fsel = $('[name=f]', d);
     s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); u.value = c ? c.unidade : u.value; u.readOnly = !!c; d.classList.toggle('avulso', !c && !!s.value); if (c && c.fvs_sugerido && !fsel.value) fsel.value = c.fvs_sugerido; };
-    $('.rm', d).onclick = () => { d.remove(); ctPainel(); };
+    $('.rm', d).onclick = () => { d.remove(); ctPainel(); orPainel(); };
     $('#srvs', f).appendChild(d);
-    if (ci) {                                   // serviço da planilha do contrato: nome e unidade vêm dele
-      s.value = ci.servico; s.onchange(); s.readOnly = true; u.value = ci.unidade; u.readOnly = true;
-      $('[name=q]', d).value = Math.max(0, ci.a_programar);
-      const cs = D.catalogo.find(x => String(x.codigo) === String(ci.servico_cod));
+    const src = ci || oi;
+    if (src) {                                  // serviço da planilha do contrato ou do orçamento: nome e unidade vêm dele
+      s.value = src.servico; s.onchange(); s.readOnly = true; u.value = src.unidade; u.readOnly = true;
+      $('[name=q]', d).value = Math.max(0, ci ? ci.a_programar : oi.a_distribuir) || '';
+      const cs = D.catalogo.find(x => String(x.codigo) === String(src.servico_cod));
       if (cs && cs.fvs_sugerido && !fsel.value) fsel.value = cs.fvs_sugerido;
       d.classList.remove('avulso'); d.classList.add('do-contrato');
     }
+    // quanto ainda há no orçamento da obra para este serviço: avisa (sem bloquear) quando passa
+    const ref = oi || (ci && ci.orc_item ? orcItem(ci.orc_item) : null);
+    if (ref) {
+      const h = document.createElement('small');
+      h.className = 'or-hint';
+      d.appendChild(h);
+      const q = $('[name=q]', d), dica = () => { const v = num(q.value), resta = num(ref.a_distribuir); h.innerHTML = v > resta + 0.0001 ? `<b class="atrasado">Passa do orçamento da obra: há ${nf(Math.max(0, resta))} ${esc(ref.unidade)} a distribuir (de ${nf(ref.qtd)}). Grava, mas fica o alerta.</b>` : `Orçamento da obra: ${nf(resta)} ${esc(ref.unidade)} a distribuir de ${nf(ref.qtd)} (${esc(ref.frente_nome)}).`; };
+      q.addEventListener('input', dica); dica();
+    }
     return s;
   };
+  // painel "serviços do orçamento da obra": o saldo de cada serviço da frente geral; um toque põe na frente de execução
+  const orcFrentes = D.orcamento || [];
+  function orcItem(id) { for (const fr of orcFrentes) { const i = fr.itens.find(x => x.id === id); if (i) return Object.assign({ frente_nome: fr.nome }, i); } return null; }
+  function orPainel() {
+    const box = $('#orItens', f);
+    if (!orcFrentes.length) { box.innerHTML = ''; return; }
+    const usados = new Set([...$$('.srv[data-orc]', f).map(d => d.dataset.orc), ...$$('.srv[data-orc-ct]', f).map(d => d.dataset.orcCt)]);
+    const sel = orcFrentes.filter(x => x.nome === f.frente.value), lista = sel.length ? sel : orcFrentes;
+    box.innerHTML = `<div class="ct-pick or-pick"><b>${ic('building')} Serviços do orçamento da obra${sel.length ? ' · ' + esc(sel[0].nome) : ''}</b>
+      <small>${sel.length ? 'Toque para incluir. A quantidade já vem com o que falta distribuir do orçamento.' : 'Escolha a frente geral acima para ver só os serviços dela, ou toque para incluir.'}</small>
+      ${lista.map(fr => `${lista.length > 1 ? `<small class="or-pick-fr">${esc(fr.nome)}</small>` : ''}${fr.itens.filter(i => !usados.has(i.id)).map(i => `<button type="button" class="ct-it" data-oi="${esc(i.id)}"><span>${esc(i.codigo ? i.codigo + ' · ' : '')}${esc(i.servico)}</span><small class="${i.a_distribuir <= 0 ? 'atrasado' : ''}">${nf(i.a_distribuir)} ${esc(i.unidade)} a distribuir · orçado ${nf(i.qtd)} · executado ${nf(i.executado)}</small>${ic('plus')}</button>`).join('') || '<small>Todos os serviços desta frente já estão aqui.</small>'}`).join('')}</div>`;
+    $$('.ct-it[data-oi]', box).forEach(b => {
+      b.onclick = () => {
+        const oi = orcItem(b.dataset.oi);
+        if (!f.frente.value) { f.frente.value = oi.frente_nome; }
+        add(null, oi); orPainel();
+      };
+    });
+  }
   // painel "serviços do contrato": mostra o que ainda falta programar e põe na frente com um toque
   const ctPainel = () => {
     const box = $('#ctItens', f), c = (D.contratos || []).find(x => x.id === f.ctr.value);
@@ -304,15 +335,17 @@ function mEtapa(e, pre) {
       <small>Toque para incluir na frente. A quantidade já vem com o que falta programar do contrato.</small>
       ${livres.length ? livres.map(i => `<button type="button" class="ct-it" data-ci="${esc(i.id)}"><span>${esc(i.codigo ? i.codigo + ' · ' : '')}${esc(i.servico)}</span><small>${nf(i.a_programar)} ${esc(i.unidade)} a programar · contratado ${nf(i.qtd)}</small>${ic('plus')}</button>`).join('') : '<small>Todos os serviços do contrato já estão nesta frente.</small>'}
       ${livres.length > 1 ? '<button type="button" class="btn sec peq" id="ctTodos">Incluir todos os que ainda têm saldo</button>' : ''}</div>`;
-    $$('.ct-it', box).forEach(b => { b.onclick = () => { add(c.itens.find(i => i.id === b.dataset.ci)); ctPainel(); }; });
+    $$('.ct-it', box).forEach(b => { b.onclick = () => { add(c.itens.find(i => i.id === b.dataset.ci)); ctPainel(); orPainel(); }; });
     const t = $('#ctTodos', box);
-    if (t) t.onclick = () => { livres.filter(i => i.a_programar > 0).forEach(i => add(i)); ctPainel(); };
+    if (t) t.onclick = () => { livres.filter(i => i.a_programar > 0).forEach(i => add(i)); ctPainel(); orPainel(); };
   };
   const ctSemVazio = () => { const v = $('#srvs', f).children; if (v.length === 1 && !$('[name=s]', v[0]).value && !$('[name=q]', v[0]).value) v[0].remove(); };
   f.empreiteiro.onchange = () => { f.ctr.innerHTML = ctrOpcoes(f.empreiteiro.value, '', e); ctPainel(); };
-  f.ctr.onchange = () => { $$('.srv[data-ci]', f).forEach(d => d.remove()); ctPainel(); };
+  f.ctr.onchange = () => { $$('.srv[data-ci]', f).forEach(d => d.remove()); ctPainel(); orPainel(); };
+  f.frente.onchange = () => orPainel();
   add();
   ctPainel();
+  orPainel();
   $('#addSrv', f).onclick = () => add().focus();
   f.ini.onchange = () => { if (!f.fim.value || f.fim.value < f.ini.value) f.fim.value = f.ini.value; };
 }
