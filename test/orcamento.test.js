@@ -233,13 +233,62 @@ test('importação da obra AVA Residence: frentes, serviços e materiais das pla
   assert.equal(tubo.qtd, 3431.4); assert.equal(tubo.unit_material, 582.96); assert.equal(tubo.unit_mo, 0);
   assert.equal(dren.itens.find(i => i.codigo === '1.3.4').unit_mo, 39.75);              // assentamento → mão de obra
   const terra = frente(d, 'Terraplenagem').itens[0];
-  assert.equal(terra.unit_material, 0); assert.match(terra.obs, /Proposta: R\$ 2,65\/m² \(material \+ MO juntos\)/);
+  assert.equal(terra.unit_material, 0); assert.equal(terra.unit_venda, 2.65); assert.match(terra.obs, /^Fonte: Estimativa SIZE/);
+  assert.equal(tubo.unit_venda, 582.96);
+  // valores da R02: preço cobrado e custos por frente; terceiros (estacas, elétrica) fora
+  const E = d.resumo.emp;
+  assert.equal(Math.round(E.receita), 101012763); assert.equal(Math.round(E.custo_direto), 66272839);
+  assert.equal(Math.round(frente(d, 'Contenções em gabião').resumo.emp.preco), 21902438);
+  assert.equal(Math.round(E.lucro_orcado), 18086550); assert.equal(E.margem_orcada, 17.91);
+  assert.equal(E.custo_fim, E.custo_direto); assert.equal(E.pct, 0);                       // nada executado nem gasto ainda
+  // valor mudado à mão não é apagado ao rodar de novo
+  const fr = frente(d, 'Terraplenagem').codigo;
+  t.raiz('orc_frente_salvar', { obra: ava.id, codigo: fr, nome: 'Terraplenagem', preco: '30.000.000' });
   assert.equal(dren.materiais.find(m => /DN400, junta/.test(m.descricao)).necessario, r2(3431.4 * 1.15));   // tubo ligado ao serviço com a margem
   assert.ok(frente(d, 'Esgoto sanitário').materiais.some(m => /DE125/.test(m.descricao) && m.necessario === 474.95));
   assert.equal(t.raiz('obra_dados', { obra: ava.id }).materiais.filter(m => m.categoria === 'FoFo').length > 10, true);
   // de novo: nada duplica
-  assert.match(t.G.rodar('criarObraAvaResidence()'), /já existia · 0 serviços e 0 materiais/);
-  assert.equal(t.raiz('orc_dados', { obra: ava.id }).resumo.servicos, 70);
+  assert.match(t.G.rodar('criarObraAvaResidence()'), /já existia · 0 serviços e 0 materiais incluídos no orçamento · valores da R02 em 0 frentes/);
+  const d2 = t.raiz('orc_dados', { obra: ava.id });
+  assert.equal(d2.resumo.servicos, 70);
+  assert.equal(frente(d2, 'Terraplenagem').resumo.emp.preco, 30000000);
+});
+
+test('empreendimento: receita, avanço físico, custo real, estimativa no fim e lucro projetado', () => {
+  const t = preparar();
+  const { rede, pv, tubo, fr } = orcar(t);
+  // preço de venda dos serviços e valores da frente (preço cobrado e custos orçados)
+  t.adm('orc_itens_salvar', { frente: fr, itens: [
+    { id: rede.id, codigo: '1.1', servico: rede.servico, unidade: 'm', qtd: 2500, unit_material: 45, unit_mo: 18, unit_venda: 100 },
+    { id: pv.id, codigo: '1.2', servico: pv.servico, unidade: 'un', qtd: 30, unit_material: 1200, unit_mo: 650, unit_venda: 2500 }] });
+  t.adm('orc_frente_salvar', { codigo: fr, nome: 'Rede de Esgoto', preco: '325.000', custo_direto: 200000, adm_local: 12000, indiretas: 18000, tributos: '21.612,50' });
+  let E = frente(t.adm('orc_dados'), 'Rede de Esgoto').resumo.emp;
+  assert.equal(E.lucro_orcado, 325000 - 200000 - 12000 - 18000 - 21612.5); assert.equal(E.custo_fim, 200000);
+  // executa 500 m de rede: avanço pelo preço de venda = 500×100 / (2500×100 + 30×2500) = 15,38 %
+  const e = etapa(t, 'Esgoto · Rua A', rede.id, 600);
+  const item = t.eng('exec_dados').etapas.find(x => x.codigo === e.codigo).itens[0];
+  t.eng('exec_diario_salvar', { data: dia(0), lancamentos: [{ item_id: item.id, qtd: 500 }] });
+  // compra de R$ 4.000 de material para a frente (pedido aprovado)
+  comprar(t, 'Rede de Esgoto', [{ descricao: 'Tubo PVC esgoto DN 150', material_cod: tubo, qtd: 100, unidade: 'm' }]);
+  const d = t.adm('orc_dados');
+  E = frente(d, 'Rede de Esgoto').resumo.emp;
+  const pct = Math.round(500 * 100 / (2500 * 100 + 30 * 2500) * 10000) / 100;
+  assert.equal(frente(d, 'Rede de Esgoto').resumo.pct_exec, pct);
+  assert.equal(E.receita_exec, Math.round(325000 * pct / 100 * 100) / 100);
+  assert.equal(E.custo_real, 4000); assert.equal(E.custo_material, 4000); assert.equal(E.custo_mo, 0);
+  // gasto (4.000) abaixo do previsto para o avanço: o executado conta pelo orçado até a medição ser lançada → estimativa = orçado
+  assert.equal(E.custo_fim, 200000); assert.equal(E.desvio, 0);
+  // gasto acima do previsto para o avanço: a estimativa sobe e o lucro projetado cai
+  comprar(t, 'Rede de Esgoto', [{ descricao: 'Tubo PVC esgoto DN 150', material_cod: tubo, qtd: 100, unidade: 'm' }]);
+  for (let k = 0; k < 8; k++) comprar(t, 'Rede de Esgoto', [{ descricao: 'Tubo PVC esgoto DN 150', material_cod: tubo, qtd: 10, unidade: 'm' }]);
+  E = frente(t.adm('orc_dados'), 'Rede de Esgoto').resumo.emp;
+  assert.equal(E.custo_real, 40000);
+  assert.equal(E.custo_fim, Math.round((40000 + 200000 * (1 - pct / 100)) * 100) / 100);
+  assert.ok(E.desvio > 0); assert.ok(E.lucro_proj < E.lucro_orcado);
+  assert.equal(E.lucro_proj, Math.round((325000 - 12000 - 18000 - 21612.5 - E.custo_fim) * 100) / 100);
+  // o total do empreendimento soma as frentes
+  assert.equal(d.resumo.emp.receita, 325000); assert.equal(d.resumo.emp.pct, pct);
+  assert.throws(() => t.adm('orc_frente_salvar', { codigo: fr, nome: 'Rede de Esgoto', preco: -1 }), /negativo/);
 });
 const r2 = x => Math.round(x * 100) / 100;
 

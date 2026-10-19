@@ -145,6 +145,8 @@ console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diari
   est('estoque_movimentar', { tipo: 'Saída', material_cod: tubo, qtd: 80, frente: 'Rede de Esgoto' });
   console.log('Orçamento da obra: frentes', esg, agua, '· frente de execução', ex, '· pedido', pt);
 }
+// obra AVA Residence importada das planilhas (orçamento R02, proposta e quantitativos)
+console.log(G.rodar('criarObraAvaResidence()'));
 
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');
 console.log('Portal (cotação PB-0002):', local(com('forn_link', { fornecedor: 'F003', numeros: [p2] }).url));

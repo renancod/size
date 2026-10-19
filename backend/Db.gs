@@ -24,7 +24,8 @@ const SCHEMA_OBRA = {
   Orcamentos: ['id', 'pedido', 'fornecedor_cod', 'fornecedor', 'valor', 'prazo_entrega', 'condicao', 'arquivo_id', 'arquivo_url', 'origem', 'recebido_em', 'registrado_por'],
   Fornecedores: ['codigo', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'materiais', 'condicao', 'obs', 'ativo'],
   Materiais: ['codigo', 'descricao', 'unidade', 'categoria', 'estoque_min', 'ativo'],
-  Frentes: ['codigo', 'nome', 'descricao', 'ativa'],
+  // frente geral; os valores (preço cobrado do cliente e custos orçados) são do orçamento do empreendimento
+  Frentes: ['codigo', 'nome', 'descricao', 'ativa', 'preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos'],
   Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs', 'frente'],
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],
@@ -55,7 +56,7 @@ const SCHEMA_OBRA = {
   ContratoAditivos: ['id', 'contrato', 'numero', 'data', 'tipo', 'descricao', 'valor', 'nova_vigencia', 'criado_por', 'criado_em'],
   MedicaoItens: ['medicao', 'item_id', 'etapa', 'etapa_nome', 'servico', 'unidade', 'qtd', 'concluido_em', 'complemento', 'contrato', 'fvs', 'rdos_json', 'dias_json'],
   // Orçamento da obra: o que cada frente geral (aba Frentes) precisa executar, com preço de referência de material e de mão de obra
-  OrcItens: ['id', 'frente', 'ordem', 'codigo', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd', 'unit_material', 'unit_mo', 'obs', 'ativo', 'criado_em', 'criado_por', 'atualizado_em'],
+  OrcItens: ['id', 'frente', 'ordem', 'codigo', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd', 'unit_material', 'unit_mo', 'obs', 'ativo', 'criado_em', 'criado_por', 'atualizado_em', 'unit_venda'],
   // materiais do orçamento: por serviço (coef = quanto gasta por unidade do serviço) ou direto na frente (qtd total)
   OrcMateriais: ['id', 'frente', 'orc_item', 'material_cod', 'descricao', 'unidade', 'coef', 'qtd', 'obs', 'ativo']
 };

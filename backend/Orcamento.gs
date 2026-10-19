@@ -63,6 +63,21 @@ function orcCalc_(ctx, calc) {
     x.contratos.push({ id: c.id, rotulo: ctrRotulo_(c), empreiteiro: c.empreiteiro_nome, qtd: num_(ci.qtd), unitario: num_(ci.unitario) });
   });
 
+  // mão de obra realizada: medições aprovadas ou pagas dos empreiteiros, pelo preço do contrato, na frente geral do serviço
+  const moReal = {}, eiPor = {}, etPor = {}, orcPor = {}, ciPor = {}, stMed = {};
+  obraTab_(ctx, 'EtapaItens').all().forEach(i => { eiPor[i.id] = i; });
+  obraTab_(ctx, 'Etapas').all().forEach(e => { etPor[e.codigo] = e; });
+  itens.forEach(i => { orcPor[i.id] = i; });
+  obraTab_(ctx, 'ContratoItens').all().forEach(i => { ciPor[i.id] = i; });
+  obraTab_(ctx, 'Medicoes').all().forEach(m => { stMed[m.id] = m.status; });
+  obraTab_(ctx, 'MedicaoItens').all().forEach(mi => {
+    if ([MED_ST_.ok, MED_ST_.paga].indexOf(stMed[mi.medicao]) < 0) return;
+    const ei = eiPor[mi.item_id], ci = ei && ciPor[ei.contrato_item];
+    if (!ci) return;
+    const fr = (orcPor[ei.orc_item] && String(orcPor[ei.orc_item].frente)) || codDe((etPor[ei.etapa] || {}).frente);
+    if (fr) moReal[fr] = (moReal[fr] || 0) + num_(mi.qtd) * num_(ci.unitario);
+  });
+
   // compras: pedidos da frente (o recebimento pode apontar outra frente)
   const peds = obraTab_(ctx, 'Pedidos').all(), pedPor = {};
   peds.forEach(p => { pedPor[p.numero] = p; });
@@ -99,10 +114,11 @@ function orcCalc_(ctx, calc) {
   const out = frentes.map(f => {
     const cod = String(f.codigo), alertas = [];
     const its = itens.filter(i => String(i.frente) === cod).sort((a, b) => num_(a.ordem) - num_(b.ordem)).map(i => {
-      const q = num_(i.qtd), um = num_(i.unit_material), uo = num_(i.unit_mo), e = exe[i.id] || { programado: 0, executado: 0, frentes: [] }, c = ctr[i.id] || { qtd: 0, valor: 0, contratos: [] };
+      const q = num_(i.qtd), um = num_(i.unit_material), uo = num_(i.unit_mo), uv = num_(i.unit_venda), e = exe[i.id] || { programado: 0, executado: 0, frentes: [] }, c = ctr[i.id] || { qtd: 0, valor: 0, contratos: [] };
       const r = {
         id: i.id, frente: cod, ordem: num_(i.ordem), codigo: String(i.codigo || ''), grupo: i.grupo || '', servico_cod: String(i.servico_cod || ''), servico: i.servico, unidade: i.unidade, obs: i.obs || '',
         qtd: q, unit_material: um, unit_mo: uo, unit_total: r2_(um + uo), v_material: r2_(q * um), v_mo: r2_(q * uo), v_total: r2_(q * (um + uo)),
+        unit_venda: uv, v_venda: r2_(q * uv), v_venda_exec: r2_(Math.min(e.executado, q) * uv),
         programado: r2_(e.programado), executado: r2_(e.executado), a_distribuir: r2_(q - e.programado), saldo_exec: r2_(Math.max(0, q - e.executado)),
         pct_exec: q ? r2_(e.executado / q * 100) : 0, pct_prog: q ? r2_(e.programado / q * 100) : 0, v_exec: r2_(Math.min(e.executado, q) * (um + uo)),
         contratado: r2_(c.qtd), contratado_valor: r2_(c.valor), a_contratar: r2_(q - c.qtd), contratos: c.contratos, frentes_exec: e.frentes,
@@ -154,26 +170,50 @@ function orcCalc_(ctx, calc) {
 
     const vm = r2_(its.reduce((t, i) => t + i.v_material, 0)), vo = r2_(its.reduce((t, i) => t + i.v_mo, 0)), vt = r2_(vm + vo), ve = r2_(its.reduce((t, i) => t + i.v_exec, 0));
     const pctQtd = its.length ? r2_(its.reduce((t, i) => t + Math.min(100, i.pct_exec), 0) / its.length) : 0;
+    // avanço físico: ponderado pelo preço de venda dos serviços; sem ele, pelo material + MO; sem valores, média dos serviços
+    const vv = r2_(its.reduce((t, i) => t + i.v_venda, 0)), vve = r2_(its.reduce((t, i) => t + i.v_venda_exec, 0));
+    const pct = vv > 0 ? r2_(vve / vv * 100) : vt > 0 ? r2_(ve / vt * 100) : pctQtd;
+    // empreendimento: preço cobrado e custos orçados da frente; custo real = material comprado + mão de obra medida
+    const preco = num_(f.preco), cd = num_(f.custo_direto), adm = num_(f.adm_local), ind = num_(f.indiretas), trib = num_(f.tributos);
+    const mat = r2_(valorFrente[cod] || 0), mo = r2_(moReal[cod] || 0), real = r2_(mat + mo), receita = preco || vv;
+    // estimativa no fim: o executado vale o gasto real ou, enquanto o gasto não foi lançado (medição pendente), o custo orçado dele; + o custo orçado do que falta
+    const fim = r2_(Math.max(real, cd * pct / 100) + cd * Math.max(0, 1 - pct / 100));
+    const emp = {
+      tem: preco > 0 || cd > 0, preco: preco, receita: r2_(receita), custo_direto: cd, adm_local: adm, indiretas: ind, tributos: trib,
+      lucro_orcado: r2_(receita - cd - adm - ind - trib), margem_orcada: receita ? r2_((receita - cd - adm - ind - trib) / receita * 100) : 0,
+      receita_exec: r2_(receita * pct / 100), custo_previsto: r2_(cd * pct / 100), custo_real: real, custo_material: mat, custo_mo: mo,
+      custo_fim: fim, desvio: r2_(fim - cd), lucro_proj: r2_(receita - adm - ind - trib - fim), margem_proj: receita ? r2_((receita - adm - ind - trib - fim) / receita * 100) : 0,
+      falta_executar: r2_(receita * Math.max(0, 1 - pct / 100))
+    };
+    if (cd > 0 && real > emp.custo_previsto * 1.1 + 1000) alertas.push({ tipo: 'custo', texto: 'Gasto de ' + brl_(real) + ' para ' + nfmt_(pct) + '% executado (o orçado para esse avanço é ' + brl_(emp.custo_previsto) + '). Pode ser compra antecipada; confira.' });
     const res = {
-      v_material: vm, v_mo: vo, v_total: vt, v_exec: ve,
-      pct_exec: vt > 0 ? r2_(ve / vt * 100) : pctQtd,            // com valores: ponderado pelo R$; sem valores: média dos serviços
+      v_material: vm, v_mo: vo, v_total: vt, v_exec: ve, v_venda: vv,
+      pct_exec: pct,
       mo_contratado: r2_(its.reduce((t, i) => t + i.contratado_valor, 0)), mo_orcado_contratado: r2_(its.reduce((t, i) => t + i.contratado * i.unit_mo, 0)),
-      material_comprado: r2_(valorFrente[cod] || 0),
-      servicos: its.length, materiais: materiais.filter(m => m.orcado).length, falta_comprar: materiais.filter(m => m.situacao === 'comprar' || m.situacao === 'parcial').length
+      material_comprado: mat,
+      servicos: its.length, materiais: materiais.filter(m => m.orcado).length, falta_comprar: materiais.filter(m => m.situacao === 'comprar' || m.situacao === 'parcial').length,
+      emp: emp
     };
     if (!obraAtiva_(ctx)) { alertas.length = 0; res.falta_comprar = 0; }       // obra desativada: sem pendência de material nem alerta
     alertas.forEach(a => alertasGeral.push(Object.assign({ frente: cod, frente_nome: f.nome }, a)));
     return { codigo: cod, nome: f.nome, descricao: f.descricao || '', ativa: !/^n/i.test(String(f.ativa)), itens: its, materiais: materiais, resumo: res, alertas: alertas };
   });
-  const soma = k => r2_(out.reduce((t, f) => t + num_(f.resumo[k]), 0));
+  const soma = k => r2_(out.reduce((t, f) => t + num_(f.resumo[k]), 0)), somaE = k => r2_(out.reduce((t, f) => t + num_(f.resumo.emp[k]), 0));
   const vt = soma('v_total'), ve = soma('v_exec');
   const comItens = out.filter(f => f.itens.length);
+  // empreendimento: soma das frentes; o avanço geral é a receita executada sobre a receita total
+  const E = {};
+  ['receita', 'custo_direto', 'adm_local', 'indiretas', 'tributos', 'lucro_orcado', 'receita_exec', 'custo_previsto', 'custo_real', 'custo_material', 'custo_mo', 'custo_fim', 'desvio', 'lucro_proj', 'falta_executar'].forEach(k => { E[k] = somaE(k); });
+  E.tem = out.some(f => f.resumo.emp.tem);
+  E.pct = E.receita ? r2_(E.receita_exec / E.receita * 100) : 0;
+  E.margem_orcada = E.receita ? r2_(E.lucro_orcado / E.receita * 100) : 0;
+  E.margem_proj = E.receita ? r2_(E.lucro_proj / E.receita * 100) : 0;
   return {
     frentes: out, alertas: alertasGeral,
     resumo: {
       v_material: soma('v_material'), v_mo: soma('v_mo'), v_total: vt, v_exec: ve, mo_contratado: soma('mo_contratado'), material_comprado: soma('material_comprado'),
-      pct_exec: vt > 0 ? r2_(ve / vt * 100) : comItens.length ? r2_(comItens.reduce((t, f) => t + f.resumo.pct_exec, 0) / comItens.length) : 0,
-      frentes: comItens.length, servicos: soma('servicos'), falta_comprar: soma('falta_comprar')
+      pct_exec: E.receita ? E.pct : vt > 0 ? r2_(ve / vt * 100) : comItens.length ? r2_(comItens.reduce((t, f) => t + f.resumo.pct_exec, 0) / comItens.length) : 0,
+      frentes: comItens.length, servicos: soma('servicos'), falta_comprar: soma('falta_comprar'), emp: E
     }
   };
 }
@@ -217,6 +257,13 @@ function orcFrenteSalvar_(q, ctx) {
   if (nova) f = { codigo: T.proxCodigo('codigo', 'FR', 2), ativa: 'Sim' };
   f.nome = nome; f.descricao = String(q.descricao || '').trim().slice(0, 300);
   if (q.ativa !== undefined) f.ativa = q.ativa ? 'Sim' : 'Não';
+  // valores do empreendimento: preço cobrado do cliente e custos orçados (vazio = sem valor)
+  ['preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos'].forEach(k => {
+    if (q[k] === undefined) return;
+    const v = q[k] === '' || q[k] == null ? '' : orcNum_(q[k]);
+    if (v !== '' && v < 0) throw new Error('Valor negativo em ' + nome + '.');
+    f[k] = v;
+  });
   if (nova) T.insert(f); else T.update(f);
   // pedidos, estoque e frentes de execução guardam o nome: acompanham a troca de nome
   if (!nova && norm_(antes) !== norm_(nome)) {
@@ -251,6 +298,11 @@ function orcItensSalvar_(q, ctx) {
       codigo: String(x.codigo || '').trim().slice(0, 30), grupo: String(x.grupo || (sc ? sc.grupo : '')).trim().slice(0, 120), servico_cod: sc ? sc.codigo : '', servico: servico.slice(0, 200),
       unidade: unidade.slice(0, 20), qtd: qtd, unit_material: um, unit_mo: uo, obs: String(x.obs || '').trim().slice(0, 300), atualizado_em: new Date()
     };
+    if (x.unit_venda !== undefined) {                              // preço de venda (o que o cliente paga por unidade)
+      const v = orcNum_(x.unit_venda);
+      if (v < 0) throw new Error('Valor negativo em ' + servico + '.');
+      reg.unit_venda = x.unit_venda === '' ? '' : v;
+    }
     if (x.id) {
       const ex = atuais.find(i => String(i.id) === String(x.id));
       if (!ex) throw new Error('Serviço ' + servico + ' não pertence a esta frente.');

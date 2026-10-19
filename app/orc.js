@@ -55,21 +55,49 @@ async function vObra() {
   view(comEtapas(orGrupos(D, 'painel'), `<div class="cab"><h2>Painel da obra</h2><span class="contagem">${esc(D.obra.nome)}</span></div>${obraInativa() ? AVISO_INATIVA : ''}
     ${!com.length ? `<div class="card vazio"><p><b>Comece pelo orçamento da obra.</b><br>Para cada frente geral (ex: Rede de Esgoto), cadastre o que precisa executar (ex: 2.500 m de rede), o valor de material e o de mão de obra, e os materiais. As frentes de execução passam a consumir esse saldo e o painel mostra o que falta comprar.</p>
       ${orGere() ? `<div class="acoes"><a class="btn" href="#/obra/orcamento">${ic('plus')} Montar o orçamento</a></div>` : ''}</div>` : `
+    ${R.emp.tem ? orEmp(R.emp, 'Empreendimento') + orTabEmp(com) : ''}
     <div class="ct-res or-res">
-      <div class="card"><small>Orçado (material + mão de obra)</small><b>${orM(R.v_total)}</b><small>material ${orM(R.v_material)} · MO ${orM(R.v_mo)}</small></div>
-      <div class="card"><small>Executado</small><b>${pct(R.pct_exec)}</b>${orBar(R.pct_exec)}<small>${orM(R.v_exec)} do orçado</small></div>
-      <div class="card"><small>Mão de obra contratada</small><b>${orM(R.mo_contratado)}</b>${orBar(R.v_mo ? R.mo_contratado / R.v_mo * 100 : 0, 'med')}<small>de ${orM(R.v_mo)} orçados</small></div>
-      <div class="card"><small>Material comprado</small><b>${orM(R.material_comprado)}</b>${orBar(R.v_material ? R.material_comprado / R.v_material * 100 : 0, 'pg')}<small>de ${orM(R.v_material)} orçados</small></div>
+      ${R.emp.tem ? '' : `<div class="card"><small>Orçado (material + mão de obra)</small><b>${orM(R.v_total)}</b><small>material ${orM(R.v_material)} · MO ${orM(R.v_mo)}</small></div>
+      <div class="card"><small>Executado</small><b>${pct(R.pct_exec)}</b>${orBar(R.pct_exec)}<small>${orM(R.v_exec)} do orçado</small></div>`}
+      <div class="card"><small>Mão de obra contratada</small><b>${orM(R.mo_contratado)}</b>${R.v_mo ? `${orBar(R.mo_contratado / R.v_mo * 100, 'med')}<small>de ${orM(R.v_mo)} de MO de referência</small>` : '<small>contratos vigentes ligados ao orçamento</small>'}</div>
+      <div class="card"><small>Material comprado</small><b>${orM(R.material_comprado)}</b>${R.v_material ? `${orBar(R.material_comprado / R.v_material * 100, 'pg')}<small>de ${orM(R.v_material)} de material de referência</small>` : '<small>pedidos aprovados das frentes</small>'}</div>
       <div class="card ${R.falta_comprar ? 'or-quente' : ''}"><small>Materiais a comprar</small><b>${R.falta_comprar}</b><small>${R.falta_comprar ? 'veja abaixo' : 'nada pendente'}</small></div></div>
     ${al.length ? `<div class="card"><h3>${ic('alert')} O que precisa de atenção <small>(${al.length})</small></h3>${al.slice(0, 20).map(a => `<a class="alerta or-al or-al-${a.tipo}" href="#/obra/frente/${enc(a.frente)}">${ic(OR_AL[a.tipo] || 'alert')}<span><b>${esc(a.frente_nome)}</b><small>${esc(a.texto)}</small></span></a>`).join('')}${al.length > 20 ? `<small>+${al.length - 20} na tela de cada frente.</small>` : ''}</div>` : ''}
     <div class="exec-lista">${com.map(orCartao).join('')}</div>`}`));
   orLigar(D);
+  $$('tr[data-ir]').forEach(tr => { tr.onclick = () => { location.hash = '#/obra/frente/' + enc(tr.dataset.ir); }; });
+}
+/* orçamento do empreendimento (preço cobrado × custos) e as estimativas pelo andamento */
+const orSinal = (v, bom) => `<b class="${v > 0.005 ? (bom ? 'ct-ok' : 'atrasado') : v < -0.005 ? (bom ? 'atrasado' : 'ct-ok') : ''}">${v > 0.005 ? '+' : ''}${orM(v)}</b>`;
+function orEmp(E, rot) {
+  const outros = orR2(E.adm_local + E.indiretas + E.tributos), pctCusto = E.custo_previsto ? E.custo_real / E.custo_previsto * 100 : 0;
+  return `<div class="card or-emp"><h3>${ic('building')} ${esc(rot)} <small>orçamento e estimativa pelo andamento</small></h3>
+    <div class="or-emp-g">
+      <div><small>Receita contratada</small><b>${orM(E.receita)}</b><small>preço cobrado do cliente</small></div>
+      <div><small>Custo direto orçado</small><b>${orM(E.custo_direto)}</b><small>+ ${orM(outros)} adm, indiretas e tributos</small></div>
+      <div><small>Lucro orçado</small><b>${orM(E.lucro_orcado)}</b><small>margem ${pct(E.margem_orcada)}</small></div>
+    </div>
+    <div class="or-emp-g or-emp-and">
+      <div><small>Avanço físico</small><b>${pct(E.pct)}</b>${orBar(E.pct)}<small>${orM(E.receita_exec)} de receita executada · falta ${orM(E.falta_executar)}</small></div>
+      <div><small>Gasto até agora</small><b>${orM(E.custo_real)}</b>${orBar(Math.min(100, pctCusto), pctCusto > 110 ? 'or-ruim' : 'pg')}<small>material ${orM(E.custo_material)} · mão de obra ${orM(E.custo_mo)} · previsto para o avanço ${orM(E.custo_previsto)}</small></div>
+      <div><small>Custo estimado no fim</small><b>${orM(E.custo_fim)}</b><small>${orSinal(E.desvio, false)} sobre o orçado</small></div>
+      <div><small>Lucro projetado</small><b class="${E.lucro_proj < E.lucro_orcado - 0.005 ? 'atrasado' : 'ct-ok'}">${orM(E.lucro_proj)}</b><small>margem ${pct(E.margem_proj)} (orçada ${pct(E.margem_orcada)})</small></div>
+    </div>
+    <small class="or-nota">Gasto = material dos pedidos aprovados + mão de obra das medições aprovadas/pagas. Estimativa no fim = o executado (pelo gasto real, ou pelo custo orçado enquanto a medição não foi lançada) + o custo orçado do que falta. A estimativa só sobe quando o gasto passa do previsto para o avanço; compra antecipada faz o gasto andar na frente.</small></div>`;
+}
+const orR2 = n => Math.round((Number(n) || 0) * 100) / 100;
+function orTabEmp(frs) {
+  const l = frs.filter(f => f.resumo.emp.tem);
+  if (!l.length) return '';
+  return `<div class="card"><h3>Por frente</h3><div class="ct-rol"><table class="tab ct-tab or-tab"><thead><tr><th>Frente</th><th class="n">Receita</th><th class="n">Custo orçado</th><th class="n">Avanço</th><th class="n">Receita executada</th><th class="n">Gasto</th><th class="n">Custo no fim</th><th class="n">Desvio</th><th class="n">Lucro projetado</th></tr></thead><tbody>
+    ${l.map(f => { const E = f.resumo.emp; return `<tr class="click" data-ir="${esc(f.codigo)}"><td><b>${esc(f.nome)}</b>${orBar(E.receita ? E.receita_exec / E.receita * 100 : 0)}</td><td class="n">${orM(E.receita)}</td><td class="n">${orM(E.custo_direto)}</td><td class="n">${pct(f.resumo.pct_exec)}</td><td class="n">${orM(E.receita_exec)}</td><td class="n">${orM(E.custo_real)}</td><td class="n">${orM(E.custo_fim)}</td><td class="n">${orSinal(E.desvio, false)}</td><td class="n">${orM(E.lucro_proj)}<br><small>${pct(E.margem_proj)}</small></td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
 }
 function orCartao(f) {
   const r = f.resumo, falta = obraInativa() ? [] : f.materiais.filter(m => m.situacao === 'comprar' || m.situacao === 'parcial');
   return `<a class="card etapa-card or-card" href="#/obra/frente/${enc(f.codigo)}">
     <div class="l1"><b>${esc(f.nome)}</b>${falta.length ? `<span class="badge fvb fvb-dev">${plural(falta.length, 'material a comprar', 'materiais a comprar')}</span>` : ''}<span class="dir">${pct(r.pct_exec)}</span></div>
-    <small>${r.v_total ? 'Orçado ' + orM(r.v_total) + ' · ' : ''}${plural(r.servicos, 'serviço', 'serviços')}${r.mo_contratado ? ' · MO contratada ' + orM(r.mo_contratado) : ''}</small>
+    <small>${r.emp.tem ? 'Receita ' + orM(r.emp.receita) + ' · ' : r.v_total ? 'Orçado ' + orM(r.v_total) + ' · ' : ''}${plural(r.servicos, 'serviço', 'serviços')}${r.mo_contratado ? ' · MO contratada ' + orM(r.mo_contratado) : ''}</small>
     ${orBar(r.pct_exec)}
     <div class="its">${f.itens.slice(0, 5).map(i => `<div class="it"><span class="n">${esc(i.servico)}</span>${orBar(i.pct_exec)}
       <small>${nf(i.executado)} / ${nf(i.qtd)} ${esc(i.unidade)} executado · ${i.a_distribuir < 0 ? `<b class="atrasado">${nf(-i.a_distribuir)} acima do orçado em frentes</b>` : nf(i.a_distribuir) + ' a distribuir'}</small></div>`).join('')}
@@ -90,20 +118,22 @@ async function vObraFrente(cod) {
     <div class="fv-hero fvs-exec"><div><span class="rel-sel">${ic('grid')} Frente geral · ${esc(f.codigo)}</span><h2>${esc(f.nome)}</h2><p>${esc(f.descricao || 'Tudo o que esta frente precisa executar, quanto já foi para frentes de execução, o executado e os materiais.')}</p></div>
       <div class="fv-hero-d"><b class="or-pct">${pct(r.pct_exec)}</b><small>executado${r.v_total ? ' (pelo valor)' : ''}</small></div></div>
     ${f.alertas.length ? `<div class="card"><h3>${ic('alert')} Atenção</h3>${f.alertas.map(a => `<div class="alerta or-al or-al-${a.tipo}">${ic(OR_AL[a.tipo] || 'alert')}<span><small>${esc(a.texto)}</small></span></div>`).join('')}</div>` : ''}
+    ${r.emp.tem ? orEmp(r.emp, 'Esta frente') : ''}
     <div class="ct-res or-res">
-      <div class="card"><small>Orçado</small><b>${orM(r.v_total)}</b><small>material ${orM(r.v_material)} · MO ${orM(r.v_mo)}</small></div>
-      <div class="card"><small>Executado</small><b>${orM(r.v_exec)}</b>${orBar(r.pct_exec)}<small>${pct(r.pct_exec)} do orçado</small></div>
+      ${r.emp.tem ? '' : `<div class="card"><small>Orçado</small><b>${orM(r.v_total)}</b><small>material ${orM(r.v_material)} · MO ${orM(r.v_mo)}</small></div>
+      <div class="card"><small>Executado</small><b>${orM(r.v_exec)}</b>${orBar(r.pct_exec)}<small>${pct(r.pct_exec)} do orçado</small></div>`}
+      ${r.v_venda && r.emp.preco && Math.abs(r.v_venda - r.emp.preco) > 1 ? `<div class="card"><small>Soma dos serviços (preço de venda)</small><b>${orM(r.v_venda)}</b><small>a receita da frente é ${orM(r.emp.preco)} (o avanço usa os serviços como peso)</small></div>` : ''}
       <div class="card"><small>Mão de obra contratada</small><b>${orM(r.mo_contratado)}</b><small>${r.mo_orcado_contratado ? (r.mo_contratado <= r.mo_orcado_contratado ? 'abaixo' : 'acima') + ' do orçado em ' + orM(Math.abs(r.mo_contratado - r.mo_orcado_contratado)) : 'nenhum contrato ligado ainda'}</small></div>
       <div class="card"><small>Material comprado</small><b>${orM(r.material_comprado)}</b><small>pedidos aprovados desta frente</small></div></div>
     <div class="card"><div class="or-h"><h3>Serviços do orçamento</h3>${ger ? `<span class="acoes"><button class="btn sec peq" id="orAdd">${ic('plus')} Incluir serviços</button><button class="btn sec peq" id="orColar">${ic('file')} Colar do Excel</button></span>` : ''}</div>
-      ${f.itens.length ? `<div class="ct-rol"><table class="tab ct-tab or-tab"><thead><tr><th>Serviço</th><th>Un.</th><th class="n">Orçado</th><th class="n">Em frentes</th><th class="n">Executado</th><th class="n">A distribuir</th><th class="n">Contratado</th><th class="n">R$ material/un</th><th class="n">R$ MO/un</th><th class="n">R$ total</th></tr></thead><tbody>
-      ${grupos.map(g => `${grupos.length > 1 || g !== 'Serviços' ? `<tr class="ct-g"><td colspan="10">${esc(g)}</td></tr>` : ''}${porG[g].map(i => `<tr class="${ger ? 'click' : ''} ${i.a_distribuir < -0.0001 || i.executado > i.qtd + 0.0001 ? 'ct-acima' : ''}" data-oi="${esc(i.id)}">
+      ${f.itens.length ? `<div class="ct-rol"><table class="tab ct-tab or-tab"><thead><tr><th>Serviço</th><th>Un.</th><th class="n">Orçado</th><th class="n">Em frentes</th><th class="n">Executado</th><th class="n">A distribuir</th><th class="n">Contratado</th><th class="n">R$ venda/un</th><th class="n">R$ material/un</th><th class="n">R$ MO/un</th><th class="n">${r.v_venda ? 'R$ venda total' : 'R$ total'}</th></tr></thead><tbody>
+      ${grupos.map(g => `${grupos.length > 1 || g !== 'Serviços' ? `<tr class="ct-g"><td colspan="11">${esc(g)}</td></tr>` : ''}${porG[g].map(i => `<tr class="${ger ? 'click' : ''} ${i.a_distribuir < -0.0001 || i.executado > i.qtd + 0.0001 ? 'ct-acima' : ''}" data-oi="${esc(i.id)}">
         <td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}<b>${esc(i.servico)}</b><div class="ct-mini">${orBar(i.pct_exec)}<small>${pct(i.pct_exec)} executado · ${pct(i.pct_prog)} em frentes</small></div>
           ${i.frentes_exec.length ? `<small class="or-fx">${i.frentes_exec.map(x => `<a href="#/exec/etapa/${enc(x.etapa)}">${esc(x.nome)}</a> ${nf(x.executado)}/${nf(x.prevista)}`).join(' · ')}</small>` : ''}
           ${i.contratos.length ? `<small class="or-fx">${i.contratos.map(c => `Contrato ${esc(c.rotulo)} (${esc(c.empreiteiro)}): ${nf(c.qtd)} a ${orM(c.unitario)}`).join(' · ')}</small>` : ''}</td>
         <td>${esc(i.unidade)}</td><td class="n">${nf(i.qtd)}</td><td class="n">${nf(i.programado)}</td><td class="n">${nf(i.executado)}</td>
         <td class="n ${i.a_distribuir < 0 ? 'atrasado' : ''}">${nf(i.a_distribuir)}</td><td class="n">${nf(i.contratado)}</td>
-        <td class="n">${orM(i.unit_material)}</td><td class="n">${orM(i.unit_mo)}</td><td class="n"><b>${orM(i.v_total)}</b></td></tr>`).join('')}`).join('')}
+        <td class="n">${i.unit_venda ? orM(i.unit_venda) : '—'}</td><td class="n">${i.unit_material ? orM(i.unit_material) : '—'}</td><td class="n">${i.unit_mo ? orM(i.unit_mo) : '—'}</td><td class="n"><b>${orM(r.v_venda ? i.v_venda : i.v_total)}</b></td></tr>`).join('')}`).join('')}
       </tbody></table></div>` : `<p class="vazio">Nenhum serviço nesta frente.${ger ? ' Toque em <b>Incluir serviços</b> (ex: 2.500 m de rede coletora) ou cole a planilha do Excel.' : ''}</p>`}
       <div class="acoes" style="margin-top:10px">${can('exec_planejar') && f.itens.length ? `<button class="btn sec" id="orExec">${ic('plus')} Abrir frente de execução</button>` : ''}${can('contrato_gerir') && f.itens.length ? `<a class="btn sec" href="#/ctr/novo?orc=${enc(f.codigo)}">${ic('file')} Contrato com estes serviços</a>` : ''}</div></div>
     <div class="card"><div class="or-h"><h3>Materiais</h3>${ger ? `<span class="acoes"><button class="btn sec peq" id="orMat">${ic('plus')} Incluir material</button></span>` : ''}</div>
@@ -153,28 +183,69 @@ async function vObraFin() {
   titulo('Orçamento · valores');
   if (!orPode()) return orSemAcesso();
   const D = await carregarOrc(), ger = orGere(), fr = D.frentes.filter(f => f.itens.length), R = D.resumo;
-  view(comEtapas(orGrupos(D, 'fin'), `<div class="cab"><h2>Valores de referência</h2><span class="contagem">${esc(D.obra.nome)}</span></div>
-    <div class="ct-tot"><span>Material <b>${orM(R.v_material)}</b></span><span>Mão de obra <b>${orM(R.v_mo)}</b></span><span>Total <b>${orM(R.v_total)}</b></span><span>MO contratada <b>${orM(R.mo_contratado)}</b></span><span>Material comprado <b>${orM(R.material_comprado)}</b></span></div>
-    <small class="ct-dica">Preço por unidade do serviço. O valor de <b>mão de obra</b> já vem preenchido quando você monta o contrato do empreiteiro com estes serviços (pode ser mudado lá).</small>
+  const frV = D.frentes.filter(f => f.ativa || f.itens.length || f.resumo.emp.tem), CAMPOS = [['preco', 'Receita (preço cobrado)'], ['custo_direto', 'Custo direto'], ['adm_local', 'Adm. local'], ['indiretas', 'Indiretas'], ['tributos', 'Tributos']];
+  const vEmp = (f, k) => { const v = f.resumo.emp[k]; return v ? Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''; };
+  view(comEtapas(orGrupos(D, 'fin'), `<div class="cab"><h2>Valores</h2><span class="contagem">${esc(D.obra.nome)}</span></div>
+    <form class="card" id="orEmpF"><div class="or-h"><h3>${ic('building')} Empreendimento por frente <small>o que o cliente paga e o custo orçado</small></h3><span id="orEmpT"></span></div>
+      <div class="ct-rol"><table class="tab or-tab"><thead><tr><th>Frente</th>${CAMPOS.map(c => `<th class="n">${c[1]}</th>`).join('')}<th class="n">Lucro orçado</th></tr></thead><tbody>
+      ${frV.map(f => `<tr data-fr="${esc(f.codigo)}"><td><a href="#/obra/frente/${enc(f.codigo)}">${esc(f.nome)}</a>${f.resumo.v_venda ? `<br><small>serviços: ${orM(f.resumo.v_venda)}</small>` : ''}</td>
+        ${CAMPOS.map(([k]) => `<td class="n">${ger ? `<input name="${k}" inputmode="decimal" value="${esc(vEmp(f, k))}" class="or-in or-in-g">` : orM(f.resumo.emp[k])}</td>`).join('')}<td class="n" data-lu></td></tr>`).join('')}
+      <tr class="ct-g"><td>Total</td>${CAMPOS.map(([k]) => `<td class="n" data-tot="${k}"></td>`).join('')}<td class="n" data-tot="lucro"></td></tr></tbody></table></div>
+      ${ger ? `<div class="acoes" style="margin-top:8px"><button class="btn">${ic('check')} Salvar valores do empreendimento</button></div>` : ''}
+      <small class="or-nota">O <b>gasto</b> (pedidos aprovados + medições dos empreiteiros) é comparado com o custo direto; a receita executada sai do avanço físico dos serviços.</small></form>
+    <div class="ct-tot"><span>Venda (serviços) <b>${orM(fr.reduce((t, f) => t + f.resumo.v_venda, 0))}</b></span><span>Material ref. <b>${orM(R.v_material)}</b></span><span>Mão de obra ref. <b>${orM(R.v_mo)}</b></span><span>MO contratada <b>${orM(R.mo_contratado)}</b></span><span>Material comprado <b>${orM(R.material_comprado)}</b></span></div>
+    <small class="ct-dica">Por serviço: <b>R$ venda/un</b> é o preço da proposta (pesa no avanço físico). <b>R$ material</b> e <b>R$ MO</b> são o custo de referência; o de mão de obra já vem preenchido no contrato do empreiteiro (pode ser mudado lá).</small>
     ${fr.map(f => `<form class="card or-fin" data-fr="${esc(f.codigo)}"><div class="or-h"><h3><a href="#/obra/frente/${enc(f.codigo)}">${esc(f.nome)}</a></h3><span class="or-ft"></span></div>
-      <div class="ct-rol"><table class="tab or-tab"><thead><tr><th>Serviço</th><th>Un.</th><th class="n">Qtd</th><th class="n">R$ material/un</th><th class="n">R$ MO/un</th><th class="n">Material</th><th class="n">Mão de obra</th><th class="n">Total</th><th class="n">MO contratada</th></tr></thead><tbody>
+      <div class="ct-rol"><table class="tab or-tab"><thead><tr><th>Serviço</th><th>Un.</th><th class="n">Qtd</th><th class="n">R$ venda/un</th><th class="n">R$ material/un</th><th class="n">R$ MO/un</th><th class="n">Venda</th><th class="n">Material</th><th class="n">Mão de obra</th><th class="n">MO contratada</th></tr></thead><tbody>
       ${f.itens.map(i => `<tr data-oi="${esc(i.id)}"><td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}${esc(i.servico)}</td><td>${esc(i.unidade)}</td><td class="n">${nf(i.qtd)}</td>
+        <td class="n">${ger ? `<input name="uv" inputmode="decimal" value="${esc(orV(i.unit_venda || ''))}" class="or-in">` : orM(i.unit_venda)}</td>
         <td class="n">${ger ? `<input name="um" inputmode="decimal" value="${esc(orV(i.unit_material))}" class="or-in">` : orM(i.unit_material)}</td>
         <td class="n">${ger ? `<input name="uo" inputmode="decimal" value="${esc(orV(i.unit_mo))}" class="or-in">` : orM(i.unit_mo)}</td>
-        <td class="n" data-vm></td><td class="n" data-vo></td><td class="n"><b data-vt></b></td>
+        <td class="n"><b data-vt></b></td><td class="n" data-vm></td><td class="n" data-vo></td>
         <td class="n">${i.contratado ? `${orM(i.contratado_valor)}<br><small class="${i.dif_mo > 0 ? 'atrasado' : 'ct-ok'}">${i.dif_mo > 0 ? '+' : ''}${orM(i.dif_mo)} vs orçado</small>` : '—'}</td></tr>`).join('')}
       </tbody></table></div>${ger ? `<div class="acoes" style="margin-top:8px"><button class="btn">${ic('check')} Salvar valores de ${esc(f.nome)}</button></div>` : ''}</form>`).join('') || '<div class="card vazio"><p>Cadastre os serviços no <a href="#/obra/orcamento">orçamento</a> primeiro; aqui entram os valores.</p></div>'}`));
   orLigar(D);
+  // empreendimento por frente: lucro orçado = receita − custos, com o total da obra
+  const EF = $('#orEmpF');
+  const calcEmp = () => {
+    const tot = { preco: 0, custo_direto: 0, adm_local: 0, indiretas: 0, tributos: 0, lucro: 0 };
+    $$('tr[data-fr]', EF).forEach(tr => {
+      const f = orFrente(tr.dataset.fr), v = k => ger ? orPn($(`[name=${k}]`, tr).value) : num(f.resumo.emp[k]);
+      const lu = v('preco') - v('custo_direto') - v('adm_local') - v('indiretas') - v('tributos');
+      CAMPOS.forEach(([k]) => { tot[k] += v(k); });
+      tot.lucro += v('preco') ? lu : 0;
+      $('[data-lu]', tr).innerHTML = v('preco') ? `${orM(lu)}<br><small>${pct(lu / v('preco') * 100)}</small>` : '—';
+    });
+    CAMPOS.forEach(([k]) => { $(`[data-tot=${k}]`, EF).textContent = orM(tot[k]); });
+    $('[data-tot=lucro]', EF).innerHTML = tot.preco ? `${orM(tot.lucro)}<br><small>${pct(tot.lucro / tot.preco * 100)}</small>` : '—';
+  };
+  $$('input', EF).forEach(x => { x.oninput = calcEmp; });
+  calcEmp();
+  EF.onsubmit = async ev => {
+    ev.preventDefault();
+    const bt = $('button', EF); bt.disabled = true;
+    try {
+      let n = 0;
+      for (const tr of $$('tr[data-fr]', EF)) {
+        const f = orFrente(tr.dataset.fr), d = { codigo: f.codigo, nome: f.nome, descricao: f.descricao };
+        let mudou = false;
+        CAMPOS.forEach(([k]) => { const s = $(`[name=${k}]`, tr).value.trim(), v = s === '' ? '' : orPn(s); d[k] = v; if ((v || 0) !== (num(f.resumo.emp[k]) || 0)) mudou = true; });
+        if (mudou) { await api('orc_frente_salvar', d); n++; }
+      }
+      toast(n ? plural(n, 'frente atualizada', 'frentes atualizadas') + '.' : 'Nada mudou.');
+      await vObraFin();
+    } catch (x) { toast(x.message, 1); bt.disabled = false; }
+  };
   $$('form.or-fin').forEach(F => {
     const f = orFrente(F.dataset.fr);
     const calc = () => {
-      let tm = 0, to = 0;
+      let tm = 0, to = 0, tv = 0;
       $$('tr[data-oi]', F).forEach(tr => {
-        const i = f.itens.find(x => x.id === tr.dataset.oi), um = ger ? orPn($('[name=um]', tr).value) : i.unit_material, uo = ger ? orPn($('[name=uo]', tr).value) : i.unit_mo;
-        $('[data-vm]', tr).textContent = orM(i.qtd * um); $('[data-vo]', tr).textContent = orM(i.qtd * uo); $('[data-vt]', tr).textContent = orM(i.qtd * (um + uo));
-        tm += i.qtd * um; to += i.qtd * uo;
+        const i = f.itens.find(x => x.id === tr.dataset.oi), um = ger ? orPn($('[name=um]', tr).value) : i.unit_material, uo = ger ? orPn($('[name=uo]', tr).value) : i.unit_mo, uv = ger ? orPn($('[name=uv]', tr).value) : i.unit_venda;
+        $('[data-vm]', tr).textContent = um ? orM(i.qtd * um) : '—'; $('[data-vo]', tr).textContent = uo ? orM(i.qtd * uo) : '—'; $('[data-vt]', tr).textContent = uv ? orM(i.qtd * uv) : '—';
+        tm += i.qtd * um; to += i.qtd * uo; tv += i.qtd * uv;
       });
-      $('.or-ft', F).innerHTML = `<small>material <b>${orM(tm)}</b> · MO <b>${orM(to)}</b> · total <b>${orM(tm + to)}</b></small>`;
+      $('.or-ft', F).innerHTML = `<small>venda <b>${orM(tv)}</b> · material <b>${orM(tm)}</b> · MO <b>${orM(to)}</b></small>`;
     };
     $$('input', F).forEach(x => { x.oninput = calc; });
     calc();
@@ -182,7 +253,7 @@ async function vObraFin() {
       ev.preventDefault();
       const bt = $('button', F); bt.disabled = true;
       try {
-        const itens = $$('tr[data-oi]', F).map(tr => { const i = f.itens.find(x => x.id === tr.dataset.oi); return { id: i.id, codigo: i.codigo, grupo: i.grupo, servico: i.servico, servico_cod: i.servico_cod, unidade: i.unidade, qtd: i.qtd, obs: i.obs, unit_material: orPn($('[name=um]', tr).value), unit_mo: orPn($('[name=uo]', tr).value) }; });
+        const itens = $$('tr[data-oi]', F).map(tr => { const i = f.itens.find(x => x.id === tr.dataset.oi); return { id: i.id, codigo: i.codigo, grupo: i.grupo, servico: i.servico, servico_cod: i.servico_cod, unidade: i.unidade, qtd: i.qtd, obs: i.obs, unit_venda: $('[name=uv]', tr).value.trim() === '' ? '' : orPn($('[name=uv]', tr).value), unit_material: orPn($('[name=um]', tr).value), unit_mo: orPn($('[name=uo]', tr).value) }; });
         toast((await api('orc_itens_salvar', { frente: f.codigo, itens })).msg);
         await vObraFin();
       } catch (x) { toast(x.message, 1); bt.disabled = false; }
@@ -194,10 +265,15 @@ async function vObraFin() {
 function mOrFrente(f) {
   modal(f ? 'Editar frente geral' : 'Nova frente geral', `<label>Nome<input name="nome" required value="${esc(f?.nome || '')}" placeholder="ex: Rede de Esgoto"></label>
     <label>Descrição <small>(opcional)</small><input name="descricao" value="${esc(f?.descricao || '')}" placeholder="ex: rede coletora, poços de visita e ligações"></label>
+    <h3 style="margin:8px 0 0">Valores do empreendimento <small>(opcional)</small></h3>
+    <div class="g2"><label>Receita (preço cobrado do cliente)<input name="preco" inputmode="decimal" value="${esc(f?.resumo.emp.preco ? orV(f.resumo.emp.preco) : '')}"></label><label>Custo direto orçado<input name="custo_direto" inputmode="decimal" value="${esc(f?.resumo.emp.custo_direto ? orV(f.resumo.emp.custo_direto) : '')}"></label></div>
+    <div class="g2"><label>Adm. local<input name="adm_local" inputmode="decimal" value="${esc(f?.resumo.emp.adm_local ? orV(f.resumo.emp.adm_local) : '')}"></label><label>Indiretas<input name="indiretas" inputmode="decimal" value="${esc(f?.resumo.emp.indiretas ? orV(f.resumo.emp.indiretas) : '')}"></label></div>
+    <label>Tributos<input name="tributos" inputmode="decimal" value="${esc(f?.resumo.emp.tributos ? orV(f.resumo.emp.tributos) : '')}"></label>
     ${f ? `<label class="ck"><input type="checkbox" name="ativa" ${f.ativa ? 'checked' : ''}> Ativa (aparece nos pedidos, no estoque e nas frentes de execução)</label><small>Trocar o nome atualiza os pedidos, o estoque e as frentes de execução desta frente.</small>` : '<small>A frente geral também aparece nos pedidos de material e nas saídas do estoque.</small>'}`, {
     ok: 'Salvar',
     onOk: async F => {
-      const r = await api('orc_frente_salvar', { codigo: f?.codigo, nome: F.nome.value, descricao: F.descricao.value, ativa: f ? F.ativa.checked : undefined });
+      const val = k => F[k].value.trim() === '' ? '' : orPn(F[k].value);
+      const r = await api('orc_frente_salvar', { codigo: f?.codigo, nome: F.nome.value, descricao: F.descricao.value, ativa: f ? F.ativa.checked : undefined, preco: val('preco'), custo_direto: val('custo_direto'), adm_local: val('adm_local'), indiretas: val('indiretas'), tributos: val('tributos') });
       toast(r.msg); await recarregarDados();
       const h = '#/obra/frente/' + enc(r.codigo);
       if (location.hash === h) rotear(); else location.hash = h;
@@ -208,7 +284,7 @@ function mOrFrente(f) {
 function mOrItens(f, item, depois, pre) {
   const cat = (OR.d.catalogo || []).slice().sort((a, b) => (a.grupo + a.servico).localeCompare(b.grupo + b.servico));
   const F = modal(item ? 'Editar serviço · ' + esc(f.nome) : 'Incluir serviços · ' + esc(f.nome), `
-    <small>Quantidade <b>total</b> que a frente geral precisa executar e o preço de referência por unidade (material e mão de obra). Os valores podem ficar para depois, na tela <a href="#/obra/financeiro">Valores</a>.</small>
+    <small>Quantidade <b>total</b> que a frente geral precisa executar, o <b>preço de venda</b> por unidade (o que o cliente paga) e o custo de referência (material e mão de obra). Os valores podem ficar para depois, na tela <a href="#/obra/financeiro">Valores</a>.</small>
     <div id="orLin"></div>${item ? '' : `<button type="button" class="btn sec" id="orMais">${ic('plus')} Outro serviço</button>`}
     ${item ? `<label>Observação<input name="obs" value="${esc(item.obs || '')}"></label>
       ${item.programado || item.contratado ? `<div class="aviso info">Já tem ${nf(item.programado)} ${esc(item.unidade)} em frentes de execução${item.contratado ? ' e ' + nf(item.contratado) + ' contratados' : ''}: dá para mudar quantidade e valores, mas não remover.</div>` : '<label class="ck"><input type="checkbox" name="rem"> Remover este serviço do orçamento</label>'}` : ''}
@@ -216,7 +292,7 @@ function mOrItens(f, item, depois, pre) {
     larga: true, ok: item ? 'Salvar' : 'Incluir no orçamento',
     onOk: async F => {
       if (item && F.rem?.checked) { if (!confirm('Remover ' + item.servico + ' do orçamento?')) return; toast((await api('orc_item_remover', { id: item.id })).msg); return depois(); }
-      const itens = $$('.or-li', F).map(r => ({ id: r.dataset.id || undefined, codigo: $('[name=c]', r).value, grupo: $('[name=g]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: orPn($('[name=q]', r).value), unit_material: orPn($('[name=m]', r).value), unit_mo: orPn($('[name=o]', r).value), obs: F.obs ? F.obs.value : undefined }))
+      const itens = $$('.or-li', F).map(r => ({ id: r.dataset.id || undefined, codigo: $('[name=c]', r).value, grupo: $('[name=g]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: orPn($('[name=q]', r).value), unit_venda: $('[name=v]', r).value.trim() === '' ? '' : orPn($('[name=v]', r).value), unit_material: orPn($('[name=m]', r).value), unit_mo: orPn($('[name=o]', r).value), obs: F.obs ? F.obs.value : undefined }))
         .filter(x => x.servico || x.qtd);
       if (!itens.length) throw new Error('Informe pelo menos um serviço.');
       toast((await api('orc_itens_salvar', { frente: f.codigo, itens })).msg);
@@ -232,14 +308,15 @@ function mOrItens(f, item, depois, pre) {
       <label class="s">Serviço<input name="s" list="dl-orsrv" value="${esc(i?.servico || '')}" placeholder="Digite ou busque no catálogo" autocomplete="off"></label>
       <label class="u">Un.<input name="u" value="${esc(i?.unidade || '')}" placeholder="m"></label>
       <label class="q">Qtd total<input name="q" inputmode="decimal" value="${esc(orV(i?.qtd))}" placeholder="2.500"></label>
+      <label class="v">R$ venda/un<input name="v" inputmode="decimal" value="${esc(orV(i?.unit_venda || ''))}"></label>
       <label class="m">R$ material/un<input name="m" inputmode="decimal" value="${esc(orV(i?.unit_material))}"></label>
       <label class="o">R$ MO/un<input name="o" inputmode="decimal" value="${esc(orV(i?.unit_mo))}"></label>
       <span class="t"><small>Total</small><b>R$ 0,00</b></span>${item ? '' : `<button type="button" class="rm" aria-label="Remover linha">${ic('x')}</button>`}`;
     $('#orLin', F).appendChild(r);
     const s = $('[name=s]', r), u = $('[name=u]', r);
     s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); r.dataset.cod = c ? c.codigo : ''; if (c && !u.value) u.value = c.unidade; if (c && !$('[name=g]', r).value) $('[name=g]', r).value = c.grupo; };
-    const calc = () => { $('.t b', r).textContent = orM(orPn($('[name=q]', r).value) * (orPn($('[name=m]', r).value) + orPn($('[name=o]', r).value))); };
-    ['q', 'm', 'o'].forEach(k => { $(`[name=${k}]`, r).oninput = calc; });
+    const calc = () => { const q = orPn($('[name=q]', r).value), v = orPn($('[name=v]', r).value); $('.t small', r).textContent = v ? 'Venda' : 'Custo'; $('.t b', r).textContent = orM(q * (v || orPn($('[name=m]', r).value) + orPn($('[name=o]', r).value))); };
+    ['q', 'v', 'm', 'o'].forEach(k => { $(`[name=${k}]`, r).oninput = calc; });
     calc();
     const rm = $('.rm', r); if (rm) rm.onclick = () => { if ($$('.or-li', F).length > 1) r.remove(); };
     return r;
