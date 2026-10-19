@@ -25,12 +25,12 @@ const SCHEMA_OBRA = {
   Fornecedores: ['codigo', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'materiais', 'condicao', 'obs', 'ativo'],
   Materiais: ['codigo', 'descricao', 'unidade', 'categoria', 'estoque_min', 'ativo'],
   Frentes: ['codigo', 'nome', 'descricao', 'ativa'],
-  Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs'],
+  Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs', 'frente'],
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],
   // módulo Execução / Diário de obra
   Etapas: ['codigo', 'nome', 'local', 'frente', 'responsavel', 'obs', 'ativa', 'criado_em', 'criado_por', 'empreiteiro', 'contrato_tipo', 'contrato_numero', 'contrato_data', 'contrato_id'],
-  EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo', 'contrato_item'],
+  EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo', 'contrato_item', 'orc_item'],
   Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa', 'empresa', 'responsavel', 'telefone', 'email', 'documento', 'endereco'],
   Diarios: ['numero', 'data', 'status', 'condicao', 'aditivo', 'responsavel_id', 'responsavel', 'chuva_manha', 'chuva_tarde', 'chuva_trabalho', 'chuva_dia',
     'tmin', 'tmax', 'vento', 'sugestao', 'ocorrencias', 'obs', 'enviado_por', 'enviado_em', 'revisado_por', 'revisado_em', 'clima_final', 'clima_json', 'criado_em', 'atualizado_em'],
@@ -49,11 +49,15 @@ const SCHEMA_OBRA = {
     'valor_global', 'permuta_valor', 'permuta_desc', 'pag_forma', 'pag_periodicidade', 'pag_obs', 'fat_nf_pct', 'fat_recibo_pct', 'retencoes', 'reajuste',
     'multa1_pct', 'multa2_pct', 'multa_diaria', 'garantia', 'aviso_dias', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'foro',
     'clausulas_extra', 'obs', 'pdf_id', 'pdf_nome', 'minuta_id', 'minuta_em', 'pasta_id', 'historico_json', 'criado_em', 'criado_por', 'atualizado_em'],
-  ContratoItens: ['id', 'contrato', 'ordem', 'grupo', 'codigo', 'servico_cod', 'servico', 'unidade', 'qtd', 'unitario', 'ativo'],
+  ContratoItens: ['id', 'contrato', 'ordem', 'grupo', 'codigo', 'servico_cod', 'servico', 'unidade', 'qtd', 'unitario', 'ativo', 'orc_item'],
   // responsabilidades técnicas do contrato (ART, RRT, TRT…): condição para liberar o contrato para assinatura
   ContratoRT: ['id', 'contrato', 'tipo', 'descricao', 'numero', 'profissional', 'registro', 'emissao', 'arquivo_id', 'arquivo_nome', 'criado_por', 'criado_em', 'anexado_por', 'anexado_em'],
   ContratoAditivos: ['id', 'contrato', 'numero', 'data', 'tipo', 'descricao', 'valor', 'nova_vigencia', 'criado_por', 'criado_em'],
-  MedicaoItens: ['medicao', 'item_id', 'etapa', 'etapa_nome', 'servico', 'unidade', 'qtd', 'concluido_em', 'complemento', 'contrato', 'fvs', 'rdos_json', 'dias_json']
+  MedicaoItens: ['medicao', 'item_id', 'etapa', 'etapa_nome', 'servico', 'unidade', 'qtd', 'concluido_em', 'complemento', 'contrato', 'fvs', 'rdos_json', 'dias_json'],
+  // Orçamento da obra: o que cada frente geral (aba Frentes) precisa executar, com preço de referência de material e de mão de obra
+  OrcItens: ['id', 'frente', 'ordem', 'codigo', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd', 'unit_material', 'unit_mo', 'obs', 'ativo', 'criado_em', 'criado_por', 'atualizado_em'],
+  // materiais do orçamento: por serviço (coef = quanto gasta por unidade do serviço) ou direto na frente (qtd total)
+  OrcMateriais: ['id', 'frente', 'orc_item', 'material_cod', 'descricao', 'unidade', 'coef', 'qtd', 'obs', 'ativo']
 };
 
 let _central = null;

@@ -71,7 +71,7 @@ function limparAbaPadrao_(ss) {
 }
 
 /* ---------- obras ---------- */
-function criarObra_(nome, sigla, endereco) {
+function criarObra_(nome, sigla, endereco, frentesObra) {
   nome = String(nome || '').trim();
   sigla = norm_(sigla).toUpperCase().replace(/[^A-Z]/g, '');
   if (!nome) throw new Error('Informe o nome da obra.');
@@ -90,7 +90,9 @@ function criarObra_(nome, sigla, endereco) {
   obraTab_(ctx, 'Materiais').insertMany(central_('MateriaisPadrao').all().map(m => ({
     codigo: m.codigo, descricao: m.descricao, unidade: m.unidade, categoria: m.categoria, estoque_min: '', ativo: 'Sim'
   })));
-  const frentes = String(config_().FRENTES_PADRAO || '').split(';').map(s => s.trim()).filter(Boolean);
+  // frentes gerais informadas ao criar a obra (ex: Rede de Esgoto, Rede de Água); sem lista, as frentes padrão das Configurações
+  const frentes = (frentesObra || String(config_().FRENTES_PADRAO || '').split(';')).map(s => String(s).trim()).filter(Boolean)
+    .filter((s, i, l) => l.findIndex(x => norm_(x) === norm_(s)) === i);
   obraTab_(ctx, 'Frentes').insertMany(frentes.map((f, i) => ({ codigo: 'FR' + ('0' + (i + 1)).slice(-2), nome: f, descricao: '', ativa: 'Sim' })));
 
   return O.insert({

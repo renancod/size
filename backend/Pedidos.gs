@@ -379,6 +379,14 @@ function pedidoReceber_(q, ctx) {
   if (p.status !== 'Aprovado' || ['Entrega liberada', 'Recebido parcial'].indexOf(p.entrega) < 0) throw new Error('Este pedido não está liberado para recebimento.');
   const I = obraTab_(ctx, 'Itens'), its = itensDe_(ctx, p.numero), qs = q.itens || {};
   const recs = [], movs = [], quando = new Date();
+  // frente geral que recebeu o material (conta no "comprado × recebido" do orçamento da obra)
+  let frente = p.frente || '';
+  if (q.frente !== undefined && String(q.frente || '').trim() && norm_(q.frente) !== norm_(p.frente)) {
+    const fg = obraTab_(ctx, 'Frentes').all().find(f => norm_(f.nome) === norm_(q.frente) || String(f.codigo) === String(q.frente));
+    if (!fg) throw new Error('Frente de trabalho não encontrada.');
+    frente = fg.nome;
+    if (!p.frente) { p.frente = fg.nome; hist_(p, ctx, 'Material vinculado à frente ' + fg.nome + ' no recebimento'); }
+  }
   its.forEach(i => {
     const qtd = num_(qs[i.item]);
     if (!(qtd > 0)) return;
@@ -387,8 +395,8 @@ function pedidoReceber_(q, ctx) {
     i.qtd_recebida = num_(i.qtd_recebida) + qtd;
     I.update(i);
     const id = Utilities.getUuid().slice(0, 8);
-    recs.push({ id: id, pedido: p.numero, item: i.item, material_cod: i.material_cod, descricao: i.descricao, qtd: qtd, unidade: i.unidade, data: quando, usuario: ctx.u.nome, nf: q.nf_numero || '', obs: q.obs || '' });
-    movs.push({ id: id, data: quando, tipo: 'Entrada', material_cod: i.material_cod, descricao: i.descricao, unidade: i.unidade, qtd: qtd, pedido: p.numero, frente: p.frente, usuario: ctx.u.nome, obs: 'Recebimento ' + p.numero });
+    recs.push({ id: id, pedido: p.numero, item: i.item, material_cod: i.material_cod, descricao: i.descricao, qtd: qtd, unidade: i.unidade, data: quando, usuario: ctx.u.nome, nf: q.nf_numero || '', obs: q.obs || '', frente: frente });
+    movs.push({ id: id, data: quando, tipo: 'Entrada', material_cod: i.material_cod, descricao: i.descricao, unidade: i.unidade, qtd: qtd, pedido: p.numero, frente: frente, usuario: ctx.u.nome, obs: 'Recebimento ' + p.numero });
   });
   if (!recs.length && !q.encerrar) throw new Error('Informe a quantidade recebida de pelo menos um item.');
   obraTab_(ctx, 'Recebimentos').insertMany(recs);

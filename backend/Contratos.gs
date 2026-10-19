@@ -61,7 +61,7 @@ function ctrLinhas_(itens, met) {
   return itens.map(i => {
     const m = met[i.id] || { executado: 0, programado: 0, medido: 0, pago: 0 }, q = num_(i.qtd), u = num_(i.unitario);
     return {
-      id: i.id, ordem: num_(i.ordem), grupo: i.grupo || '', codigo: i.codigo || '', servico_cod: i.servico_cod || '', servico: i.servico, unidade: i.unidade, qtd: q, unitario: u, total: r2_(q * u),
+      id: i.id, ordem: num_(i.ordem), grupo: i.grupo || '', codigo: i.codigo || '', servico_cod: i.servico_cod || '', servico: i.servico, unidade: i.unidade, qtd: q, unitario: u, total: r2_(q * u), orc_item: String(i.orc_item || ''),
       programado: r2_(m.programado), executado: r2_(m.executado), medido: r2_(m.medido), pago: r2_(m.pago), saldo: r2_(q - m.medido), a_programar: r2_(q - m.programado),
       v_exec: r2_(m.executado * u), v_med: r2_(m.medido * u), v_pago: r2_(m.pago * u), v_saldo: r2_((q - m.medido) * u),
       pct_exec: q ? r2_(m.executado / q * 100) : 0, pct_med: q ? r2_(m.medido / q * 100) : 0, acima: m.executado > q + 0.0001
@@ -188,6 +188,11 @@ function ctrListar_(q, ctx) {
 function ctrDetalhe_(q, ctx) {
   const c = ctrAchar_(ctx, q.id), calc = calcExec_(ctx), met = ctrMetricas_(ctx, calc);
   const itens = ctrAtivos_(ctx, c.id), linhas = ctrLinhas_(itens, met);
+  // valor de referência de mão de obra do orçamento da obra (para comparar com o contratado)
+  const orc = {};
+  obraTab_(ctx, 'OrcItens').all().filter(orcAtivo_).forEach(i => { orc[i.id] = i; });
+  linhas.forEach(l => { const o = orc[l.orc_item]; l.orc_unit_mo = o ? num_(o.unit_mo) : null; l.orc_servico = o ? o.servico : ''; });
+  const comOrc = linhas.filter(l => l.orc_unit_mo != null), orcado = r2_(comOrc.reduce((t, l) => t + l.qtd * l.orc_unit_mo, 0)), contratadoOrc = r2_(comOrc.reduce((t, l) => t + l.total, 0));
   const aditivos = obraTab_(ctx, 'ContratoAditivos').all().filter(a => String(a.contrato) === String(c.id)).map(a => ({
     id: a.id, numero: num_(a.numero), data: ymd_(a.data), tipo: a.tipo, descricao: a.descricao, valor: num_(a.valor), nova_vigencia: ymd_(a.nova_vigencia), criado_por: a.criado_por
   })).sort((a, b) => a.numero - b.numero);
@@ -197,6 +202,7 @@ function ctrDetalhe_(q, ctx) {
   const rts = obraTab_(ctx, 'ContratoRT').all().filter(r => String(r.contrato) === String(c.id));
   return Object.assign(ctrBase_(c), {
     rts: rts.map(ctrRtPub_), liberacao: ctrLiberacao_(rts),
+    orcamento: comOrc.length ? { linhas: comOrc.length, orcado: orcado, contratado: contratadoOrc, diferenca: r2_(contratadoOrc - orcado), pct: orcado ? r2_((contratadoOrc - orcado) / orcado * 100) : 0 } : null,
     itens: linhas, resumo: ctrResumo_(c, linhas, aditivos), aditivos: aditivos, historico: json_(c.historico_json, []),
     frentes: frentes.map(e => ({ codigo: e.codigo, nome: e.nome, local: e.local, pct: e.pct, situacao: e.situacao, servicos: e.itens.length, ativa: e.ativa })), sem_vinculo: semVinculo,
     pasta_url: c.pasta_id ? 'https://drive.google.com/drive/folders/' + c.pasta_id : '', minuta_em: fmtVal_(c.minuta_em),
@@ -210,7 +216,7 @@ function ctrParaFrentes_(ctx) {
   const C = obraTab_(ctx, 'Contratos').all().filter(c => c.status !== CTR_ST_.canc && c.status !== CTR_ST_.rasc), I = ctrAtivos_(ctx), met = ctrMetricas_(ctx);
   return C.map(c => ({
     id: c.id, rotulo: ctrRotulo_(c), numero: String(c.numero || ''), empreiteiro: String(c.empreiteiro), status: c.status, objeto: String(c.objeto || '').slice(0, 160), data_assinatura: ymd_(c.data_assinatura),
-    itens: ctrLinhas_(I.filter(i => String(i.contrato) === String(c.id)), met).map(l => ({ id: l.id, grupo: l.grupo, codigo: l.codigo, servico_cod: l.servico_cod, servico: l.servico, unidade: l.unidade, qtd: l.qtd, programado: l.programado, a_programar: l.a_programar }))
+    itens: ctrLinhas_(I.filter(i => String(i.contrato) === String(c.id)), met).map(l => ({ id: l.id, grupo: l.grupo, codigo: l.codigo, servico_cod: l.servico_cod, servico: l.servico, unidade: l.unidade, qtd: l.qtd, programado: l.programado, a_programar: l.a_programar, orc_item: l.orc_item }))
   }));
 }
 
@@ -258,6 +264,8 @@ function ctrSalvar_(q, ctx) {
     const usados = {};
     obraTab_(ctx, 'EtapaItens').all().forEach(i => { if (i.contrato_item && !/^n/i.test(String(i.ativo))) usados[i.contrato_item] = i.servico; });
     let ordem = 0;
+    const orcIds = {};
+    obraTab_(ctx, 'OrcItens').all().filter(orcAtivo_).forEach(i => { orcIds[i.id] = 1; });
     [].concat(q.itens || []).forEach(x => {
       const servico = String(x.servico || '').trim(), unidade = String(x.unidade || '').trim();
       if (!servico && !num_(x.qtd) && !x.id) return;
@@ -265,7 +273,9 @@ function ctrSalvar_(q, ctx) {
       if (!unidade) throw new Error('Informe a unidade de ' + servico + '.');
       const qtd = num_(x.qtd), unit = ctrNum_(x.unitario, 'Preço unitário de ' + servico);
       if (!(qtd > 0)) throw new Error('Informe a quantidade de ' + servico + '.');
-      const reg = { ordem: ++ordem, grupo: String(x.grupo || '').trim().slice(0, 120), codigo: String(x.codigo || '').trim().slice(0, 30), servico_cod: String(x.servico_cod || '').trim(), servico: servico.slice(0, 200), unidade: unidade.slice(0, 20), qtd: qtd, unitario: unit };
+      if (x.orc_item && !orcIds[x.orc_item]) throw new Error('"' + servico + '" não está mais no orçamento da obra (atualize a tela).');
+      const reg = { ordem: ++ordem, grupo: String(x.grupo || '').trim().slice(0, 120), codigo: String(x.codigo || '').trim().slice(0, 30), servico_cod: String(x.servico_cod || '').trim(), servico: servico.slice(0, 200), unidade: unidade.slice(0, 20), qtd: qtd, unitario: unit, orc_item: String(x.orc_item || '') };
+      if (x.orc_item === undefined) delete reg.orc_item;          // tela antiga sem o campo: mantém o vínculo que já existe
       const ex = x.id ? atuais.find(i => String(i.id) === String(x.id)) : null;
       if (x.id && !ex) throw new Error('Linha da planilha não pertence a este contrato.');
       if (ex) { Object.assign(ex, reg); mantidos[ex.id] = 1; I.update(ex); } else linhas.push(Object.assign({ id: 'CI-' + Utilities.getUuid().slice(0, 6), contrato: c.id, ativo: 'Sim' }, reg));

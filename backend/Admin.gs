@@ -59,7 +59,8 @@ function adminDados_(q, ctx) {
     servicos: garantirCatalogo_().all().map(pub_),
     unidades: central_('Unidades').all().map(r => String(r.unidade).trim()).filter(Boolean),
     permissoes: PERMISSOES,
-    central_url: centralSS_().getUrl()
+    central_url: centralSS_().getUrl(),
+    frentes_padrao: String(config_().FRENTES_PADRAO || '').split(';').map(s => s.trim()).filter(Boolean)
   };
 }
 
@@ -110,10 +111,12 @@ function adminSenha_(q, ctx) {
 }
 
 function adminObraCriar_(q, ctx) {
-  const o = criarObra_(q.nome, q.sigla, q.endereco);
+  const frentes = Array.isArray(q.frentes) ? q.frentes.map(s => String(s || '').trim()).filter((s, i, l) => s && l.findIndex(x => norm_(x) === norm_(s)) === i) : null;
+  const o = criarObra_(q.nome, q.sigla, q.endereco, frentes);
   if (q.email_financeiro) { o.email_financeiro = String(q.email_financeiro).trim(); central_('Obras').update(o); }
   log_(ctx, 'obra_criar', o.nome);
-  return { msg: 'Obra ' + o.nome + ' criada com a planilha e a pasta no Drive.', id: o.id };
+  const n = frentes ? frentes.length : 0;
+  return { msg: 'Obra ' + o.nome + ' criada com a planilha e a pasta no Drive' + (n ? ' e ' + n + (n === 1 ? ' frente geral' : ' frentes gerais') : '') + '.', id: o.id };
 }
 
 function adminObraSalvar_(q, ctx) {

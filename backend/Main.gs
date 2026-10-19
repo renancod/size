@@ -125,6 +125,13 @@ const ROTAS = {
   contrato_rt_remover: { obra: true, perm: 'contrato_gerir', lock: true, fn: ctrRtRemover_ },
   contrato_rt_ver: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrRtVer_ },
   contrato_anexo_ver: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrAnexoVer_ },
+  orc_dados: { obra: true, perm: ['orc_ver', 'orc_gerir'], fn: orcDados_ },
+  orc_para_contrato: { obra: true, perm: 'contrato_gerir', fn: orcParaContrato_ },
+  orc_frente_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcFrenteSalvar_ },
+  orc_itens_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcItensSalvar_ },
+  orc_item_remover: { obra: true, perm: 'orc_gerir', lock: true, fn: orcItemRemover_ },
+  orc_material_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcMaterialSalvar_ },
+  orc_material_remover: { obra: true, perm: 'orc_gerir', lock: true, fn: orcMaterialRemover_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },
@@ -180,7 +187,9 @@ const PERMISSOES = {
   medicao_lancar: 'Medições: montar e enviar para aprovação',
   medicao_aprovar: 'Medições: aprovar, devolver e marcar como paga',
   contrato_ver: 'Contratos: consultar (valores, planilha, saldo)',
-  contrato_gerir: 'Contratos: cadastrar, editar, aditivos, ativar e arquivar o contrato assinado'
+  contrato_gerir: 'Contratos: cadastrar, editar, aditivos, ativar e arquivar o contrato assinado',
+  orc_ver: 'Orçamento da obra: ver frentes gerais, quantidades, valores e o painel da obra (falta comprar, consumido)',
+  orc_gerir: 'Orçamento da obra: cadastrar frentes gerais, serviços, valores de material e mão de obra e materiais'
 };
 const PERFIS_PADRAO = [
   ['Admin', Object.keys(PERMISSOES).join(','), 'Tudo na obra'],
@@ -190,7 +199,7 @@ const PERFIS_PADRAO = [
   ['Financeiro', 'pedido_ver_todos,financeiro', 'Pagamentos e notas fiscais'],
   ['Solicitante', 'pedido_abrir', 'Só abre e acompanha os próprios pedidos'],
   ['Encarregado', 'exec_ver,exec_lancar,pedido_abrir,fvs_ver', 'Lança o diário de obra (quantidades, equipes, fotos) e abre pedidos de material'],
-  ['Engenheiro', 'exec_ver,exec_lancar,exec_planejar,pedido_abrir,pedido_ver_todos,estoque_ver,fvs_ver,fvs_preencher,fvs_aprovar', 'Planeja as etapas, acompanha a produção, revisa os diários e avisa a equipe']
+  ['Engenheiro', 'exec_ver,exec_lancar,exec_planejar,pedido_abrir,pedido_ver_todos,estoque_ver,fvs_ver,fvs_preencher,fvs_aprovar,orc_ver','Planeja as etapas, acompanha a produção, revisa os diários e avisa a equipe']
 ];
 
 function permsDe_(u, obraId) {
@@ -275,7 +284,7 @@ function login_(q) {
     throw new Error('Usuário ou senha incorretos.');
   }
   cache.remove(kf);
-  try { atualizarPerfisFvs_(); atualizarPerfisMed_(); atualizarPerfisCtr_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
+  try { atualizarPerfisFvs_(); atualizarPerfisMed_(); atualizarPerfisCtr_(); atualizarPerfisOrc_(); } catch (e) { /* o ajuste de perfis roda de novo no próximo acesso */ }
   u.ultimo_acesso = new Date();
   T.update(u);
   return Object.assign({ token: token_(u) }, sessaoDe_(u));

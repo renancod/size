@@ -195,7 +195,7 @@ function calcExec_(ctx, ate) {
     let sem = 0;
     if (sit !== 'concluido' && ini && hoje >= ini) for (let s = addDias_(ultimo || addDias_(ini, -1), 1); s <= ontem; s = addDias_(s, 1)) if (util(s) && !parado[s]) sem++;
     const r = {
-      id: i.id, etapa: i.etapa, servico: i.servico, servico_cod: i.servico_cod, grupo: i.grupo, unidade: i.unidade, ordem: i.ordem, contrato_item: String(i.contrato_item || ''),
+      id: i.id, etapa: i.etapa, servico: i.servico, servico_cod: i.servico_cod, grupo: i.grupo, unidade: i.unidade, ordem: i.ordem, contrato_item: String(i.contrato_item || ''), orc_item: String(i.orc_item || ''),
       prevista: prev, original: num_(i.qtd_original) || prev, inicio: ini, termino: fim, inicio_original: ymd_(i.inicio_original) || ini, termino_original: ymd_(i.termino_original) || fim,
       executado: r2_(exec), saldo: r2_(saldo), pct: prev ? r2_(exec / prev * 100) : 0, planejado: r2_(planejado), media: r2_(media), media7: r2_(media7),
       ritmo: ritmo === null ? null : r2_(ritmo), projecao: projecao, dias_trab: n, dias_restantes: restam, primeiro: primeiro, ultimo: ultimo,
@@ -236,6 +236,7 @@ function execDados_(q, ctx) {
     hoje: c.hoje, etapas: c.etapas, alertas: c.alertas,
     equipes: obraTab_(ctx, 'Equipes').all().map(pub_),
     contratos: ctrParaFrentes_(ctx),
+    orcamento: orcParaFrentes_(ctx, c),
     catalogo: (() => { const mods = {}; garantirFvsModelos_().all().forEach(m => { if (!/^n/i.test(String(m.ativo))) mods[m.codigo] = m; }); return cat.all().filter(s => !/^n/i.test(String(s.ativo))).map(s => Object.assign(pub_(s), { fvs_sugerido: fvsSugerido_(s, mods) })); })(),
     fvs_modelos: garantirFvsModelos_().all().filter(m => !/^n/i.test(String(m.ativo))).map(m => ({ codigo: m.codigo, nome: m.nome, categoria: m.categoria, tipo: m.tipo, revisao: m.revisao })),
     fvs: obraTab_(ctx, 'Fvs').all().filter(f => f.status !== FVS_ST_.canc).map(f => ({ id: f.id, item_id: f.item_id, etapa: f.etapa, status: f.status, modelo: f.modelo, tipo: f.tipo, numero_txt: f.numero === '' ? '' : numFvs_(num_(f.numero)) })),
@@ -292,11 +293,17 @@ function execEtapaSalvar_(q, ctx) {
   const cat = garantirCatalogo_().all();
   let ordem = I.all().filter(i => String(i.etapa) === String(e.codigo)).reduce((m, i) => Math.max(m, num_(i.ordem)), 0);
   const itensContrato = e.contrato_id ? ctrAtivos_(ctx, e.contrato_id) : [];
+  const orcItens = obraTab_(ctx, 'OrcItens').all().filter(orcAtivo_), orcUsados = [];
   const linhas = novos.map(x => {
     // serviço vindo da planilha do contrato: nome, unidade e catálogo seguem o contrato
     const ci = x.contrato_item ? itensContrato.find(i => String(i.id) === String(x.contrato_item)) : null;
     if (x.contrato_item && !ci) throw new Error('O serviço escolhido não pertence ao contrato desta frente.');
     if (ci) { x = Object.assign({}, x, { servico: ci.servico, unidade: ci.unidade, servico_cod: ci.servico_cod || x.servico_cod }); }
+    // serviço do orçamento da obra: consome o saldo dele (o do contrato manda, se o contrato estiver ligado ao orçamento)
+    const oid = (ci && ci.orc_item) || x.orc_item, oi = oid ? orcItens.find(i => String(i.id) === String(oid)) : null;
+    if (oid && !oi) throw new Error('O serviço escolhido não está mais no orçamento da obra (atualize a tela).');
+    if (oi && !ci) x = Object.assign({}, x, { servico: oi.servico, unidade: oi.unidade, servico_cod: oi.servico_cod || x.servico_cod });
+    if (oi) orcUsados.push({ oi: oi, qtd: num_(x.qtd_prevista) });
     const sc = x.servico_cod ? cat.find(s => String(s.codigo) === String(x.servico_cod)) : cat.find(s => norm_(s.servico) === norm_(x.servico));
     const servico = ci ? ci.servico : sc ? sc.servico : String(x.servico || '').trim(), unidade = ci ? ci.unidade : sc ? sc.unidade : String(x.unidade || '').trim();
     if (!servico) throw new Error('Informe o serviço de cada item.');
@@ -309,16 +316,25 @@ function execEtapaSalvar_(q, ctx) {
     return {
       id: e.codigo + '-' + Utilities.getUuid().slice(0, 6), etapa: e.codigo, servico_cod: sc ? sc.codigo : '', servico: servico, grupo: sc ? sc.grupo : 'Avulso',
       unidade: unidade, qtd_prevista: qtd, qtd_original: qtd, inicio: ini, termino: fim, inicio_original: ini, termino_original: fim, ativo: 'Sim', ordem: ++ordem,
-      contrato_item: ci ? ci.id : ''
+      contrato_item: ci ? ci.id : '', orc_item: oi ? oi.id : ''
     };
   });
+  // frente de execução sem frente geral escolhida: fica na frente geral do orçamento que ela consome
+  if (!e.frente && orcUsados.length) { const fg = orcFrente_(ctx, orcUsados[0].oi.frente); if (fg) e.frente = fg.nome; }
+  // passar do orçamento não bloqueia: só avisa (o painel da obra mostra o alerta)
+  const programado = {};
+  I.all().forEach(i => { if (i.orc_item && orcAtivo_(i)) programado[i.orc_item] = (programado[i.orc_item] || 0) + num_(i.qtd_prevista); });
+  const acima = [];
+  orcUsados.forEach(u => { programado[u.oi.id] = (programado[u.oi.id] || 0) + u.qtd; });
+  orcUsados.forEach(u => { const p = programado[u.oi.id], t = num_(u.oi.qtd); if (p > t + 0.0001 && !acima.some(a => a.indexOf(u.oi.servico) === 0)) acima.push(u.oi.servico + ' (' + nfmt_(p) + ' de ' + nfmt_(t) + ' ' + u.oi.unidade + ')'); });
   if (nova) E.insert(e); else E.update(e);
   I.insertMany(linhas);
   const fvsAbertas = fvsAbrirParaItens_(ctx, e, linhas.map((l, i) => ({ item: l, modelo: novos[i].fvs_modelo })));
   if (!nova) linhas.forEach(l => alteracao_(ctx, 'item', l.id, 'incluído', '', l.servico + ' ' + l.qtd_prevista + ' ' + l.unidade, q.motivo));
   log_(ctx, nova ? 'exec_etapa_criar' : 'exec_etapa_editar', e.codigo + ' ' + e.nome);
   const txtFvs = fvsAbertas ? ' ' + (fvsAbertas === 1 ? '1 FVS aberta.' : fvsAbertas + ' FVS abertas.') : '';
-  return { msg: (nova ? 'Etapa ' + e.nome + ' criada com ' + linhas.length + ' serviço(s).' : 'Etapa salva.') + txtFvs, codigo: e.codigo };
+  const txtOrc = acima.length ? ' Atenção: passou do orçamento da obra em ' + acima.join('; ') + '.' : '';
+  return { msg: (nova ? 'Etapa ' + e.nome + ' criada com ' + linhas.length + ' serviço(s).' : 'Etapa salva.') + txtFvs + txtOrc, codigo: e.codigo, acima_orcamento: acima };
 }
 function execItemAlterar_(q, ctx) {
   const I = obraTab_(ctx, 'EtapaItens'), i = I.all().find(x => String(x.id) === String(q.id));
