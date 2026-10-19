@@ -223,6 +223,26 @@ test('obra desativada: sem atraso, sem alerta e sem pendência de material (o hi
   assert.throws(() => t.eng('exec_dados'), /desativada/);                   // quem não é admin nem abre a obra
 });
 
+test('importação da obra AVA Residence: frentes, serviços e materiais das planilhas, sem duplicar', () => {
+  const t = preparar();
+  assert.match(t.G.rodar('criarObraAvaResidence()'), /AVA Residence \(OB\d+\) criada · 70 serviços e 58 materiais/);
+  const ava = t.raiz('sessao').obras.find(o => o.sigla === 'AVA');
+  const d = t.raiz('orc_dados', { obra: ava.id });
+  assert.deepEqual(d.frentes.map(f => f.nome), ['Terraplenagem', 'Pavimentação e vias', 'Drenagem pluvial', 'Esgoto sanitário', 'Abastecimento de água', 'Urbanização e paisagismo', 'Contenções em gabião', 'Marina externa e heliponto']);
+  const dren = frente(d, 'Drenagem pluvial'), tubo = dren.itens.find(i => i.codigo === '1.3.1');
+  assert.equal(tubo.qtd, 3431.4); assert.equal(tubo.unit_material, 582.96); assert.equal(tubo.unit_mo, 0);
+  assert.equal(dren.itens.find(i => i.codigo === '1.3.4').unit_mo, 39.75);              // assentamento → mão de obra
+  const terra = frente(d, 'Terraplenagem').itens[0];
+  assert.equal(terra.unit_material, 0); assert.match(terra.obs, /Proposta: R\$ 2,65\/m² \(material \+ MO juntos\)/);
+  assert.equal(dren.materiais.find(m => /DN400, junta/.test(m.descricao)).necessario, r2(3431.4 * 1.15));   // tubo ligado ao serviço com a margem
+  assert.ok(frente(d, 'Esgoto sanitário').materiais.some(m => /DE125/.test(m.descricao) && m.necessario === 474.95));
+  assert.equal(t.raiz('obra_dados', { obra: ava.id }).materiais.filter(m => m.categoria === 'FoFo').length > 10, true);
+  // de novo: nada duplica
+  assert.match(t.G.rodar('criarObraAvaResidence()'), /já existia · 0 serviços e 0 materiais/);
+  assert.equal(t.raiz('orc_dados', { obra: ava.id }).resumo.servicos, 70);
+});
+const r2 = x => Math.round(x * 100) / 100;
+
 test('remover serviço sem uso tira as composições dele', () => {
   const t = preparar();
   const { pv, fr } = orcar(t);
