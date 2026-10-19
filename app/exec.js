@@ -280,7 +280,8 @@ function mEtapa(e, pre) {
     if (ci && ci.orc_item) d.dataset.orcCt = ci.orc_item;
     if (oi) d.dataset.orc = oi.id;
     d.innerHTML = `<label class="s">Serviço<input name="s" list="dl-srv" autocomplete="off" placeholder="Digite para buscar no catálogo"></label>
-      <label>Qtd prevista<input name="q" type="number" step="any" min="0" inputmode="decimal"></label><label>Unid.<input name="u" placeholder="m²"></label>
+      <label>Qtd prevista <small>(total)</small><input name="p" readonly tabindex="-1" placeholder="—"></label>
+      <label>Executar nesta etapa<input name="q" type="number" step="any" min="0" inputmode="decimal"></label><label>Unid.<input name="u" placeholder="m²"></label>
       <label>Início<input type="date" name="i"></label><label>Término<input type="date" name="t"></label>
       <label class="fvl">FVS deste serviço <small>(ficha de verificação — obrigatória para concluir e medir)</small><select name="f">${fvsOpcoes()}</select></label><button type="button" class="rm" aria-label="Remover">${ic('x')}</button>`;
     const s = $('[name=s]', d), u = $('[name=u]', d);
@@ -291,18 +292,26 @@ function mEtapa(e, pre) {
     const src = ci || oi;
     if (src) {                                  // serviço da planilha do contrato ou do orçamento: nome e unidade vêm dele
       s.value = src.servico; s.onchange(); s.readOnly = true; u.value = src.unidade; u.readOnly = true;
-      $('[name=q]', d).value = Math.max(0, ci ? ci.a_programar : oi.a_distribuir) || '';
+      const saldo = Math.max(0, ci ? ci.a_programar : oi.a_distribuir);
+      $('[name=q]', d).placeholder = saldo ? 'até ' + nf(saldo) : '';
       const cs = D.catalogo.find(x => String(x.codigo) === String(src.servico_cod));
       if (cs && cs.fvs_sugerido && !fsel.value) fsel.value = cs.fvs_sugerido;
       d.classList.remove('avulso'); d.classList.add('do-contrato');
     }
     // quanto ainda há no orçamento da obra para este serviço: avisa (sem bloquear) quando passa
     const ref = oi || (ci && ci.orc_item ? orcItem(ci.orc_item) : null);
+    // quantidade prevista (total do serviço): a do orçamento da obra, ou a contratada quando o contrato não está ligado ao orçamento
+    const tot = ref ? num(ref.qtd) : ci ? num(ci.qtd) : 0;
+    if (tot) $('[name=p]', d).value = nf(tot);
     if (ref) {
       const h = document.createElement('small');
       h.className = 'or-hint';
       d.appendChild(h);
-      const q = $('[name=q]', d), dica = () => { const v = num(q.value), resta = num(ref.a_distribuir); h.innerHTML = v > resta + 0.0001 ? `<b class="atrasado">Passa do orçamento da obra: há ${nf(Math.max(0, resta))} ${esc(ref.unidade)} a distribuir (de ${nf(ref.qtd)}). Grava, mas fica o alerta.</b>` : `Orçamento da obra: ${nf(resta)} ${esc(ref.unidade)} a distribuir de ${nf(ref.qtd)} (${esc(ref.frente_nome)}).`; };
+      const q = $('[name=q]', d), dica = () => {
+        const v = num(q.value), resta = num(ref.a_distribuir), un = esc(ref.unidade);
+        h.innerHTML = v > resta + 0.0001 ? `<b class="atrasado">Passa do orçamento da obra: há ${nf(Math.max(0, resta))} ${un} a distribuir (de ${nf(ref.qtd)}). Grava, mas fica o alerta.</b>`
+          : `Previsto ${nf(ref.qtd)} ${un} · já executado ${nf(ref.executado)} · a distribuir ${nf(resta)}${v ? ` · depois desta etapa sobram <b>${nf(resta - v)} ${un}</b>` : ''} (${esc(ref.frente_nome)}).`;
+      };
       q.addEventListener('input', dica); dica();
     }
     return s;
@@ -316,7 +325,7 @@ function mEtapa(e, pre) {
     const usados = new Set([...$$('.srv[data-orc]', f).map(d => d.dataset.orc), ...$$('.srv[data-orc-ct]', f).map(d => d.dataset.orcCt)]);
     const sel = orcFrentes.filter(x => x.nome === f.frente.value), lista = sel.length ? sel : orcFrentes;
     box.innerHTML = `<div class="ct-pick or-pick"><b>${ic('building')} Serviços do orçamento da obra${sel.length ? ' · ' + esc(sel[0].nome) : ''}</b>
-      <small>${sel.length ? 'Toque para incluir. A quantidade já vem com o que falta distribuir do orçamento.' : 'Escolha a frente geral acima para ver só os serviços dela, ou toque para incluir.'}</small>
+      <small>${sel.length ? 'Toque para incluir e digite quanto será executado nesta etapa.' : 'Escolha a frente geral acima para ver só os serviços dela, ou toque para incluir.'}</small>
       ${lista.map(fr => `${lista.length > 1 ? `<small class="or-pick-fr">${esc(fr.nome)}</small>` : ''}${fr.itens.filter(i => !usados.has(i.id)).map(i => `<button type="button" class="ct-it" data-oi="${esc(i.id)}"><span>${esc(i.codigo ? i.codigo + ' · ' : '')}${esc(i.servico)}</span><small class="${i.a_distribuir <= 0 ? 'atrasado' : ''}">${nf(i.a_distribuir)} ${esc(i.unidade)} a distribuir · orçado ${nf(i.qtd)} · executado ${nf(i.executado)}</small>${ic('plus')}</button>`).join('') || '<small>Todos os serviços desta frente já estão aqui.</small>'}`).join('')}</div>`;
     $$('.ct-it[data-oi]', box).forEach(b => {
       b.onclick = () => {
@@ -333,7 +342,7 @@ function mEtapa(e, pre) {
     const usados = new Set($$('.srv[data-ci]', f).map(d => d.dataset.ci));
     const livres = c.itens.filter(i => !usados.has(i.id));
     box.innerHTML = `<div class="ct-pick"><b>${ic('file')} Serviços do contrato ${esc(c.rotulo)}</b>
-      <small>Toque para incluir na frente. A quantidade já vem com o que falta programar do contrato.</small>
+      <small>Toque para incluir na frente e digite quanto será executado nesta etapa.</small>
       ${livres.length ? livres.map(i => `<button type="button" class="ct-it" data-ci="${esc(i.id)}"><span>${esc(i.codigo ? i.codigo + ' · ' : '')}${esc(i.servico)}</span><small>${nf(i.a_programar)} ${esc(i.unidade)} a programar · contratado ${nf(i.qtd)}</small>${ic('plus')}</button>`).join('') : '<small>Todos os serviços do contrato já estão nesta frente.</small>'}
       ${livres.length > 1 ? '<button type="button" class="btn sec peq" id="ctTodos">Incluir todos os que ainda têm saldo</button>' : ''}</div>`;
     $$('.ct-it', box).forEach(b => { b.onclick = () => { add(c.itens.find(i => i.id === b.dataset.ci)); ctPainel(); orPainel(); }; });

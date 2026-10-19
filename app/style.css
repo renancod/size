@@ -353,10 +353,11 @@ details summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:.85re
 .aviso-ex{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
 .aviso-ex span{flex:1}.aviso-ex small{color:var(--mute)}.aviso-ex.lido{opacity:.6}
 .avisos-dia{border-left:4px solid #E0A100}
-.srv{display:grid;grid-template-columns:2fr 1fr 70px 1fr 1fr 36px;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)}
+.srv{display:grid;grid-template-columns:2fr 1fr 1fr 70px 1fr 1fr 36px;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)}
 .srv.avulso .s input{border-color:#E0A100}
 .srv .rm{background:none;border:0;color:var(--err);height:44px;cursor:pointer}
-@media (max-width:700px){.srv{grid-template-columns:1fr 1fr 70px 36px}.srv .s{grid-column:1/-1}.srv label:nth-of-type(4),.srv label:nth-of-type(5){grid-column:span 2}}
+@media (max-width:700px){.srv{grid-template-columns:1fr 1fr 70px 36px}.srv .s{grid-column:1/-1}.srv label:nth-of-type(5),.srv label:nth-of-type(6){grid-column:span 2}}
+.srv [name=p]{background:var(--gray-l);color:var(--mute)}
 .dia-nav{display:flex;align-items:center;gap:6px;margin-bottom:6px}
 .dia-nav{position:sticky;top:calc(var(--top) + var(--sat));z-index:6;background:var(--bg);padding:6px 0;flex-wrap:wrap}
 .dia-data{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:12px;min-height:46px;font:inherit;font-size:1rem;color:var(--navy);cursor:pointer}
