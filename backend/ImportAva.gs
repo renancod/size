@@ -164,18 +164,28 @@ function criarObraAvaResidence() {
       if (!f.descricao && v.etapas.length > 1) f.descricao = v.etapas.join(' · ').slice(0, 300);
       Fr.update(f); nVal++;
     });
-    // serviços: os que ainda não estão no orçamento da frente (pelo código do item); os que já estão ganham o preço de venda, se faltar
-    const T = obraTab_(ctx, 'OrcItens');
-    let nServ = 0;
+    // serviços: reconhecidos pelo nome + unidade (o código "1.1.1" já foi trocado por data pelo Planilhas na 1ª versão);
+    // os que já estão ganham o código certo e o preço de venda; duplicados sem uso saem; os que faltam entram
+    const T = obraTab_(ctx, 'OrcItens'), usados = {};
+    obraTab_(ctx, 'EtapaItens').all().filter(orcAtivo_).forEach(x => { if (x.orc_item) usados[x.orc_item] = 1; });
+    ctrAtivos_(ctx).forEach(x => { if (x.orc_item) usados[x.orc_item] = 1; });
+    obraTab_(ctx, 'OrcMateriais').all().filter(orcAtivo_).forEach(x => { if (x.orc_item) usados[x.orc_item] = 1; });
+    let nServ = 0, nDup = 0, nCod = 0;
+    const chave = x => norm_(x.servico) + '|' + norm_(x.unidade);
     AVA_FRENTES_.forEach(n => {
-      const f = orcFrente_(ctx, n), ja = {};
-      T.all().filter(i => String(i.frente) === String(f.codigo) && orcAtivo_(i)).forEach(i => { ja[String(i.codigo)] = i; });
-      AVA_ITENS_.filter(i => i.frente === n && ja[i.codigo] && ja[i.codigo].unit_venda === '' && i.unit_venda !== '').forEach(i => {
-        const x = ja[i.codigo];
-        x.unit_venda = i.unit_venda; x.obs = String(x.obs || '').replace(/^Proposta: [^·]*· total R\$ [\d.,]+( · )?/, '');
-        T.update(x);
+      const f = orcFrente_(ctx, n), ativos = T.all().filter(i => String(i.frente) === String(f.codigo) && orcAtivo_(i)), novos = [];
+      AVA_ITENS_.filter(i => i.frente === n).forEach(i => {
+        const cands = ativos.filter(x => chave(x) === chave(i));
+        if (!cands.length) { novos.push({ codigo: i.codigo, servico: i.servico, unidade: i.unidade, qtd: i.qtd, unit_material: i.unit_material, unit_mo: i.unit_mo, unit_venda: i.unit_venda, obs: i.obs }); return; }
+        const fica = cands.find(x => usados[x.id]) || cands[0];
+        cands.filter(x => x !== fica && !usados[x.id]).forEach(x => { x.ativo = 'Não'; x.atualizado_em = new Date(); T.update(x); nDup++; });
+        let mudou = false;
+        if (String(fica.codigo) !== i.codigo) { fica.codigo = i.codigo; mudou = true; nCod++; }
+        if (fica.unit_venda === '' && i.unit_venda !== '') { fica.unit_venda = i.unit_venda; mudou = true; }
+        const obs = String(fica.obs || '').replace(/^Proposta: [^·]*· total R\$ [\d.,]+( · )?/, '');
+        if (obs !== String(fica.obs || '')) { fica.obs = obs; mudou = true; }
+        if (mudou) T.update(fica);
       });
-      const novos = AVA_ITENS_.filter(i => i.frente === n && !ja[i.codigo]).map(i => ({ codigo: i.codigo, servico: i.servico, unidade: i.unidade, qtd: i.qtd, unit_material: i.unit_material, unit_mo: i.unit_mo, unit_venda: i.unit_venda, obs: i.obs }));
       if (novos.length) { orcItensSalvar_({ frente: f.codigo, itens: novos }, ctx); nServ += novos.length; }
     });
     // materiais: entram no cadastro da obra (para os pedidos casarem) e no orçamento da frente
@@ -190,7 +200,8 @@ function criarObraAvaResidence() {
       orcMaterialSalvar_(it ? { orc_item: it.id, material_cod: cad.codigo, coef: m.coef, obs: m.obs } : { frente: f.codigo, material_cod: cad.codigo, qtd: m.qtd, obs: m.obs }, ctx);
       nMat++;
     });
-    const r = 'AVA Residence (' + o.id + ')' + (nova ? ' criada' : ' já existia') + ' · ' + nServ + ' serviços e ' + nMat + ' materiais incluídos no orçamento · valores da R02 em ' + nVal + ' frentes';
+    const r = 'AVA Residence (' + o.id + ')' + (nova ? ' criada' : ' já existia') + ' · ' + nServ + ' serviços e ' + nMat + ' materiais incluídos no orçamento · valores da R02 em ' + nVal + ' frentes' +
+      (nDup || nCod ? ' · ' + nDup + ' serviços duplicados retirados e ' + nCod + ' códigos corrigidos' : '');
     log_(ctx, 'importar_ava', r);
     Logger.log(r);
     return r;

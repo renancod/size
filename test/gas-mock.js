@@ -34,7 +34,8 @@ function criarGAS() {
   };
   Range.prototype.setValues = function (v) {
     if (v.length !== this.nr || v.some(r => r.length !== this.nc)) throw new Error('setValues: dimensões erradas');
-    v.forEach((row, i) => { const rr = this.sh.d[this.r - 1 + i] = this.sh.d[this.r - 1 + i] || []; row.forEach((x, j) => { rr[this.c - 1 + j] = x; }); });
+    // como no Google Planilhas: apóstrofo no começo força texto e não fica no valor
+    v.forEach((row, i) => { const rr = this.sh.d[this.r - 1 + i] = this.sh.d[this.r - 1 + i] || []; row.forEach((x, j) => { rr[this.c - 1 + j] = typeof x === 'string' && x[0] === "'" ? x.slice(1) : x; }); });
     return this;
   };
   Range.prototype.setValue = function (x) { return this.setValues([[x]]); };

@@ -102,7 +102,10 @@ Tabela_.prototype.all = function () {
   });
   return (this._rows = rows);
 };
-Tabela_.prototype.linha_ = function (o) { return this.head.map(c => (o[c] == null ? '' : o[c])); };
+/* texto que o Google Planilhas trocaria por data ou número (código de item "1.1.1" vira 01/01/2001, "2.10" vira 2,1, "015/2026" vira data):
+ * vai com apóstrofo na frente, que força texto e não aparece na célula */
+const TEXTO_FORCADO_ = /^(\d+(\.\d+)+|\d{1,4}\/\d{4})$/;
+Tabela_.prototype.linha_ = function (o) { return this.head.map(c => { const v = o[c] == null ? '' : o[c]; return typeof v === 'string' && TEXTO_FORCADO_.test(v) ? "'" + v : v; }); };
 Tabela_.prototype.insert = function (o) { return this.insertMany([o])[0]; };
 Tabela_.prototype.insertMany = function (lista) {
   if (!lista.length) return lista;

@@ -254,6 +254,27 @@ test('importação da obra AVA Residence: frentes, serviços e materiais das pla
   assert.equal(frente(d2, 'Terraplenagem').resumo.emp.preco, 30000000);
 });
 
+test('importação AVA conserta códigos trocados por data e tira os serviços duplicados', () => {
+  const t = preparar();
+  t.G.rodar('criarObraAvaResidence()');
+  // estado da 1ª versão em produção: código "1.1.1" virou "1.1.2001" e sem preço de venda; a 2ª rodada duplicou os serviços
+  t.G.rodar(`(() => {
+    const o = central_('Obras').all().find(x => x.sigla === 'AVA'), ctx = { ss: SpreadsheetApp.openById(o.planilha_id) }, T = obraTab_(ctx, 'OrcItens');
+    const ori = T.all().filter(orcAtivo_);
+    ori.forEach(i => { i.codigo = i.codigo + '001'; i.unit_venda = ''; i.obs = 'Proposta: R$ 1,00/un (material + MO juntos) · total R$ 10,00 · ' + i.obs; T.update(i); });
+    T.insertMany(ori.slice(0, 66).map(i => Object.assign({}, i, { id: 'OI-dup' + i.id.slice(3), unit_venda: 9 })));
+  })()`);
+  const ava = t.raiz('sessao').obras.find(o => o.sigla === 'AVA');
+  assert.equal(t.raiz('orc_dados', { obra: ava.id }).resumo.servicos, 136);
+  assert.match(t.G.rodar('criarObraAvaResidence()'), /0 serviços e 0 materiais .* 66 serviços duplicados retirados e 70 códigos corrigidos/);
+  const d = t.raiz('orc_dados', { obra: ava.id });
+  assert.equal(d.resumo.servicos, 70);
+  const dren = frente(d, 'Drenagem pluvial'), tubo = dren.itens.find(i => i.codigo === '1.3.1');
+  assert.equal(tubo.unit_venda, 582.96); assert.ok(!/^Proposta/.test(tubo.obs));
+  assert.equal(dren.materiais.find(m => /DN400, junta/.test(m.descricao)).necessario, r2(3431.4 * 1.15));   // composição continua ligada
+  assert.match(t.G.rodar('criarObraAvaResidence()'), /0 serviços e 0 materiais incluídos no orçamento · valores da R02 em 0 frentes$/);
+});
+
 test('empreendimento: receita, avanço físico, custo real, estimativa no fim e lucro projetado', () => {
   const t = preparar();
   const { rede, pv, tubo, fr } = orcar(t);
