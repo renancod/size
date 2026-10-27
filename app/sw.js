@@ -1,5 +1,5 @@
 // Cache do app para abrir rápido e funcionar com sinal fraco na obra (os dados sempre vêm da API).
-const CACHE = 'size-v33';
+const CACHE = 'size-v34';
 const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './ctr.js', './ctr-doc.js', './orc.js', './relobra.js', './base.js', './prop.js', './empresa.js','./push.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png', './fornecedor.html', './forn.js'];
 
 // cache: 'reload' / 'no-cache': nunca usar a cópia do navegador (o GitHub Pages manda guardar 10 min),
