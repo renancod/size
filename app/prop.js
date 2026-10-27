@@ -335,53 +335,151 @@ async function vPropDoc(id, qs) {
   $('#ppPrint').onclick = () => window.print();
   $('#ppXls').onclick = async () => { const b = $('#ppXls'); b.disabled = true; try { await ppExcel(d); } catch (e) { toast(e.message, 1); } b.disabled = false; };
 }
-/* Excel no formato da planilha do RDObras: aba do orçamento (custo, material, MO, BDI, gestão, preço final) e aba Composições
- * (cada item com os insumos); dá para importar de volta no sistema */
+/* Excel com a mesma cara da planilha do RDObras (ExcelJS, carregado só quando precisa): aba "Material x Mão de obra"
+ * (cabeçalho verde-petróleo, material em verde, mão de obra em âmbar, BDI/gestão/preço final em roxo, etapas em faixa,
+ * subtotais em verde-claro, taxas em azul no quadro amarelo, subtotais e total com fórmula) e aba "Composições"
+ * (cada item com os insumos; mão de obra em marrom). Dá para importar de volta no sistema. */
+const PP_EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
 async function ppExcel(d) {
   await bpCarregar();
-  if (!window.XLSX) await bpScript(BP_XLSX);
+  if (!window.ExcelJS) await bpScript(PP_EXCELJS);
   const p = d.proposta, T = d.total, et = {};
   d.etapas.forEach(e => { et[e.codigo] = e; });
-  const base = b => (b === 'total' ? 'sobre o total' : 's/ serviços');
-  const A = [
-    ['', '', 'PLANILHA ORÇAMENTÁRIA · MATERIAL x MÃO DE OBRA', '', '', '', '', '', '', 'Preço final (R$)', T.preco, '', 'BDI ' + base(p.bdi_base) + ' (%)', p.bdi_pct / 100],
-    ['', '', [p.empreendimento, p.local, p.cliente, p.rotulo].filter(Boolean).join(' · '), '', '', '', '', '', '', 'Custo direto (R$)', T.custo, '', 'Gestão de obra ' + base(p.gestao_base) + ' (%)', p.gestao_pct / 100],
-    ['', '', 'Data-base ' + fd(p.data_base) + ' · ' + d.empresa, '', '', '', '', '', '', 'Material (R$)', T.v_mat, '', 'BDI (R$)', T.bdi],
-    ['', '', '', '', '', '', '', '', '', 'Mão de obra / serviço (R$)', T.v_serv, '', 'Gestão de obra (R$)', T.gestao],
-    [],
-    ['ITEM', 'CÓD.', 'DESCRIÇÃO', 'UN', 'QUANT.', 'PREÇO UNIT. (R$)', 'MATERIAL UNIT. (R$)', 'MÃO DE OBRA UNIT. (R$)', 'PREÇO TOTAL (R$)', 'MATERIAL TOTAL (R$)', 'MÃO DE OBRA / SERVIÇO TOTAL (R$)', 'BDI S/ SERVIÇOS (R$)', 'GESTÃO DE OBRA (R$)', 'PREÇO FINAL TOTAL (R$)', 'PREÇO FINAL UNIT. (R$)']
-  ];
-  let aberta = null;
-  const fecha = () => { if (!aberta) return; const e = et[aberta]; A.push(['', '', 'Subtotal ' + aberta, '', '', '', '', '', e.custo, e.v_mat, e.v_serv, e.bdi, e.gestao, e.preco, '']); aberta = null; };
-  d.itens.forEach(i => {
-    if (i.tipo === 'E') { fecha(); aberta = i.codigo; A.push([i.codigo, '', String(i.descricao).toUpperCase()]); return; }
-    A.push([i.codigo, i.comp_cod || '', i.descricao, i.unidade, i.qtd, ppR2(i.custo_unit), ppR2(i.unit_mat), ppR2(i.unit_mo + i.unit_eq + i.unit_sv), i.custo, i.v_mat, i.v_serv, i.bdi, i.gestao, i.preco, i.preco_unit]);
+  const COR = { petroleo: 'FF027F79', escuro: 'FF035F5E', verde: 'FF1F6E43', ambar: 'FFB07A00', roxo: 'FF7A2E8C', lilas: 'FFF6EFF8', subtotal: 'FFCFE8E1', amarelo: 'FFFFF2CC', borda: 'FFC9D3DC', nota: 'FF5A6475', azul: 'FF0000FF', marrom: 'FF7A4A00' };
+  const fonte = (o = {}) => Object.assign({ name: 'Arial', size: 9 }, o);
+  const fundo = c => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } });
+  const borda = { top: { style: 'thin', color: { argb: COR.borda } }, left: { style: 'thin', color: { argb: COR.borda } }, bottom: { style: 'thin', color: { argb: COR.borda } }, right: { style: 'thin', color: { argb: COR.borda } } };
+  const MOEDA = '#,##0.00', PCT = '0.0%';
+  const wb = new ExcelJS.Workbook();
+  wb.creator = d.empresa; wb.created = new Date();
+
+  /* ---- aba do orçamento ---- */
+  const A = wb.addWorksheet('Material x Mão de obra', { views: [{ state: 'frozen', xSplit: 3, ySplit: 6, showGridLines: false }], pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  A.columns = [6, 9, 52, 5, 12, 13, 13, 13, 16, 16, 17, 13, 9, 15, 15, 17, 14].map(width => ({ width }));
+  const cel = (ref, v, st) => { const c = A.getCell(ref); c.value = v; Object.assign(c, st || {}); return c; };
+  cel('C1', 'PLANILHA ORÇAMENTÁRIA · MATERIAL x MÃO DE OBRA', { font: fonte({ size: 15, bold: true, color: { argb: COR.escuro } }) });
+  cel('C2', [p.empreendimento, p.local, p.cliente, p.rotulo].filter(Boolean).join(' · '), { font: fonte({ size: 10, color: { argb: COR.petroleo } }) });
+  cel('C3', 'Material = insumos das composições. Mão de obra / serviço = execução, equipamentos e serviços de terceiros.', { font: fonte({ italic: true, color: { argb: COR.nota } }) });
+  cel('C4', 'Data-base ' + fd(p.data_base) + ' · validade ' + p.validade_dias + ' dias · ' + d.empresa + '. Os insumos de cada item estão na aba "Composições".', { font: fonte({ italic: true, color: { argb: COR.nota } }) });
+  A.getRow(1).height = 18;
+  const TOT = 'TOT';   // trocado pela linha do VALOR TOTAL depois de montar a planilha
+  [['J1', 'Total', 'I'], ['J2', 'Material', 'J'], ['J3', 'Mão de obra / serviço', 'K'], ['J4', 'Sem detalhe', 'L']].forEach(([r, t, col], n) => {
+    cel(r, t, { font: fonte({ bold: !n }) });
+    cel('K' + (n + 1), { formula: col + TOT }, { font: fonte({ size: 10, bold: true, color: { argb: n ? 'FF000000' : COR.escuro } }), numFmt: MOEDA });
+    if (n) cel('L' + (n + 1), { formula: 'IFERROR(K' + (n + 1) + '/K1,0)' }, { font: fonte(), numFmt: PCT });
   });
-  fecha();
-  A.push([], ['', '', 'VALOR TOTAL', '', '', '', '', '', T.custo, T.v_mat, T.v_serv, T.bdi, T.gestao, T.preco, '']);
-  // composições: cabeçalho do item + insumos (as auxiliares abertas até o insumo; preço da base de hoje)
+  const base = b => (b === 'total' ? 'sobre o total' : 's/ serviços');
+  [['N1', 'BDI ' + base(p.bdi_base) + ' (%)', p.bdi_pct / 100], ['N2', 'Gestão de obra ' + base(p.gestao_base) + ' (%)', p.gestao_pct / 100]].forEach(([r, t, v], n) => {
+    cel(r, t, { font: fonte({ bold: true }), alignment: { horizontal: 'right' } });
+    cel('O' + (n + 1), v, { font: fonte({ size: 11, bold: true, color: { argb: COR.azul } }), fill: fundo(COR.amarelo), numFmt: '0.00%', border: borda });
+  });
+  [['N3', 'BDI (R$)', 'N'], ['N4', 'Gestão de obra (R$)', 'O'], ['N5', 'PREÇO FINAL (R$)', 'P']].forEach(([r, t, col], n) => {
+    cel(r, t, { font: fonte({ bold: n === 2 }), alignment: { horizontal: 'right' } });
+    cel('O' + (n + 3), { formula: col + TOT }, { font: fonte({ size: 10, bold: true, color: { argb: n === 2 ? COR.escuro : 'FF000000' } }), numFmt: MOEDA });
+  });
+  const CAB = ['ITEM', 'CÓD.', 'DESCRIÇÃO', 'UN', 'QUANT.', 'PREÇO UNIT. (R$)', 'MATERIAL UNIT. (R$)', 'MÃO DE OBRA UNIT. (R$)', 'PREÇO TOTAL (R$)', 'MATERIAL TOTAL (R$)', 'MÃO DE OBRA / SERVIÇO TOTAL (R$)', 'SEM DETALHE (R$)', '% MATERIAL', 'BDI S/ SERVIÇOS (R$)', 'GESTÃO DE OBRA (R$)', 'PREÇO FINAL TOTAL (R$)', 'PREÇO FINAL UNIT. (R$)'];
+  const corCab = n => ([6, 9].includes(n) ? COR.verde : [7, 10].includes(n) ? COR.ambar : n >= 13 ? COR.roxo : COR.petroleo);
+  const hc = A.getRow(6);
+  hc.values = CAB; hc.height = 36;
+  hc.eachCell((c, n) => { c.font = fonte({ bold: true, color: { argb: 'FFFFFFFF' } }); c.fill = fundo(corCab(n - 1)); c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = borda; });
+  let r = 7, ini = 0;
+  const subtotais = [];
+  const faixa = (row, cor, fnt) => { for (let k = 1; k <= 17; k++) { const c = row.getCell(k); c.fill = fundo(cor); c.font = fnt; c.border = borda; } };
+  // fórmulas levam o resultado junto: aparece certo até em visualizador que não recalcula (celular, e-mail)
+  const VAL = { I: 'custo', J: 'v_mat', K: 'v_serv', N: 'bdi', O: 'gestao', P: 'preco' };
+  const res = (o, col) => (VAL[col] ? o[VAL[col]] : 0);
+  const fechaEtapa = cod => {
+    const row = A.getRow(r), e = et[cod] || {};
+    row.getCell(3).value = 'Subtotal ' + cod;
+    ['I', 'J', 'K', 'L', 'N', 'O', 'P'].forEach(col => { row.getCell(col).value = { formula: `SUM(${col}${ini}:${col}${r - 1})`, result: res(e, col) }; });
+    row.getCell('M').value = { formula: `IFERROR(J${r}/I${r},0)`, result: e.custo ? e.v_mat / e.custo : 0 };
+    faixa(row, COR.subtotal, fonte({ bold: true }));
+    for (let k = 9; k <= 17; k++) row.getCell(k).numFmt = MOEDA;
+    row.getCell('M').numFmt = PCT;
+    subtotais.push(r); r++;
+  };
+  let aberta = null;
+  d.itens.forEach(i => {
+    if (i.tipo === 'E') {
+      if (aberta) fechaEtapa(aberta);
+      aberta = i.codigo;
+      const row = A.getRow(r);
+      row.getCell(1).value = Number(i.codigo) || i.codigo; row.getCell(3).value = String(i.descricao).toUpperCase();
+      faixa(row, COR.petroleo, fonte({ size: 10, bold: true, color: { argb: 'FFFFFFFF' } }));
+      r++; ini = r; return;
+    }
+    const row = A.getRow(r);
+    row.values = [i.codigo, i.comp_cod || '', i.descricao, i.unidade, i.qtd, ppR2(i.custo_unit), ppR2(i.unit_mat), ppR2(i.unit_mo + i.unit_eq + i.unit_sv), i.custo, i.v_mat, i.v_serv, 0,
+      { formula: `IFERROR(J${r}/I${r},0)`, result: i.custo ? i.v_mat / i.custo : 0 }, i.bdi, i.gestao, { formula: `I${r}+N${r}+O${r}`, result: i.preco }, { formula: `IFERROR(ROUND(P${r}/E${r},2),0)`, result: i.preco_unit }];
+    row.eachCell({ includeEmpty: true }, (c, n) => {
+      c.font = fonte(); c.border = borda;
+      if (n >= 5) c.numFmt = n === 13 ? PCT : n === 5 ? '#,##0.00##' : MOEDA;
+      if ([1, 2, 4].includes(n)) c.alignment = { horizontal: 'center', vertical: 'middle' };
+      if (n === 3) c.alignment = { vertical: 'middle', wrapText: true };
+      if (n >= 14) c.fill = fundo(COR.lilas);
+    });
+    if (i.sem_bdi || i.sem_gestao) row.getCell(3).note = [i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ');
+    r++;
+  });
+  if (aberta) fechaEtapa(aberta);
+  r++;
+  const tr = A.getRow(r);
+  tr.getCell(3).value = 'VALOR TOTAL';
+  ['I', 'J', 'K', 'L', 'N', 'O', 'P'].forEach(col => { tr.getCell(col).value = { formula: subtotais.map(x => col + x).join('+') || '0', result: res(T, col) }; });
+  tr.getCell('M').value = { formula: `IFERROR(J${r}/I${r},0)`, result: T.custo ? T.v_mat / T.custo : 0 };
+  faixa(tr, COR.petroleo, fonte({ size: 10, bold: true, color: { argb: 'FFFFFFFF' } }));
+  for (let k = 9; k <= 17; k++) tr.getCell(k).numFmt = MOEDA;
+  tr.getCell('M').numFmt = PCT;
+  const conf = A.getRow(r + 1);
+  conf.getCell(3).value = 'Conferência (material + mão de obra + sem detalhe − total):';
+  conf.getCell(9).value = { formula: `J${r}+K${r}+L${r}-I${r}`, result: ppR2(T.v_mat + T.v_serv - T.custo) };
+  [3, 9].forEach(k => { conf.getCell(k).font = fonte({ size: 8, italic: true }); });
+  conf.getCell(9).numFmt = MOEDA;
+  // o resumo do topo aponta para a linha do total
+  const RES = { K1: T.custo, K2: T.v_mat, K3: T.v_serv, K4: 0, O3: T.bdi, O4: T.gestao, O5: T.preco };
+  ['K1', 'K2', 'K3', 'K4', 'O3', 'O4', 'O5'].forEach(ref => { const c = A.getCell(ref); c.value = { formula: c.value.formula.replace(TOT, r), result: RES[ref] }; });
+  ['L2', 'L3', 'L4'].forEach((ref, n) => { const c = A.getCell(ref); c.value = { formula: c.value.formula, result: T.custo ? [T.v_mat, T.v_serv, 0][n] / T.custo : 0 }; });
+
+  /* ---- aba das composições ---- */
   const TIPO = { 'Material': 'Material', 'Mão de obra': 'Mão de obra / serviço', 'Equipamento': 'Equipamento', 'Serviço': 'Serviço' };
-  const B = [['', '', '', 'COMPOSIÇÕES DO ORÇAMENTO ' + p.rotulo + ' · ' + p.empreendimento], [], ['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF. / UN ITEM', 'CUSTO UNIT. (R$)', 'CUSTO TOTAL (R$)']];
+  const B = wb.addWorksheet('Composições', { views: [{ state: 'frozen', ySplit: 4, showGridLines: false }], pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  B.columns = [6, 20, 15, 70, 6, 14, 12, 15, 17].map(width => ({ width }));
+  B.getCell('A1').value = String(p.empreendimento).toUpperCase() + ' · COMPOSIÇÕES DO ORÇAMENTO ' + p.rotulo;
+  B.getCell('A1').font = fonte({ size: 13, bold: true, color: { argb: COR.escuro } });
+  B.getCell('A2').value = 'Linhas de cada composição: insumos (material) e mão de obra / serviço, com a quantidade total e o custo unitário usado no orçamento.';
+  B.getCell('A2').font = fonte({ italic: true, color: { argb: COR.nota } });
+  const bh = B.getRow(4);
+  bh.values = ['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF. / UN ITEM', 'CUSTO UNIT. (R$)', 'CUSTO TOTAL (R$)'];
+  bh.height = 21.75;
+  bh.eachCell(c => { c.font = fonte({ bold: true, color: { argb: 'FFFFFFFF' } }); c.fill = fundo(COR.petroleo); c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = borda; });
+  let br = 5;
+  const linhaB = (vals, cab, cor) => {
+    const row = B.getRow(br++);
+    row.values = vals;
+    row.eachCell({ includeEmpty: true }, (c, n) => {
+      c.font = fonte({ bold: cab, color: { argb: cor || 'FF000000' } }); c.border = borda;
+      if (cab) c.fill = fundo(COR.subtotal);
+      if ([1, 5].includes(n)) c.alignment = { horizontal: 'center' };
+      if (n === 6) c.numFmt = '#,##0.00##'; if (n === 7) c.numFmt = '0.0000'; if (n >= 8) c.numFmt = MOEDA;
+    });
+  };
   d.itens.filter(i => i.tipo === 'I').forEach(i => {
-    B.push([i.codigo, '', i.comp_cod || '', i.descricao, i.unidade, i.qtd, '', ppR2(i.custo_unit), i.custo]);
+    linhaB([i.codigo, '', i.comp_cod || '', i.descricao, i.unidade, i.qtd, '', ppR2(i.custo_unit), i.custo], true);
     const c = i.comp_cod && BP.C[i.comp_cod];
-    if (c) {
-      Object.values(bpExplodir(c.itens, 1, {}, [c.codigo])).forEach(a => B.push([i.codigo, TIPO[a.i.tipo] || 'Material', a.i.codigo, a.i.descricao, a.i.unidade, Math.round(i.qtd * a.coef * 1e4) / 1e4, Math.round(a.coef * 1e6) / 1e6, a.preco, ppR2(i.qtd * a.coef * a.preco)]));
-    } else {
-      if (i.unit_mat) B.push([i.codigo, 'Material', '', i.descricao + ' – material', i.unidade, i.qtd, 1, i.unit_mat, i.v_mat]);
-      if (i.unit_mo + i.unit_eq + i.unit_sv) B.push([i.codigo, 'Mão de obra / serviço', '', i.descricao + ' – mão de obra', i.unidade, i.qtd, 1, i.unit_mo + i.unit_eq + i.unit_sv, i.v_serv]);
+    if (c) Object.values(bpExplodir(c.itens, 1, {}, [c.codigo])).forEach(a => linhaB([i.codigo, TIPO[a.i.tipo] || 'Material', a.i.codigo, a.i.descricao, a.i.unidade, Math.round(i.qtd * a.coef * 1e4) / 1e4, Math.round(a.coef * 1e6) / 1e6, a.preco, ppR2(i.qtd * a.coef * a.preco)], false, a.i.tipo === 'Material' ? '' : COR.marrom));
+    else {
+      if (i.unit_mat) linhaB([i.codigo, 'Material', '', i.descricao + ' – material', i.unidade, i.qtd, 1, i.unit_mat, i.v_mat], false);
+      if (i.unit_mo + i.unit_eq + i.unit_sv) linhaB([i.codigo, 'Mão de obra / serviço', '', i.descricao + ' – mão de obra', i.unidade, i.qtd, 1, i.unit_mo + i.unit_eq + i.unit_sv, i.v_serv], false, COR.marrom);
     }
   });
-  const folha = (L, larg, moeda) => {
-    const ws = XLSX.utils.aoa_to_sheet(L);
-    ws['!cols'] = larg.map(w => ({ wch: w }));
-    Object.keys(ws).forEach(k => { if (k[0] === '!') return; const col = XLSX.utils.decode_cell(k).c, cel = ws[k]; if (cel.t === 'n' && moeda.includes(col)) cel.z = '#,##0.00'; if (cel.t === 'n' && (col === 13 && /\(%\)/.test(String((L[XLSX.utils.decode_cell(k).r] || [])[12] || '')))) cel.z = '0.00%'; });
-    return ws;
-  };
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, folha(A, [7, 10, 62, 6, 12, 14, 14, 14, 16, 16, 18, 16, 16, 18, 14], [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]), 'Material x Mão de obra');
-  XLSX.utils.book_append_sheet(wb, folha(B, [7, 20, 14, 62, 6, 14, 12, 14, 16], [7, 8]), 'Composições');
-  XLSX.writeFile(wb, (p.rotulo + ' - ' + p.empreendimento).replace(/[\\/:*?"<>|]/g, '-').slice(0, 100) + '.xlsx');
+
+  const buf = await wb.xlsx.writeBuffer(), nome = (p.rotulo + ' - ' + p.empreendimento).replace(/[\\/:*?"<>|]/g, '-').slice(0, 100) + '.xlsx';
+  if (PP.excelBase64) return PP.excelBase64(buf, nome);   // só para teste: devolve o arquivo em vez de baixar
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = nome;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 
 /* ---------- importar um orçamento do RDObras (vira orçamento em rascunho + composições na base) ---------- */
