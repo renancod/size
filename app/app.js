@@ -130,6 +130,8 @@ async function instalar() {
 /* ---------- estado e API ---------- */
 const S = { token: LS.get('cs_token'), sess: null, obraId: LS.get('cs_obra'), dados: null, ped: null, todos: false, adm: null };
 const admin = () => !!(S.sess && S.sess.usuario.admin);
+/* módulo Orçamentos (base de preços): não depende de obra; nível vem do cadastro do usuário */
+const baseNivel = () => (S.sess && S.sess.usuario.orcamentos) || (admin() ? 'Gerir' : '');
 const can = p => admin() || [].concat(p).some(x => S.dados && S.dados.permissoes.includes(x));
 const obraAtual = () => (S.sess?.obras || []).find(o => o.id === S.obraId);
 /* obra desativada (só o admin abre): dá para consultar, mas não há pendências, alertas nem contadores */
@@ -251,6 +253,17 @@ const MODULOS = [
       { h: '#/obra/financeiro', t: 'Valores (financeiro)', i: 'money', ok: () => can(['orc_ver', 'orc_gerir']) },
       { h: '#/obra/relatorio', t: 'Relatório da obra', i: 'file', ok: () => can(['orc_ver', 'orc_gerir', 'exec_planejar']) }
     ]
+  },
+  {
+    id: 'orcamentos', t: 'Orçamentos', i: 'calc', home: '#/orc', global: true,   // global: aparece mesmo sem obra escolhida
+    desc: 'Base de preços da Size: insumos e composições de serviço (como no RDObras e no OrçaFácil), para orçar novos clientes',
+    rotas: /^#\/orc/,
+    itens: [
+      { h: '#/orc', t: 'Painel da base', i: 'chart', ok: () => !!baseNivel() },
+      { h: '#/orc/composicoes', t: 'Composições', i: 'layers', ok: () => !!baseNivel() },
+      { h: '#/orc/insumos', t: 'Insumos', i: 'box', ok: () => !!baseNivel() },
+      { h: '#/orc/importar', t: 'Importar do RDObras', i: 'upload', ok: () => baseNivel() === 'Gerir' }
+    ]
   }
 ];
 const modOk = m => !m.itens || m.itens.some(n => n.ok());
@@ -316,7 +329,7 @@ function montarMenu() {
     <div class="sep">Módulos</div>
     ${MODULOS.filter(modOk).map(m => m.breve
       ? `<div class="mod breve">${ic(m.i)}<span>${m.t}</span><small>em breve</small></div>`
-      : !S.dados ? '' : `<button type="button" class="mod" data-mod="${m.id}" aria-expanded="${aberto === m.id}">${ic(m.i)}<span>${m.t}</span><span class="cont" data-c="mod-${m.id}" hidden></span>${ic('chevron')}</button>
+      : !S.dados && !m.global ? '' : `<button type="button" class="mod" data-mod="${m.id}" aria-expanded="${aberto === m.id}">${ic(m.i)}<span>${m.t}</span><span class="cont" data-c="mod-${m.id}" hidden></span>${ic('chevron')}</button>
         <div class="sub" data-sub="${m.id}" ${aberto === m.id ? '' : 'hidden'}>${m.itens.filter(n => n.ok()).map(link).join('')}</div>`).join('')}
     ${NAV_GERAL.filter(n => n.ok()).map(n => n.sep ? `<div class="sep">${n.sep}</div>` : link(n)).join('')}`;
   $$('#nav .mod[data-mod]').forEach(b => {
@@ -344,7 +357,7 @@ function marcarMenu() {
 function contadores() {
   $$('#nav .cont').forEach(c => {
     const k = c.dataset.c;
-    const n = obraInativa() ? 0 : /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
+    const n = obraInativa() ? 0 : /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra|mod-orcamentos)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
     c.textContent = n; c.hidden = !n;
   });
 }
@@ -373,7 +386,7 @@ async function rotear() {
   const h = location.hash || '#/inicio', id = ++rotaN;
   marcarMenu();
   fecharModal();
-  if (!S.dados && !/^#\/(admin|conta)/.test(h)) return semObra();
+  if (!S.dados && !/^#\/(admin|conta|orc)/.test(h)) return semObra();
   for (const [re, fn] of ROTAS) {
     const m = h.match(re);
     if (!m) continue;
@@ -388,7 +401,8 @@ async function rotear() {
 addEventListener('hashchange', rotear);
 function semObra() {
   titulo('Compras');
-  view(`<div class="card vazio"><p><b>Nenhuma obra liberada para você.</b></p>${admin() ? '<a class="btn" href="#/admin/obras">Criar a primeira obra</a>' : '<p>Peça ao administrador para liberar seu acesso.</p>'}</div>`);
+  view(`<div class="card vazio"><p><b>Nenhuma obra liberada para você.</b></p>${admin() ? '<a class="btn" href="#/admin/obras">Criar a primeira obra</a>' : '<p>Peça ao administrador para liberar seu acesso.</p>'}
+    ${baseNivel() ? `<p>Você tem acesso ao módulo Orçamentos.</p><a class="btn sec" href="#/orc">${ic('calc')} Abrir a base de preços</a>` : ''}</div>`);
 }
 
 /* ---------- login ---------- */
@@ -447,6 +461,8 @@ async function iniciar() {
   if (S.obraId) LS.set('cs_obra', S.obraId);
   S.dados = null;
   if (S.obraId) { try { await recarregarDados(); } catch (e) { toast(e.message, 1); } }
+  // quem só tem o módulo Orçamentos (sem obra) já abre na base de preços
+  if (!S.obraId && baseNivel() && /^(#\/inicio)?$/.test(location.hash)) history.replaceState(null, '', '#/orc');
   montarShell();
   rotear();
   if (S.dados && !S.offline) pedidos().catch(() => {});
@@ -1266,7 +1282,8 @@ async function recarregarSessao() { S.sess = Object.assign(S.sess, await api('se
 async function vUsuarios() {
   titulo('Usuários e acessos');
   const A = await adm(true);
-  const resumo = u => sim(u.admin) ? 'Administrador' : A.acessos.filter(a => a.usuario_id === u.id).map(a => `${A.obras.find(o => o.id === a.obra_id)?.sigla || a.obra}: ${a.perfil}`).join(' · ') || 'sem acesso';
+  const resumo = u => sim(u.admin) ? 'Administrador' : [...A.acessos.filter(a => a.usuario_id === u.id).map(a => `${A.obras.find(o => o.id === a.obra_id)?.sigla || a.obra}: ${a.perfil}`),
+    ...(u.orcamentos ? ['Orçamentos: ' + u.orcamentos] : [])].join(' · ') || 'sem acesso';
   view(`<div class="cab"><h2>${plural(A.usuarios.length, 'usuário', 'usuários')}</h2><button class="btn" id="novo">${ic('plus')} Novo usuário</button></div>
     <div class="busca">${ic('search')}<input type="search" id="busca" placeholder="Buscar…"></div>
     <div class="card" style="padding:4px 14px" id="lst"></div>`);
@@ -1293,6 +1310,8 @@ function mUsuario(u) {
     ${u ? '' : `<label>Senha provisória (mín. 10)<input name="senha" required minlength="10" autocomplete="new-password" value="${senhaAleatoria()}"></label><small>Já sugerimos uma senha. A pessoa cria a dela no primeiro acesso. Depois de salvar, aparece o convite para enviar por WhatsApp ou e-mail.</small>`}
     <label class="ck"><input type="checkbox" name="ativo" ${!u || sim(u.ativo) ? 'checked' : ''}> Ativo</label>
     <label class="ck"><input type="checkbox" name="admin" ${u && sim(u.admin) ? 'checked' : ''}> Administrador (acesso total a todas as obras e à administração)</label>
+    <label>Orçamentos (base de preços: insumos e composições; não depende de obra)<select name="orcamentos">${[['', 'Sem acesso'], ['Ver', 'Ver: consulta preços e composições'], ['Gerir', 'Gerir: cadastra, importa e atualiza preços']]
+      .map(([v, t]) => `<option value="${v}" ${(u?.orcamentos || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <div id="acessos"><h3>Acesso por obra</h3>${A.obras.map(o => {
       const a = ac(o.id), lista = a ? a.permissoes : [];
       return `<div class="acesso" data-obra="${esc(o.id)}"><div class="topo2"><b>${esc(o.nome)} <small>${esc(o.sigla)}</small></b>
@@ -1303,7 +1322,7 @@ function mUsuario(u) {
     larga: true, ok: 'Salvar',
     onOk: async f => {
       const acessos = $$('.acesso', f).map(el => ({ obra_id: el.dataset.obra, perfil: $('.perfil', el).value, permissoes: $$('.perms input:checked', el).map(x => x.value) })).filter(a => a.permissoes.length);
-      const r = await api('admin_usuario_salvar', { usuario: { id: u?.id, nome: f.nome.value, login: f.login.value, email: f.email.value, telefone: f.telefone.value, admin: f.admin.checked, ativo: f.ativo.checked }, senha: f.senha?.value, acessos });
+      const r = await api('admin_usuario_salvar', { usuario: { id: u?.id, nome: f.nome.value, login: f.login.value, email: f.email.value, telefone: f.telefone.value, admin: f.admin.checked, ativo: f.ativo.checked, orcamentos: f.orcamentos.value }, senha: f.senha?.value, acessos });
       toast(r.msg);
       if (u && u.id === S.sess.usuario.id) await recarregarSessao();
       await vUsuarios();

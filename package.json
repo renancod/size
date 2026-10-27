@@ -3,7 +3,7 @@
   "private": true,
   "description": "Compras Â· Size Engenharia â€” app de pedidos, compras, estoque e financeiro (Apps Script + Google Sheets)",
   "scripts": {
-    "test": "node --test test/fluxo.test.js test/execucao.test.js test/seguranca.test.js test/fvs.test.js test/medicoes.test.js test/push.test.js test/contratos.test.js test/orcamento.test.js test/relobra.test.js",
+    "test": "node --test test/fluxo.test.js test/execucao.test.js test/seguranca.test.js test/fvs.test.js test/medicoes.test.js test/push.test.js test/contratos.test.js test/orcamento.test.js test/relobra.test.js test/base.test.js",
     "demo": "node test/servidor.js"
   }
 }

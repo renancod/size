@@ -4,7 +4,7 @@
  */
 const SCHEMA_CENTRAL = {
   Config: ['chave', 'valor', 'descricao'],
-  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso'],
+  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos'],
   Acessos: ['usuario_id', 'usuario', 'obra_id', 'obra', 'perfil', 'permissoes'],
   Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro', 'lat', 'lng', 'feriados'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
@@ -13,7 +13,13 @@ const SCHEMA_CENTRAL = {
   FvsModelos: ['codigo', 'nome', 'categoria', 'tipo', 'revisao', 'data_rev', 'blocos_json', 'ativo', 'revisar', 'nota'],
   Unidades: ['unidade'],
   Aparelhos: ['token', 'usuario_id', 'usuario', 'ua', 'criado_em', 'vistos'],
-  Log: ['data', 'usuario', 'obra', 'acao', 'detalhe']
+  Log: ['data', 'usuario', 'obra', 'acao', 'detalhe'],
+  // base de preços da empresa (módulo Orçamentos): vale para todos os orçamentos, antes de existir a obra
+  Insumos: ['codigo', 'descricao', 'unidade', 'tipo', 'grupo', 'preco', 'data_preco', 'fonte', 'obs', 'ativo', 'criado_em', 'atualizado_em', 'atualizado_por'],
+  InsumoPrecos: ['insumo', 'data', 'de', 'para', 'origem', 'usuario'],
+  Composicoes: ['codigo', 'descricao', 'unidade', 'grupo', 'obs', 'fonte', 'ativo', 'criado_em', 'atualizado_em', 'atualizado_por'],
+  // item da composição: insumo (I) ou composição auxiliar (C) × coeficiente por unidade; preço próprio vazio = preço do cadastro
+  ComposicaoItens: ['composicao', 'ordem', 'ref_tipo', 'ref', 'coef', 'preco', 'obs']
 };
 const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',
@@ -102,9 +108,9 @@ Tabela_.prototype.all = function () {
   });
   return (this._rows = rows);
 };
-/* texto que o Google Planilhas trocaria por data ou número (código de item "1.1.1" vira 01/01/2001, "2.10" vira 2,1, "015/2026" vira data):
- * vai com apóstrofo na frente, que força texto e não aparece na célula */
-const TEXTO_FORCADO_ = /^(\d+(\.\d+)+|\d{1,4}\/\d{4})$/;
+/* texto que o Google Planilhas trocaria por data ou número (código de item "1.1.1" vira 01/01/2001, "2.10" vira 2,1, "015/2026" vira data,
+ * código de insumo "008" vira 8): vai com apóstrofo na frente, que força texto e não aparece na célula */
+const TEXTO_FORCADO_ = /^(\d+(\.\d+)+|\d{1,4}\/\d{4}|0\d+)$/;
 Tabela_.prototype.linha_ = function (o) { return this.head.map(c => { const v = o[c] == null ? '' : o[c]; return typeof v === 'string' && TEXTO_FORCADO_.test(v) ? "'" + v : v; }); };
 Tabela_.prototype.insert = function (o) { return this.insertMany([o])[0]; };
 Tabela_.prototype.insertMany = function (lista) {
@@ -116,6 +122,16 @@ Tabela_.prototype.insertMany = function (lista) {
 };
 Tabela_.prototype.update = function (o) {
   this.sh.getRange(o._l, 1, 1, this.head.length).setValues([this.linha_(o)]);
+};
+/* regrava a aba inteira de uma vez (uma chamada só, em vez de apagar linha por linha) */
+Tabela_.prototype.substituir = function (lista) {
+  const w = this.head.length, linhas = lista.map(o => this.linha_(o)), tot = Math.max(this.sh.getLastRow() - 1, linhas.length);
+  if (tot > 0) {
+    for (let i = linhas.length; i < tot; i++) linhas.push(this.head.map(() => ''));
+    this.sh.getRange(2, 1, tot, w).setValues(linhas);
+  }
+  lista.forEach((o, i) => { o._l = i + 2; });
+  this._rows = lista.slice();
 };
 Tabela_.prototype.removeWhere = function (fn) {
   const linhas = this.all().filter(fn).map(o => o._l).sort((a, b) => b - a);

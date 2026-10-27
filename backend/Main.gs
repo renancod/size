@@ -28,6 +28,7 @@ function doPost(e) {
 
 /* ---------- rotas ----------
  * pub: sem login · admin: só administradores · obra: precisa de q.obra · perm: permissão (ou lista: basta uma)
+ * base: nível mínimo no módulo Orçamentos (Ver | Gerir), que não depende de obra
  * lock: ação que grava (serializada com LockService)
  */
 const ROTAS = {
@@ -135,6 +136,17 @@ const ROTAS = {
   orc_material_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcMaterialSalvar_ },
   orc_material_remover: { obra: true, perm: 'orc_gerir', lock: true, fn: orcMaterialRemover_ },
 
+  // módulo Orçamentos · base de preços da empresa (sem obra: acesso pelo cadastro do usuário)
+  base_dados: { base: 'Ver', fn: baseDados_ },
+  base_insumo_historico: { base: 'Ver', fn: baseInsumoHistorico_ },
+  base_insumo_salvar: { base: 'Gerir', lock: true, fn: baseInsumoSalvar_ },
+  base_insumo_excluir: { base: 'Gerir', lock: true, fn: baseInsumoExcluir_ },
+  base_composicao_salvar: { base: 'Gerir', lock: true, fn: baseComposicaoSalvar_ },
+  base_composicao_excluir: { base: 'Gerir', lock: true, fn: baseComposicaoExcluir_ },
+  base_composicao_duplicar: { base: 'Gerir', lock: true, fn: baseComposicaoDuplicar_ },
+  base_precos: { base: 'Gerir', lock: true, fn: basePrecos_ },
+  base_importar: { base: 'Gerir', lock: true, fn: baseImportar_ },
+
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },
   admin_senha: { admin: true, lock: true, fn: adminSenha_ },
@@ -155,6 +167,7 @@ function rota_(q) {
   const ctx = { u: usuarioDoToken_(q.token) };
   ctx.admin = sim_(ctx.u.admin);
   if (r.admin && !ctx.admin) throw new Error('Apenas administradores.');
+  if (r.base) exigirBase_(ctx, r.base);
   if (r.obra) abrirObra_(ctx, q.obra);
   if (r.perm) exigir_(ctx, r.perm);
   if (!r.lock) return r.fn(q, ctx);
@@ -298,7 +311,7 @@ function sessaoDe_(u) {
     .map(o => ({ id: String(o.id), sigla: o.sigla, nome: o.nome, ativa: sim_(o.ativa), permissoes: permsDe_(u, o.id) }))
     .filter(o => o.permissoes);
   return {
-    usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: admin, trocar_senha: sim_(u.trocar_senha) },
+    usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: admin, trocar_senha: sim_(u.trocar_senha), orcamentos: nivelBase_(u) },
     obras: obras,
     permissoes: PERMISSOES
   };

@@ -1,6 +1,6 @@
 // Cache do app para abrir rápido e funcionar com sinal fraco na obra (os dados sempre vêm da API).
-const CACHE = 'size-v26';
-const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './ctr.js', './ctr-doc.js', './orc.js', './relobra.js', './push.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png', './fornecedor.html', './forn.js'];
+const CACHE = 'size-v27';
+const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './ctr.js', './ctr-doc.js', './orc.js', './relobra.js', './base.js','./push.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png', './fornecedor.html', './forn.js'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

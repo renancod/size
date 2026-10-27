@@ -83,6 +83,7 @@ function adminUsuarioSalvar_(q, ctx) {
   u.telefone = String(d.telefone || '').trim();
   u.admin = sim_(d.admin) ? 'Sim' : 'Não';
   u.ativo = sim_(d.ativo) ? 'Sim' : 'Não';
+  if (d.orcamentos !== undefined) u.orcamentos = BASE_NIVEIS.indexOf(d.orcamentos) >= 0 ? d.orcamentos : '';
   if (novo) U.insert(u); else U.update(u);
 
   if (q.acessos) {

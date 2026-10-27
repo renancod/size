@@ -148,6 +148,26 @@ console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diari
 // obra AVA Residence importada das planilhas (orçamento R02, proposta e quantitativos)
 console.log(G.rodar('criarObraAvaResidence()'));
 
+// ---- Orçamentos · base de preços: planilha de composições no formato do RDObras + uma composição com auxiliar ----
+{
+  const MO = 'Mão de obra / serviço', L = [['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF.', 'CUSTO UNIT. (R$)']];
+  const comp = (item, cod, desc, un, q, unit, itens) => { L.push([item, '', cod, desc, un, q, '', unit]); itens.forEach(([t, c, d, u, k, p]) => L.push([item, t, c, d, u, q * k, '', p])); };
+  comp('1.1', 'LCMV', 'LIMPEZA DE CAMADA VEGETAL ESP. 0,15 M, COM REMOÇÃO E TRANSPORTE', 'M2', 10000, 2.6, [[MO, 'LCMV', 'LIMPEZA MECANIZADA DE CAMADA VEGETAL', 'M2', 1, 2.6]]);
+  comp('1.2', 'EML', 'ESCAVAÇÃO DE MATERIAL LOCAL', 'M3', 8000, 18, [[MO, 'EML', 'ESCAVAÇÃO MECANIZADA DE MATERIAL LOCAL', 'M3', 1, 18]]);
+  comp('2.1', '10014', 'GUIA DE SARJETA (MEIO-FIO) PRÉ-MOLDADA 1,00X0,12X0,20', 'M', 1000, 46.67, [['Material', 'PAV007', 'MEIO-FIO DE CONCRETO 100X30X12X10', 'M', 1, 27], ['Material', 'APVT20KL', 'ARGAMASSA PARA ASSENTAR E REVESTIR, MASSA PRONTA 20KG', 'SC', 0.05, 23.5], [MO, '1148', 'ASSENTAMENTO DE GUIA SARJETA (MEIO-FIO)', 'M', 1, 16], [MO, '1066', 'REJUNTAMENTO DE MEIO-FIO COM CONCRETO FCK 20', 'M', 1, 2.5]]);
+  comp('2.2', '10034', 'BASE DE BRITA GRADUADA (BGS) ESP. 15 CM, MECANIZADA', 'M3', 500, 103.5, [['Material', 'PAV001', 'BASE SIMPLES – BGS, COM TRANSPORTE', 'M3', 1, 92], [MO, '1051', 'REGULARIZAÇÃO E COMPACTAÇÃO MECANIZADA DE BASE DE BRITA', 'M2', 1, 11.5]]);
+  comp('2.3', '10011', 'PAVIMENTO INTERTRAVADO (PAVER) 8 CM, TIPO HOLANDÊS', 'M2', 3000, 80.99, [['Material', 'BL1202', 'PISO INTERTRAVADO (PAVER) HOLANDÊS CINZA 8 CM', 'M2', 1, 57.24], ['Material', 'CI003', 'AREIA FINA', 'M3', 0.05, 125], [MO, '1146', 'ASSENTAMENTO DE PAVER ESP. 8 CM', 'M2', 1, 17], [MO, '1064', 'ESPALHAMENTO DE AREIA DE SELAGEM', 'M2', 1, 0.5]]);
+  comp('3.1', '10023', 'TUBO PEAD CORRUGADO DN400, PONTA E BOLSA, ASSENTADO', 'M', 800, 169.84, [['Material', 'TPEAD400', 'TUBO PEAD CORRUGADO DN400 (BARRA 6 M)', 'M', 1, 128.34], ['Material', 'CI003', 'AREIA FINA', 'M3', 0.12, 125], [MO, '1121', 'ASSENTAMENTO DE TUBO PEAD DN400', 'M', 1, 26.5]]);
+  comp('3.2', '10006', 'BOCA DE LOBO 1,00X1,00X1,50 EM BLOCO ESTRUTURAL, COM GRELHA', 'UN', 20, 1564.23, [['Material', 'BLE14', 'BLOCO ESTRUTURAL DE CONCRETO 14X19X39', 'UN', 90, 4.9], ['Material', 'GRFF', 'GRELHA DE FERRO FUNDIDO 100X40', 'UN', 1, 520], ['Material', 'C05', 'CONCRETO USINADO FCK 30', 'M3', 0.35, 650], [MO, '1099', 'EXECUÇÃO DE BOCA DE LOBO', 'UN', 1, 360.73]]);
+  const orc = [['ITEM', 'CÓD.', 'DESCRIÇÃO', 'UN'], ['1', '', 'MOVIMENTAÇÃO DE SOLO (TERRAPLENAGEM)'], ['2', '', 'PAVIMENTAÇÃO'], ['3', '', 'REDE DE DRENAGEM PLUVIAL']];
+  const r = adm('base_importar', { abas: [{ nome: 'Orçamento', linhas: orc }, { nome: 'Composições', linhas: L }], aplicar: true, data_preco: d(-200), fonte: 'RDObras · exemplo' });
+  adm('base_insumo_salvar', { insumo: { codigo: 'RETRO', descricao: 'RETROESCAVADEIRA COM OPERADOR', unidade: 'H', tipo: 'Equipamento', preco: 185, data_preco: d(-20), fonte: 'Cotação Locadora Sul' } });
+  adm('base_composicao_salvar', { composicao: { descricao: 'MEIO-FIO COM ABERTURA DE VALA E REATERRO', unidade: 'M', grupo: 'Pavimentação' }, itens: [{ ref_tipo: 'C', ref: '10014', coef: 1 }, { ref: 'RETRO', coef: 0.015 }, { ref: 'EML', coef: 0.06, preco: 21 }] });
+  adm('base_precos', { itens: [{ codigo: 'PAV007', preco: 28.9 }, { codigo: 'BL1202', preco: 59.1 }], data_preco: d(-10), origem: 'Cotação Pré-Moldados Sul' });
+  adm('admin_usuario_salvar', { usuario: { nome: 'Olívia Orçamentista', login: 'orc', ativo: true, orcamentos: 'Gerir' }, senha: 'Obra#Teste26', acessos: [] });
+  console.log('Base de preços:', r.msg, '· login orc / Obra#Teste26 (só Orçamentos, sem obra)');
+}
+
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');
 console.log('Portal (cotação PB-0002):', local(com('forn_link', { fornecedor: 'F003', numeros: [p2] }).url));
 console.log('Portal (compra PB-0005):', local(com('forn_link', { fornecedor: 'F001', numeros: [p5] }).url));
