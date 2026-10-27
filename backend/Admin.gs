@@ -113,8 +113,11 @@ function adminSenha_(q, ctx) {
 
 function adminObraCriar_(q, ctx) {
   const frentes = Array.isArray(q.frentes) ? q.frentes.map(s => String(s || '').trim()).filter((s, i, l) => s && l.findIndex(x => norm_(x) === norm_(s)) === i) : null;
+  obraLocal_({}, q);                   // localização inválida: erro antes de criar planilha e pasta
   const o = criarObra_(q.nome, q.sigla, q.endereco, frentes);
-  if (q.email_financeiro) { o.email_financeiro = String(q.email_financeiro).trim(); central_('Obras').update(o); }
+  if (q.email_financeiro) o.email_financeiro = String(q.email_financeiro).trim();
+  obraLocal_(o, q);
+  central_('Obras').update(o);
   log_(ctx, 'obra_criar', o.nome);
   const n = frentes ? frentes.length : 0;
   return { msg: 'Obra ' + o.nome + ' criada com a planilha e a pasta no Drive' + (n ? ' e ' + n + (n === 1 ? ' frente geral' : ' frentes gerais') : '') + '.', id: o.id };
@@ -128,15 +131,41 @@ function adminObraSalvar_(q, ctx) {
   o.nome = nome;
   o.endereco = String(q.endereco || '').trim();
   o.email_financeiro = String(q.email_financeiro || '').trim();
-  if (q.lat !== undefined) {
-    const lat = String(q.lat || '').trim(), lng = String(q.lng || '').trim();
-    if ((lat || lng) && !(Math.abs(num_(lat)) <= 90 && Math.abs(num_(lng)) <= 180 && num_(lat) && num_(lng))) throw new Error('Latitude/longitude inválidas (ex: -27.59, -48.55).');
-    o.lat = lat ? num_(lat) : ''; o.lng = lng ? num_(lng) : '';
-  }
+  obraLocal_(o, q);
   if (q.feriados !== undefined) o.feriados = String(q.feriados || '').trim();
   o.ativa = sim_(q.ativa) ? 'Sim' : 'Não';
   O.update(o);
   return { msg: 'Obra salva.' };
+}
+
+/* localização da obra (escolhida no mapa ou pelo GPS): mapa do Início e clima do diário */
+function obraLocal_(o, q) {
+  if (q.lat === undefined) return;
+  const lat = String(q.lat == null ? '' : q.lat).trim().replace(',', '.'), lng = String(q.lng == null ? '' : q.lng).trim().replace(',', '.');
+  if ((lat || lng) && !(Math.abs(num_(lat)) <= 90 && Math.abs(num_(lng)) <= 180 && num_(lat) && num_(lng))) throw new Error('Latitude/longitude inválidas (ex: -27.59, -48.55).');
+  o.lat = lat ? Math.round(num_(lat) * 1e6) / 1e6 : ''; o.lng = lng ? Math.round(num_(lng) * 1e6) / 1e6 : '';
+}
+
+/* exclui a obra do sistema: sai da lista de obras e dos acessos; a pasta (com a planilha, fotos e documentos)
+ * vai para "Compras Size / Obras excluídas" no Drive — nada é apagado, dá para recuperar copiando de volta */
+function adminObraExcluir_(q, ctx) {
+  const O = central_('Obras'), o = O.all().find(x => String(x.id) === String(q.id));
+  if (!o) throw new Error('Obra não encontrada.');
+  if (String(q.confirmar || '').trim().toUpperCase() !== String(o.sigla).toUpperCase()) throw new Error('Para confirmar, digite a sigla da obra (' + o.sigla + ').');
+  let pasta = '';
+  try {
+    const f = DriveApp.getFolderById(o.pasta_id);
+    f.setName(o.sigla + ' · ' + o.nome + ' (excluída em ' + hoje_() + ')');
+    f.moveTo(subpasta_(raizPasta_(), 'Obras excluídas'));
+    pasta = f.getUrl();
+  } catch (e) { /* pasta já não existia: segue tirando a obra do sistema */ }
+  central_('Acessos').removeWhere(a => String(a.obra_id) === String(o.id));
+  O.removeWhere(x => String(x.id) === String(o.id));
+  const P = central_('Propostas');
+  P.all().filter(p => String(p.obra_id) === String(o.id)).forEach(p => { p.obra_id = ''; propHist_(p, ctx, 'Obra excluída', o.id + ' · ' + o.nome); P.update(p); });
+  try { CacheService.getScriptCache().remove('emp|' + o.id); } catch (e) { /* sem cache */ }
+  log_(ctx, 'obra_excluir', o.id + ' ' + o.nome);
+  return { msg: 'Obra ' + o.nome + ' excluída. A pasta com a planilha e os arquivos foi para "Obras excluídas" no Drive.', pasta: pasta };
 }
 
 function adminConfigSalvar_(q, ctx) {

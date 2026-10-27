@@ -146,6 +146,22 @@ test('importar orçamento do RDObras: etapas, quantidades, BDI e gestão do arqu
   assert.ok(t.adm('base_dados').insumos.some(i => i.codigo === 'MOB1'));
 });
 
+test('obra: localização escolhida no mapa ao criar; excluir pede a sigla, tira do sistema e guarda a pasta em "Obras excluídas"', () => {
+  const t = preparar();
+  const r = t.adm('admin_obra_criar', { nome: 'AVA Residence', sigla: 'AVA', endereco: 'Maquiné/RS', lat: '-29,78378', lng: -50.07392 });
+  let o = t.adm('admin_dados').obras.find(x => x.id === r.id);
+  assert.deepEqual([o.lat, o.lng], [-29.78378, -50.07392]);
+  assert.throws(() => t.adm('admin_obra_criar', { nome: 'X', sigla: 'XX', lat: 123, lng: 0 }), /inválidas/);
+  const pasta = o.pasta_id;
+  assert.throws(() => t.adm('admin_obra_excluir', { id: r.id, confirmar: 'PB' }), /digite a sigla/);
+  assert.match(t.adm('admin_obra_excluir', { id: r.id, confirmar: 'ava' }).msg, /Obras excluídas/);
+  assert.equal(t.adm('admin_dados').obras.some(x => x.id === r.id), false);
+  const P = t.G._pastas[pasta];
+  assert.match(P.nome, /^AVA · AVA Residence \(excluída em /);
+  assert.equal(t.G._pastas[P.pai].nome, 'Obras excluídas');
+  assert.equal(t.adm('empresa_dados').obras.length, 0);
+});
+
 test('gerar obra: frentes = etapas, serviços com material, mão de obra e preço de venda, materiais das composições', () => {
   const t = preparar();
   const id = novo(t);

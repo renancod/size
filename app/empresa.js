@@ -81,11 +81,13 @@ async function empEntrar(id) {
   await trocarObra(id);
 }
 /* mapa das obras (Leaflet + OpenStreetMap, como o do RDObras); carregado só quando precisa */
+async function empLeaflet() {
+  if (window.L) return;
+  await new Promise((ok, no) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = EMP_LEAFLET[0]; l.onload = ok; l.onerror = no; document.head.appendChild(l); });
+  await new Promise((ok, no) => { const s = document.createElement('script'); s.src = EMP_LEAFLET[1]; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+}
 async function empMapa(obras) {
-  if (!window.L) {
-    await new Promise((ok, no) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = EMP_LEAFLET[0]; l.onload = ok; l.onerror = no; document.head.appendChild(l); });
-    await new Promise((ok, no) => { const s = document.createElement('script'); s.src = EMP_LEAFLET[1]; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
-  }
+  await empLeaflet();
   const el = $('#empMapa');
   if (!el) return;
   const com = obras.filter(o => o.lat !== '' && o.lat != null && o.lng !== '' && o.lng != null);
@@ -100,6 +102,68 @@ async function empMapa(obras) {
   });
   if (pts.length === 1) m.setView(pts[0], 13); else m.fitBounds(pts, { padding: [40, 40], maxZoom: 13 });
   EMP.mapa = m;
+}
+/* ---------- escolher a localização da obra no mapa (cadastro da obra e "Gerar obra") ----------
+ * busca o endereço (OpenStreetMap / Nominatim), toque no mapa ou arraste o marcador, ou o GPS do aparelho;
+ * preenche os campos lat/lng do formulário e, se o endereço estiver vazio, o endereço encontrado */
+function mapaLocalHtml(lat, lng) {
+  return `<div class="ml"><div class="ml-busca"><div class="busca">${ic('search')}<input type="search" data-mlq placeholder="Buscar endereço, cidade ou ponto de referência"></div>
+      <button type="button" class="btn sec peq" data-mlb>Buscar</button><button type="button" class="btn sec peq" data-mlgps>${ic('send')} Minha localização</button></div>
+    <div class="ml-res" hidden></div><div class="ml-mapa"><div class="carregando"><span class="spin"></span></div></div>
+    <div class="ml-ll"><label>Latitude<input name="lat" inputmode="decimal" value="${esc(lat ?? '')}" placeholder="toque no mapa"></label><label>Longitude<input name="lng" inputmode="decimal" value="${esc(lng ?? '')}" placeholder="toque no mapa"></label></div></div>`;
+}
+const ML_NOM = 'https://nominatim.openstreetmap.org/';
+function mlEndereco(a) {
+  if (!a) return '';
+  const cid = a.city || a.town || a.village || a.municipality || '', uf = String(a['ISO3166-2-lvl4'] || '').replace(/^BR-/, '');
+  return [[a.road, a.house_number].filter(Boolean).join(', '), a.suburb, cid + (uf ? '/' + uf : '')].filter(Boolean).join(' · ');
+}
+async function mapaLocal(el, f) {
+  if (!el || !f) return;
+  try { await empLeaflet(); } catch (e) { el.querySelector('.ml-mapa').innerHTML = '<small>Não consegui carregar o mapa: digite a latitude e a longitude.</small>'; return; }
+  const box = el.querySelector('.ml-mapa');
+  box.innerHTML = '';
+  const tem = () => bpPn(f.lat.value) && bpPn(f.lng.value);
+  const m = L.map(box, { scrollWheelZoom: true }).setView(tem() ? [bpPn(f.lat.value), bpPn(f.lng.value)] : [-29.75, -50.6], tem() ? 15 : 8);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m);
+  let mk = null;
+  const icone = L.divIcon({ className: '', html: '<span class="emp-pin"><i>●</i></span>', iconSize: [40, 40], iconAnchor: [20, 38] });
+  const marca = (lat, lng, mover) => {
+    if (!mk) { mk = L.marker([lat, lng], { draggable: true, icon: icone }).addTo(m); mk.on('dragend', () => { const p = mk.getLatLng(); pega(p.lat, p.lng, false); }); }
+    else mk.setLatLng([lat, lng]);
+    if (mover) m.setView([lat, lng], Math.max(m.getZoom(), 15));
+  };
+  const pega = async (lat, lng, mover) => {
+    f.lat.value = lat.toFixed(6); f.lng.value = lng.toFixed(6);
+    marca(lat, lng, mover);
+    // endereço vazio: preenche com o endereço do ponto escolhido
+    if (f.endereco && !f.endereco.value.trim()) {
+      try { const r = await (await fetch(`${ML_NOM}reverse?format=jsonv2&zoom=17&accept-language=pt-BR&lat=${lat}&lon=${lng}`)).json(); const t = mlEndereco(r.address); if (t && !f.endereco.value.trim()) f.endereco.value = t; } catch (e) { /* sem endereço: segue só com as coordenadas */ }
+    }
+  };
+  if (tem()) marca(bpPn(f.lat.value), bpPn(f.lng.value), false);
+  m.on('click', e => pega(e.latlng.lat, e.latlng.lng, false));
+  [f.lat, f.lng].forEach(i => { i.onchange = () => { if (tem()) marca(bpPn(f.lat.value), bpPn(f.lng.value), true); }; });
+  const q = el.querySelector('[data-mlq]'), res = el.querySelector('.ml-res');
+  const buscar = async () => {
+    const t = q.value.trim();
+    if (t.length < 3) return toast('Digite pelo menos 3 letras do endereço.', 1);
+    res.hidden = false; res.innerHTML = '<small>Buscando…</small>';
+    try {
+      const l = await (await fetch(`${ML_NOM}search?format=jsonv2&addressdetails=1&limit=6&countrycodes=br&accept-language=pt-BR&q=${enc(t)}`)).json();
+      res.innerHTML = l.length ? l.map((x, n) => `<button type="button" class="bp-op" data-n="${n}">${ic('building')}<span><b>${esc(x.display_name.split(',').slice(0, 2).join(','))}</b><small>${esc(x.display_name)}</small></span></button>`).join('') : '<small>Nada encontrado. Tente com a cidade (ex: "Rua das Flores, Osório").</small>';
+      $$('.bp-op', res).forEach(b => { b.onclick = () => { const x = l[+b.dataset.n]; res.hidden = true; if (f.endereco && !f.endereco.value.trim()) f.endereco.value = mlEndereco(x.address) || x.display_name; pega(Number(x.lat), Number(x.lon), true); }; });
+    } catch (e) { res.innerHTML = '<small>Não consegui buscar agora. Toque no mapa para marcar.</small>'; }
+  };
+  el.querySelector('[data-mlb]').onclick = buscar;
+  q.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } };
+  el.querySelector('[data-mlgps]').onclick = () => {
+    if (!navigator.geolocation) return toast('Este aparelho não informa a localização.', 1);
+    navigator.geolocation.getCurrentPosition(p => pega(p.coords.latitude, p.coords.longitude, true), () => toast('Não consegui a localização (permita o GPS para este site).', 1), { enableHighAccuracy: true, timeout: 15000 });
+  };
+  // o modal abre com animação e muda de largura: o mapa recalcula o tamanho sempre que o quadro muda
+  if (window.ResizeObserver) new ResizeObserver(() => m.invalidateSize()).observe(box);
+  setTimeout(() => m.invalidateSize(), 300);
 }
 const EMP_ST = { Rascunho: 'b-aberto', Enviado: 'b-apr', Aprovado: 'b-ok', Perdido: 'b-canc', Cancelado: 'b-canc', Revisado: '' };
 function empOrcamentos(P) {

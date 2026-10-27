@@ -290,7 +290,9 @@ function propGerarObra_(q, ctx) {
   const calc = propCalc_(p, propItens_(p.id));
   if (!calc.total.itens) throw new Error('O orçamento não tem itens.');
   const etapas = calc.etapas.filter(e => e.itens), nomes = etapas.map(e => e.descricao);
+  obraLocal_({}, q);
   const o = criarObra_(String(q.nome || p.empreendimento).trim(), q.sigla, String(q.endereco || p.local || '').trim(), nomes);
+  if (q.lat !== undefined && String(q.lat || '').trim()) { obraLocal_(o, q); central_('Obras').update(o); }
   const octx = { u: ctx.u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
   const ix = baseIndice_(), Mt = obraTab_(octx, 'Materiais'), Fr = obraTab_(octx, 'Frentes');
   let nServ = 0, nMat = 0;

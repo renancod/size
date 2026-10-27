@@ -165,6 +165,7 @@ const ROTAS = {
   admin_senha: { admin: true, lock: true, fn: adminSenha_ },
   admin_obra_criar: { admin: true, lock: true, fn: adminObraCriar_ },
   admin_obra_salvar: { admin: true, lock: true, fn: adminObraSalvar_ },
+  admin_obra_excluir: { admin: true, lock: true, fn: adminObraExcluir_ },
   admin_config_salvar: { admin: true, lock: true, fn: adminConfigSalvar_ },
   admin_backup: { admin: true, lock: true, fn: adminBackup_ },
   admin_perfil_salvar: { admin: true, lock: true, fn: adminPerfilSalvar_ },

@@ -295,16 +295,18 @@ function ppGerarObra(d) {
   modal(`${ic('building')} Gerar obra a partir de ${esc(p.rotulo)}`, `<p><small>Cria a obra com a planilha e a pasta no Drive. Cada etapa vira uma <b>frente geral</b> do Orçamento da obra, com os serviços (quantidade, material, mão de obra e preço de venda) e os <b>materiais</b> das composições. Depois é só liberar o acesso das pessoas.</small></p>
     <div class="bp-g3"><label class="bp-span2">Nome da obra<input name="nome" required value="${esc(p.empreendimento)}"></label><label>Sigla (2 a 5 letras)<input name="sigla" required maxlength="5" value="${esc(sig)}" style="text-transform:uppercase"></label></div>
     <label>Endereço<input name="endereco" value="${esc(p.local || '')}"></label>
+    <h3 style="margin:8px 0 0">Localização <small>(busque o endereço ou toque no mapa)</small></h3>${mapaLocalHtml('', '')}
     <div class="aviso info">${plural(d.etapas.filter(e => e.itens).length, 'frente geral', 'frentes gerais')} · ${plural(d.total.itens, 'serviço', 'serviços')} · preço de venda ${bpM(d.total.preco)}</div>`, {
     ok: 'Criar a obra', larga: true,
     onOk: async f => {
-      const r = await api('prop_gerar_obra', { id: p.id, nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value });
+      const r = await api('prop_gerar_obra', { id: p.id, nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, lat: f.lat.value, lng: f.lng.value });
       toast(r.msg);
       await recarregarSessao();
       await trocarObra(r.obra_id);
       location.hash = '#/obra';
     }
   });
+  mapaLocal($('#modal .ml'), $('#modal form'));
 }
 
 /* ---------- proposta para imprimir / salvar em PDF (cliente ou planilha interna) ---------- */

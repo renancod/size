@@ -1170,3 +1170,13 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .pp-doc.interna .pp-tab td:nth-child(2){min-width:280px}
 .pp-doc.interna .pp-tab th{white-space:nowrap}
 @media print{.pp-doc.interna .pp-tab{font-size:7.5pt}.pp-doc.interna .pp-tab td:nth-child(2){min-width:0}}.view:has(.pp-doc.interna){max-width:1560px}
+
+/* localização da obra no mapa */
+.ml{display:grid;gap:8px;margin:6px 0}
+.ml-busca{display:flex;gap:6px;flex-wrap:wrap}.ml-busca .busca{flex:1 1 220px;margin:0}
+.ml-res{display:grid;gap:2px;border:1px solid var(--line);border-radius:10px;padding:4px;max-height:220px;overflow:auto;background:#fff}
+.ml-res small{padding:6px 8px}
+.ml-mapa{height:280px;border-radius:12px;overflow:hidden;border:1px solid var(--line);cursor:crosshair;z-index:0}
+.ml-mapa .carregando{height:100%;display:grid;place-items:center}
+.ml-ll{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ml-ll input{font-family:var(--bp-mono);font-size:14px;min-height:38px}
+.ob-excluir{display:grid;gap:4px;justify-items:start;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}

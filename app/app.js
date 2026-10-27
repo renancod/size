@@ -1406,42 +1406,49 @@ async function vObras() {
       <small>${esc(o.endereco || 'sem endereço')} · criada ${fd(o.criada_em)}${o.email_financeiro ? ' · financeiro: ' + esc(o.email_financeiro) : ''}</small><br><small><a href="${esc(o.planilha_url)}" target="_blank" rel="noopener">Planilha</a> · <a href="${esc(o.pasta_url)}" target="_blank" rel="noopener">Pasta no Drive</a></small></span>
       <button class="btn sec peq" data-o="${esc(o.id)}">Editar</button></div>`).join('') || '<p class="vazio">Nenhuma obra. Crie a primeira.</p>'}</div>
     <p><small>Planilha central: <a href="${esc(A.central_url)}" target="_blank" rel="noopener">Size · Cadastros</a></small></p>`);
-  $('#nova').onclick = () => modal('Nova obra', `<label>Nome da obra<input name="nome" required placeholder="ex: Residencial Prime Beach"></label>
+  $('#nova').onclick = () => { modal('Nova obra', `<label>Nome da obra<input name="nome" required placeholder="ex: Residencial Prime Beach"></label>
     <label>Sigla (2 a 5 letras)<input name="sigla" required maxlength="5" style="text-transform:uppercase" placeholder="ex: PB"></label><small>Os pedidos da obra ficam numerados com a sigla: PB-0001, PB-0002…</small>
     <label>Endereço (vai nos e-mails aos fornecedores)<input name="endereco"></label>
     <label>E-mail do financeiro desta obra <small>(opcional — recebe os avisos de pagamento)</small><input name="email_financeiro" placeholder="financeiro@…"></label>
+    <h3 style="margin:8px 0 0">Localização <small>(busque o endereço ou toque no mapa)</small></h3>${mapaLocalHtml('', '')}
     <label>Frentes gerais da obra <small>(uma por linha · ex: Rede de Esgoto, Rede de Água, Pavimentação)</small><textarea name="frentes" rows="5" placeholder="Rede de Esgoto&#10;Rede de Água&#10;Drenagem pluvial&#10;Pavimentação">${esc((A.frentes_padrao || []).join('\n'))}</textarea></label>
     <small>Depois de criar, você monta o orçamento de cada frente (o que executar, valores de material e mão de obra) em <b>Orçamento da obra</b>.</small>
     <div class="aviso info">Cria a planilha da obra (pedidos, fornecedores, materiais, estoque, frentes) já com os ${A.padrao.length} materiais padrão e as frentes gerais acima. Leva uns segundos.</div>`, {
-    ok: 'Criar obra',
+    ok: 'Criar obra', larga: true,
     onOk: async f => {
-      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, frentes: f.frentes.value.split(/\r?\n|;/).map(s => s.trim()).filter(Boolean) });
+      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, lat: f.lat.value, lng: f.lng.value, frentes: f.frentes.value.split(/\r?\n|;/).map(s => s.trim()).filter(Boolean) });
       toast(r.msg);
       await recarregarSessao();
       if (!S.obraId || confirm('Obra criada. Abrir agora para montar o orçamento?')) { await trocarObra(r.id); location.hash = '#/obra/orcamento'; } else vObras();
     }
-  });
+  }); mapaLocal($('#modal .ml'), $('#modal form')); };
   $$('[data-o]').forEach(b => {
     b.onclick = () => {
       const o = A.obras.find(x => x.id === b.dataset.o);
       modal('Editar obra', `<label>Nome<input name="nome" required value="${esc(o.nome)}"></label><label>Endereço<input name="endereco" value="${esc(o.endereco || '')}"></label>
         <label>E-mail do financeiro desta obra <small>(se vazio, usa o geral das Configurações)</small><input name="email_financeiro" value="${esc(o.email_financeiro || '')}" placeholder="financeiro@…"></label>
         <small>Quem tem o perfil Financeiro nesta obra (em Usuários e acessos) também recebe os avisos no e-mail do cadastro dele e as notificações no app.</small>
-        <h3 style="margin:8px 0 0">Diário de obra</h3>
-        <div class="g2"><label>Latitude <small>(clima automático)</small><input name="lat" inputmode="decimal" value="${esc(o.lat ?? '')}" placeholder="-27.5954"></label>
-        <label>Longitude<input name="lng" inputmode="decimal" value="${esc(o.lng ?? '')}" placeholder="-48.5480"></label></div>
-        <button type="button" class="btn sec peq" id="gpsObra">Usar a minha localização agora</button>
+        <h3 style="margin:8px 0 0">Localização <small>(mapa do Início e clima do diário de obra)</small></h3>
+        ${mapaLocalHtml(o.lat, o.lng)}
         <small>Se ficar vazio, o primeiro diário lançado na obra com o GPS ligado preenche sozinho.</small>
         <label>Feriados municipais <small>(dd/mm todo ano ou dd/mm/aaaa, separados por ;)</small><input name="feriados" value="${esc(o.feriados || '')}" placeholder="ex: 23/03; 15/08"></label>
         <small>Os feriados nacionais (inclusive Carnaval, Sexta-feira Santa e Corpus Christi) já são considerados.</small>
-        <label class="ck"><input type="checkbox" name="ativa" ${sim(o.ativa) ? 'checked' : ''}> Obra ativa (desativada some para quem não é admin)</label>`, {
-        ok: 'Salvar', onOk: async f => { toast((await api('admin_obra_salvar', { id: o.id, nome: f.nome.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, lat: f.lat.value.replace(',', '.'), lng: f.lng.value.replace(',', '.'), feriados: f.feriados.value, ativa: f.ativa.checked })).msg); await recarregarSessao(); vObras(); }
+        <label class="ck"><input type="checkbox" name="ativa" ${sim(o.ativa) ? 'checked' : ''}> Obra ativa (desativada some para quem não é admin)</label>
+        <div class="ob-excluir"><button type="button" class="btn perigo peq" id="obExcluir">${ic('x')} Excluir obra</button><small>Tira a obra do sistema. A pasta com a planilha e os arquivos vai para "Obras excluídas" no Drive (nada é apagado).</small></div>`, {
+        ok: 'Salvar', larga: true, onOk: async f => { toast((await api('admin_obra_salvar', { id: o.id, nome: f.nome.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, lat: f.lat.value.replace(',', '.'), lng: f.lng.value.replace(',', '.'), feriados: f.feriados.value, ativa: f.ativa.checked })).msg); await recarregarSessao(); vObras(); }
       });
-      $('#gpsObra').onclick = () => {
-        if (!navigator.geolocation) return toast('Este aparelho não informa a localização.', 1);
-        navigator.geolocation.getCurrentPosition(p => { const f = $('#modal form'); f.lat.value = p.coords.latitude.toFixed(5); f.lng.value = p.coords.longitude.toFixed(5); },
-          () => toast('Não consegui a localização (permita o GPS para este site).', 1), { enableHighAccuracy: true, timeout: 15000 });
-      };
+      mapaLocal($('#modal .ml'), $('#modal form'));
+      $('#obExcluir').onclick = () => modal(`Excluir a obra ${esc(o.nome)}`, `<div class="aviso erro">A obra sai da lista, do menu e dos acessos de todo mundo. Pedidos, diários, contratos e medições dela deixam de aparecer no app.
+          A pasta da obra (com a planilha e os arquivos) vai para <b>Compras Size / Obras excluídas</b> no Drive: nada é apagado.</div>
+        <label>Para confirmar, digite a sigla da obra: <b>${esc(o.sigla)}</b><input name="conf" required autocomplete="off" style="text-transform:uppercase"></label>`, {
+        ok: 'Excluir a obra',
+        onOk: async f => {
+          const r = await api('admin_obra_excluir', { id: o.id, confirmar: f.conf.value });
+          toast(r.msg);
+          if (S.obraId === o.id) { S.obraId = ''; S.dados = null; LS.del('cs_obra'); }
+          await recarregarSessao(); vObras();
+        }
+      });
     };
   });
 }
