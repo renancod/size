@@ -109,7 +109,7 @@ function baseDados_(q, ctx) {
   const insumos = Object.keys(ix.I).map(k => {
     const i = ix.I[k];
     return { codigo: k, descricao: i.descricao, unidade: i.unidade, tipo: BASE_TIPOS.indexOf(i.tipo) >= 0 ? i.tipo : 'Material', grupo: i.grupo, preco: num_(i.preco),
-      data_preco: baseData_(i.data_preco), fonte: i.fonte, obs: i.obs, ativo: baseAtivo_(i), usos: Object.keys(u.ins[k] || {}).length };
+      data_preco: baseData_(i.data_preco), fonte: i.fonte, obs: i.obs, ativo: baseAtivo_(i), usos: Object.keys(u.ins[k] || {}).length, foto: baseFotoUrl_(i.foto_id) };
   });
   const composicoes = Object.keys(ix.C).map(k => {
     const c = ix.C[k], o = {
@@ -177,9 +177,42 @@ function baseInsumoExcluir_(q, ctx) {
   if (!ix.I[cod]) throw new Error('Insumo não encontrado.');
   const em = Object.keys(baseUsos_(ix).ins[cod] || {});
   if (em.length) throw new Error('Este insumo está em ' + plural_(em.length, 'composição', 'composições') + ' (' + em.slice(0, 5).join(', ') + (em.length > 5 ? '…' : '') + '). Tire das composições ou desative o insumo.');
+  baseFotoLixo_(ix.I[cod].foto_id);
   central_('Insumos').removeWhere(x => String(x.codigo) === cod);
   log_(ctx, 'insumo_excluir', cod);
   return { msg: 'Insumo ' + cod + ' excluído.' };
+}
+/* foto do insumo: arquivo no Drive (Compras Size / Base de preços / Fotos dos insumos), aberto para quem tem o link,
+ * para o app mostrar direto pela miniatura do Drive (sem passar pela API a cada imagem) */
+const BASE_FOTO_MAX_ = 4 * 1024 * 1024;
+function baseFotoUrl_(id) { return id ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w800' : ''; }
+function baseFotoLixo_(id) { if (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* já não existe */ } } }
+function baseInsumoFoto_(q, ctx) {
+  const T = central_('Insumos'), i = T.all().find(x => String(x.codigo) === String(q.codigo));
+  if (!i) throw new Error('Insumo não encontrado.');
+  if (q.remover) {
+    baseFotoLixo_(i.foto_id);
+    i.foto_id = '';
+    T.update(i);
+    log_(ctx, 'insumo_foto', i.codigo + ' removida');
+    return { msg: 'Foto removida.', foto: '' };
+  }
+  const a = q.arquivo || {};
+  if (!/^image\/(jpeg|png|webp|gif)$/i.test(String(a.mime || ''))) throw new Error('Envie uma imagem (JPG, PNG ou WEBP).');
+  const bytes = Utilities.base64Decode(String(a.b64 || ''));
+  if (!bytes.length) throw new Error('Imagem vazia.');
+  if (bytes.length > BASE_FOTO_MAX_) throw new Error('Imagem maior que 4 MB.');
+  const pasta = subpasta_(subpasta_(raizPasta_(), 'Base de preços'), 'Fotos dos insumos');
+  const ext = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[String(a.mime).toLowerCase()] || 'jpg';
+  const f = pasta.createFile(Utilities.newBlob(bytes, a.mime, nomeArq_(i.codigo + ' · ' + i.descricao) + '.' + ext));
+  f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  baseFotoLixo_(i.foto_id);
+  i.foto_id = f.getId();
+  i.atualizado_em = new Date();
+  i.atualizado_por = ctx.u.nome;
+  T.update(i);
+  log_(ctx, 'insumo_foto', i.codigo);
+  return { msg: 'Foto salva.', foto: baseFotoUrl_(i.foto_id) };
 }
 /* atualização de preços em lote: reajuste por % (o app calcula) ou lista colada do Excel (código · preço) */
 function basePrecos_(q, ctx) {

@@ -78,6 +78,7 @@ function criarGAS() {
   File.prototype.getSize = function () { return this.blob.getSize(); };
   File.prototype.moveTo = function (f) { this.pai = f.id; return this; };
   File.prototype.setTrashed = function (v) { this.lixo = !!v; return this; };
+  File.prototype.setSharing = function (acesso, perm) { this.compartilhado = acesso + ':' + perm; return this; };
 
   const iter = l => ({ hasNext: () => l.length > 0, next: () => l.shift() });
   const pad = n => String(n).padStart(2, '0');
@@ -88,6 +89,7 @@ function criarGAS() {
       openById: id => { const s = planilhas[id]; if (!s) throw new Error('Planilha não encontrada: ' + id); return s; }
     },
     DriveApp: {
+      Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' },
       createFolder: n => new Folder(n, null),
       getFolderById: id => { const f = pastas[id]; if (!f) throw new Error('Pasta não encontrada'); return f; },
       getFoldersByName: n => iter(Object.values(pastas).filter(f => f.nome === n)),

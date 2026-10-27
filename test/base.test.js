@@ -88,6 +88,28 @@ test('duplicar composição e editar insumo guardando o histórico de preço', (
   assert.throws(() => ins(t, '', 'Sem tipo', 'm', 'Coisa', 1), /tipo/);
 });
 
+test('foto do insumo: vai para a pasta da base no Drive, aberta pelo link; trocar e remover mandam a antiga para a lixeira', () => {
+  const t = preparar();
+  base(t);
+  const PNG = { nome: 'meio-fio.png', mime: 'image/png', b64: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64').toString('base64') };
+  const r = t.adm('base_insumo_foto', { codigo: 'PAV007', arquivo: PNG });
+  assert.match(r.foto, /^https:\/\/drive\.google\.com\/thumbnail\?id=/);
+  const id1 = decodeURIComponent(r.foto.match(/id=([^&]+)/)[1]), f1 = t.G._arquivos[id1];
+  assert.equal(f1.compartilhado, 'ANYONE_WITH_LINK:VIEW');
+  assert.equal(t.G._pastas[f1.pai].nome, 'Fotos dos insumos');
+  assert.equal(t.G._pastas[t.G._pastas[f1.pai].pai].nome, 'Base de preços');
+  assert.match(f1.nome, /^PAV007 · Meio-fio/);
+  assert.equal(t.adm('base_dados').insumos.find(i => i.codigo === 'PAV007').foto, r.foto);
+  const r2 = t.adm('base_insumo_foto', { codigo: 'PAV007', arquivo: { ...PNG, mime: 'image/jpeg' } });
+  assert.notEqual(r2.foto, r.foto);
+  assert.ok(f1.lixo);
+  assert.throws(() => t.adm('base_insumo_foto', { codigo: 'PAV007', arquivo: { nome: 'x.pdf', mime: 'application/pdf', b64: PNG.b64 } }), /imagem/);
+  t.adm('base_insumo_foto', { codigo: 'PAV007', remover: true });
+  assert.equal(t.adm('base_dados').insumos.find(i => i.codigo === 'PAV007').foto, '');
+  assert.ok(t.G._arquivos[decodeURIComponent(r2.foto.match(/id=([^&]+)/)[1])].lixo);
+  assert.throws(() => t.usuario('vendo', 'Ver')('base_insumo_foto', { codigo: 'PAV007', remover: true }), /só pode consultar/);
+});
+
 test('reajuste e preços colados: só muda o que mudou e avisa os códigos que não existem', () => {
   const t = preparar();
   base(t);

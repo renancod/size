@@ -56,6 +56,54 @@ function bpDonut(c, extra) {
   const seg = t ? BP_K.filter(([k]) => c[k] > 0).map(([k]) => { const i = a; a += c[k] / t * 100; return `var(--k-${k}) ${i}% ${a}%`; }).join(',') : 'rgba(255,255,255,.18) 0 100%';
   return `<div class="bp-donut ${extra || ''}" style="background:conic-gradient(${seg})"></div>`;
 }
+/* foto do insumo (miniatura do Drive, aberta pelo link); sem foto, um quadradinho com a cor do tipo.
+ * zoom: no computador a miniatura amplia ao passar o mouse */
+function bpFoto(i, cl) {
+  if (!i || !i.foto) return `<span class="bp-foto vazia k-${i && i.tipo === 'Composição' ? 'cmp' : bpK(i && i.tipo)} ${cl || ''}">${ic(i && i.tipo === 'Composição' ? 'layers' : 'box')}</span>`;
+  return `<span class="bp-foto ${cl || ''}"><img src="${esc(i.foto)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+}
+// imagem que não abriu (arquivo apagado no Drive, sem internet): volta para o quadradinho
+document.addEventListener('error', e => {
+  const t = e.target, p = t && t.tagName === 'IMG' && t.parentNode;
+  if (!p || !p.classList) return;
+  if (p.classList.contains('bp-foto')) p.classList.add('vazia', 'falhou');
+  else if (p.classList.contains('bp-fotobox')) p.innerHTML = `<div class="bp-foto-vazia">${ic('alert')}<b>Foto indisponível</b><small>o arquivo pode ter sido apagado do Drive</small></div>`;
+}, true);
+/* no computador, passar o mouse na miniatura mostra a foto grande ao lado (por cima de tudo, sem ser cortada pelas tabelas com rolagem) */
+(() => {
+  if (!matchMedia('(hover: hover)').matches) return;
+  let el = null;
+  document.addEventListener('mouseover', e => {
+    const img = e.target.closest && e.target.closest('.bp-foto.zoom:not(.vazia) img');
+    if (!img) { if (el) el.hidden = true; return; }
+    el = el || document.body.appendChild(Object.assign(document.createElement('div'), { className: 'bp-zoom' }));
+    if (el.dataset.src !== img.src) { el.innerHTML = `<img src="${esc(img.src)}" alt="" referrerpolicy="no-referrer">`; el.dataset.src = img.src; }
+    const r = img.getBoundingClientRect(), W = 250;
+    el.style.left = (r.right + W + 24 < innerWidth ? r.right + 12 : Math.max(12, r.left - W - 12)) + 'px';
+    el.style.top = Math.max(12, Math.min(innerHeight - W - 12, r.top + r.height / 2 - W / 2)) + 'px';
+    el.hidden = false;
+  });
+  addEventListener('scroll', () => { if (el) el.hidden = true; }, true);
+  addEventListener('hashchange', () => { if (el) el.hidden = true; });
+})();
+/* reduz a foto antes de enviar (lado maior 1000 px, JPG com fundo branco para PNG transparente) */
+function bpReduzir(f, max = 1000) {
+  return new Promise((ok, no) => {
+    if (!/^image\//.test(f.type)) return no(new Error('Escolha uma imagem (JPG, PNG ou WEBP).'));
+    const img = new Image(), u = URL.createObjectURL(f);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u);
+      const url = c.toDataURL('image/jpeg', 0.85);
+      ok({ nome: f.name.replace(/\.\w+$/, '') + '.jpg', mime: 'image/jpeg', b64: url.split(',')[1], url });
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); no(new Error('Não consegui abrir essa imagem.')); };
+    img.src = u;
+  });
+}
 const bpDominante = c => (BP_K.slice().sort((a, b) => (c[b[0]] || 0) - (c[a[0]] || 0))[0] || ['mat'])[0];
 
 /* ---------- dados ---------- */
@@ -78,7 +126,7 @@ function bpRef(x) {
   const i = BP.I[x.ref];
   if (!i) return { ok: false, codigo: x.ref, descricao: 'Insumo não encontrado', unidade: '', tipo: 'Material', unit: 0 };
   const proprio = bpProprio(x);
-  return { ok: true, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, tipo: i.tipo, unit: proprio ? bpPn(x.preco) : i.preco, cadastro: i.preco, proprio, ativo: i.ativo, data: i.data_preco };
+  return { ok: true, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, tipo: i.tipo, unit: proprio ? bpPn(x.preco) : i.preco, cadastro: i.preco, proprio, ativo: i.ativo, data: i.data_preco, foto: i.foto };
 }
 function bpCustoItens(itens) {
   const r = { mat: 0, mo: 0, eq: 0, sv: 0, total: 0 };
@@ -188,7 +236,7 @@ async function vBase() {
       <div class="bp-grupos">${Object.values(grupos).sort((a, b) => b.n - a.n).map(x => { const m = { mat: x.c.mat, mo: x.c.mo, eq: x.c.eq, sv: x.c.sv, total: x.c.mat + x.c.mo + x.c.eq + x.c.sv };
         return `<a class="bp-grupo" href="#/orc/composicoes?g=${enc(x.g)}"><b>${esc(x.g)}</b><small>${plural(x.n, 'composição', 'composições')} · ${x.n > 1 ? bpM(x.min) + ' a ' + bpM(x.max) : bpM(x.min)}</small>${bpBarra(m, 'fino')}</a>`; }).join('')}</div></div>
     <div class="bp-2">
-      <div class="card"><h3>${ic('box')} Insumos mais usados</h3>${top.map(i => `<button type="button" class="bp-linha" data-ins="${esc(i.codigo)}">${bpDot(i.tipo)}<span><b>${esc(i.descricao)}</b><small><code>${esc(i.codigo)}</code> · em ${plural(i.usos, 'composição', 'composições')}</small></span><span class="bp-mono">${bpM(i.preco)}<small>/${esc(i.unidade)}</small></span></button>`).join('') || '<p class="vazio">Nenhum insumo em composição ainda.</p>'}</div>
+      <div class="card"><h3>${ic('box')} Insumos mais usados</h3>${top.map(i => `<button type="button" class="bp-linha" data-ins="${esc(i.codigo)}">${bpFoto(i, 'mini zoom')}<span><b>${esc(i.descricao)}</b><small><code>${esc(i.codigo)}</code> · em ${plural(i.usos, 'composição', 'composições')}</small></span><span class="bp-mono">${bpM(i.preco)}<small>/${esc(i.unidade)}</small></span></button>`).join('') || '<p class="vazio">Nenhum insumo em composição ainda.</p>'}</div>
       <div class="card"><h3>${ic('clock')} Alteradas por último</h3>${recentes.map(c => `<a class="bp-linha" href="#/orc/composicao/${enc(c.codigo)}">${bpDonut(c.custo, 'mini')}<span><b>${esc(c.descricao)}</b><small><code>${esc(c.codigo)}</code> · ${fdh(c.atualizado_em)}${c.atualizado_por ? ' · ' + esc(c.atualizado_por) : ''}</small></span><span class="bp-mono">${bpM(c.custo.total)}<small>/${esc(c.unidade)}</small></span></a>`).join('')}</div>
     </div>`);
   $$('[data-ins]').forEach(b => { b.onclick = () => bpInsumoModal(BP.I[b.dataset.ins]); });
@@ -307,7 +355,7 @@ function bpTabArvore(c) {
     const r = bpRef(x), k = bpPn(x.coef), custo = fator * k * (r.unit || 0), id = (pai ? pai + '.' : 'n') + n;
     linhas.push(`<tr class="${nivel ? 'bp-sub' : ''} ${r.aux ? 'bp-aux' : ''} ${r.ok ? '' : 'bp-falta'}" ${pai ? `data-pai="${pai}" hidden` : ''} ${r.aux ? `data-tg="${id}"` : ''}>
       <td style="padding-left:${8 + nivel * 18}px">${r.aux ? `<span class="bp-seta">${ic('chevron')}</span>` : ''}${bpDot(r.tipo)} <code>${esc(r.codigo)}</code></td>
-      <td>${r.aux || !r.ok ? `<b>${esc(r.descricao)}</b>` : `<button type="button" class="bp-lnk" data-ins="${esc(r.codigo)}">${esc(r.descricao)}</button>`}${r.proprio ? ` <span class="bp-flag" title="no cadastro: ${bpM(r.cadastro)}">preço próprio</span>` : ''}${r.ok && r.ativo === false ? ' <span class="bp-flag">inativo</span>' : ''}</td>
+      <td><div class="bp-cel">${r.aux ? '' : bpFoto(r, 'mini zoom')}<span>${r.aux || !r.ok ? `<b>${esc(r.descricao)}</b>` : `<button type="button" class="bp-lnk" data-ins="${esc(r.codigo)}">${esc(r.descricao)}</button>`}${r.proprio ? ` <span class="bp-flag" title="no cadastro: ${bpM(r.cadastro)}">preço próprio</span>` : ''}${r.ok && r.ativo === false ? ' <span class="bp-flag">inativo</span>' : ''}</span></div></td>
       <td>${esc(r.unidade)}</td><td class="n bp-mono">${bpN(k)}</td><td class="n bp-mono">${bpM(r.unit)}</td><td class="n bp-mono"><b>${bpM(custo)}</b></td><td class="n">${nivel ? '' : bpPct(custo, tot)}</td></tr>`);
     if (r.aux && !pilha.includes(x.ref)) add(BP.C[x.ref].itens, fator * k, nivel + 1, id, pilha.concat(x.ref));
   });
@@ -318,7 +366,7 @@ function bpTabArvore(c) {
 function bpTabAbc(c) {
   const { l, t } = bpAbc(c);
   return `<table class="tab bp-tab"><thead><tr><th>Classe</th><th>Insumo</th><th>Un</th><th class="n">Coef. total</th><th class="n">Preço</th><th class="n">Custo / ${esc(c.unidade)}</th><th class="n">%</th><th class="n">Acumulado</th></tr></thead><tbody>
-    ${l.map(a => `<tr><td><span class="bp-abc k-${a.classe}">${a.classe}</span></td><td>${bpDot(a.i.tipo)} <button type="button" class="bp-lnk" data-ins="${esc(a.i.codigo)}">${esc(a.i.descricao)}</button> <small><code>${esc(a.i.codigo)}</code></small>${a.proprio ? ' <span class="bp-flag">preço próprio</span>' : ''}</td>
+    ${l.map(a => `<tr><td><span class="bp-abc k-${a.classe}">${a.classe}</span></td><td><div class="bp-cel">${bpFoto(a.i, 'mini zoom')}<span><button type="button" class="bp-lnk" data-ins="${esc(a.i.codigo)}">${esc(a.i.descricao)}</button> <small><code>${esc(a.i.codigo)}</code></small>${a.proprio ? ' <span class="bp-flag">preço próprio</span>' : ''}</span></div></td>
       <td>${esc(a.i.unidade)}</td><td class="n bp-mono">${bpN(a.coef)}</td><td class="n bp-mono">${bpM(a.preco)}</td><td class="n bp-mono"><b>${bpM(a.custo)}</b></td><td class="n">${bpPct(a.custo, t)}</td>
       <td class="n"><div class="bp-acum"><i style="width:${Math.min(100, a.acum)}%"></i><span>${Math.round(a.acum)}%</span></div></td></tr>`).join('')}</tbody></table>
     <small class="bp-nota">A curva ABC abre as composições auxiliares até os insumos: os de classe A somam 80% do custo do serviço e são os que mais pesam numa negociação de preço.</small>`;
@@ -330,7 +378,7 @@ function bpSimular(c, q) {
     ${BP_K.filter(([k]) => cu[k]).map(([k, n]) => `<div class="bp-sim-c"><i class="bp-dot k-${k}"></i>${n}<b class="bp-mono">${bpM(q * cu[k])}</b></div>`).join('')}`;
   $('#bpSimL').innerHTML = `<table class="tab bp-tab"><thead><tr><th>Insumo</th><th class="n">Quantidade</th><th>Un</th><th class="n">Custo</th></tr></thead><tbody>
     ${l.slice().sort((a, b) => (a.i.tipo === b.i.tipo ? b.custo - a.custo : BP_K.findIndex(([k]) => k === bpK(a.i.tipo)) - BP_K.findIndex(([k]) => k === bpK(b.i.tipo))))
-      .map(a => `<tr><td>${bpDot(a.i.tipo)} ${esc(a.i.descricao)} <small><code>${esc(a.i.codigo)}</code></small></td><td class="n bp-mono"><b>${nf(q * a.coef)}</b></td><td>${esc(a.i.unidade)}</td><td class="n bp-mono">${bpM(q * a.custo)}</td></tr>`).join('')}</tbody></table>`;
+      .map(a => `<tr><td><div class="bp-cel">${bpFoto(a.i, 'mini zoom')}<span>${esc(a.i.descricao)} <small><code>${esc(a.i.codigo)}</code></small></span></div></td><td class="n bp-mono"><b>${nf(q * a.coef)}</b></td><td>${esc(a.i.unidade)}</td><td class="n bp-mono">${bpM(q * a.custo)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 /* ---------- bancada: criar e editar composição com custo ao vivo ---------- */
@@ -385,7 +433,7 @@ function bpItens() {
   $('#bpItens').innerHTML = E.itens.length ? `<div class="bp-it bp-it-cab"><span></span><span>Item</span><span>Coef.</span><span>Preço unit.</span><span>Custo</span><span></span></div>` + E.itens.map((x, n) => {
     const r = bpRef(x);
     return `<div class="bp-it ${r.ok ? '' : 'bp-falta'} ${r.aux ? 'bp-aux' : ''}" data-n="${n}">
-      <span>${bpDot(r.tipo)}</span>
+      <span>${bpFoto(r, 'mini zoom')}</span>
       <span class="bp-it-d"><b>${esc(r.descricao)}</b><small><code>${esc(r.codigo)}</code> · ${esc(r.unidade)}${r.aux ? ' · composição auxiliar' : ''}${!r.ok ? ' · <b>sem cadastro</b>' : ''}${r.ok && r.ativo === false ? ' · inativo' : ''}</small></span>
       <label class="bp-it-c"><small>Coef.</small><input data-c="coef" inputmode="decimal" value="${esc(x.coef)}" aria-label="Coeficiente"></label>
       <label class="bp-it-p ${r.proprio ? 'proprio' : ''}"><small>Preço</small>${r.aux ? `<span class="bp-mono">${bpM(r.unit)}</span>` : `<input data-c="preco" inputmode="decimal" value="${esc(x.preco)}" placeholder="${esc(bpV(Math.round((r.cadastro || 0) * 10000) / 10000))}" title="Vazio = preço do cadastro (${bpM(r.cadastro)}). Preencha para um preço só desta composição." aria-label="Preço próprio">`}</label>
@@ -437,7 +485,7 @@ function bpBuscaLigar(proprio) {
       ...BP.d.composicoes.filter(c => c.ativo && c.codigo !== proprio && ok(norm(c.codigo + ' ' + c.descricao + ' ' + c.grupo))).map(c => ({ t: 'C', o: c }))]
       .sort((a, b) => (norm(b.o.codigo) === t.join(' ') ? 1 : 0) - (norm(a.o.codigo) === t.join(' ') ? 1 : 0)).slice(0, 30);
     sel = 0;
-    res.innerHTML = lista.map((x, n) => `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}">${bpDot(x.t === 'C' ? 'Composição' : x.o.tipo)}<span><b>${esc(x.o.descricao)}</b><small><code>${esc(x.o.codigo)}</code> · ${esc(x.o.unidade)}${x.t === 'C' ? ' · composição' : ' · ' + esc(x.o.tipo)}</small></span><span class="bp-mono">${bpM(x.t === 'C' ? x.o.custo.total : x.o.preco)}</span></button>`).join('')
+    res.innerHTML = lista.map((x, n) => `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}">${bpFoto(x.t === 'C' ? { tipo: 'Composição' } : x.o, 'mini')}<span><b>${esc(x.o.descricao)}</b><small><code>${esc(x.o.codigo)}</code> · ${esc(x.o.unidade)}${x.t === 'C' ? ' · composição' : ' · ' + esc(x.o.tipo)}</small></span><span class="bp-mono">${bpM(x.t === 'C' ? x.o.custo.total : x.o.preco)}</span></button>`).join('')
       + `<button type="button" class="bp-op bp-op-novo" data-n="novo">${ic('plus')}<span><b>Cadastrar insumo “${esc(inp.value.trim())}”</b><small>abre o cadastro e já inclui na composição</small></span></button>`;
     res.hidden = false;
     $$('.bp-op', res).forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => escolher(b.dataset.n); });
@@ -519,7 +567,7 @@ async function vBaseIns(qs) {
     const l = filtrar();
     BP.filtrados = l;
     $('#bpN').textContent = plural(l.length, 'insumo', 'insumos');
-    $('#bpLista').innerHTML = l.slice(0, F.lim).map(i => `<button type="button" class="bp-ins ${i.ativo ? '' : 'inativo'}" data-ins="${esc(i.codigo)}">${bpDot(i.tipo)}<code class="bp-cod">${esc(i.codigo)}</code>
+    $('#bpLista').innerHTML = l.slice(0, F.lim).map(i => `<button type="button" class="bp-ins ${i.ativo ? '' : 'inativo'}" data-ins="${esc(i.codigo)}">${bpFoto(i, 'mini zoom')}<code class="bp-cod">${esc(i.codigo)}</code>
       <span class="bp-ins-d"><b>${esc(i.descricao)}</b>${i.grupo || i.fonte ? `<small>${esc([i.grupo, i.fonte].filter(Boolean).join(' · '))}</small>` : ''}</span><span class="bp-ins-u">${esc(i.unidade)}</span>
       <span class="n bp-mono"><b>${bpM(i.preco)}</b></span><span>${bpIdade(i.data_preco)}</span><span class="n bp-usos ${i.usos ? '' : 'zero'}">${i.usos}</span></button>`).join('')
       || `<p class="vazio">Nenhum insumo${F.q ? ' com “' + esc(F.q) + '”' : ''}.</p>`;
@@ -565,22 +613,67 @@ function bpInsumoModal(i, depois) {
   const extra = novo ? '' : `<div class="bp-hist"><h3>${ic('chart')} Histórico do preço</h3><div id="bpHist"><div class="carregando"><span class="spin"></span></div></div></div>
     <div><h3>${ic('layers')} Usado em ${plural(usado.length, 'composição', 'composições')}</h3>${usado.map(c => { const x = c.itens.find(y => y.ref === i.codigo); return `<a class="bp-linha" href="#/orc/composicao/${enc(c.codigo)}"><span><b>${esc(c.descricao)}</b><small><code>${esc(c.codigo)}</code> · coef. ${bpN(x.coef)}${bpProprio(x) ? ' · preço próprio ' + bpM(x.preco) : ''}</small></span><span class="bp-mono">${bpM(c.custo.total)}<small>/${esc(c.unidade)}</small></span></a>`; }).join('') || '<small>Ainda não está em nenhuma composição.</small>'}
       ${g && !usado.length ? `<button type="button" class="btn sec bp-x peq" id="bpExcluirI" style="margin-top:10px">${ic('trash')} Excluir insumo</button>` : ''}</div>`;
-  const f = modal(cab, `${leitura}${form}${extra}`, {
-    ok: novo ? 'Cadastrar' : 'Salvar', larga: !novo, semRodape: !g,
+  // foto ao lado dos dados: para insumo já cadastrado vai na hora; no cadastro novo, sobe depois de salvar
+  const fotoBox = `<aside class="bp-fotolado"><div class="bp-fotobox ${g ? 'pode' : ''}" id="bpFotoBox" ${g ? 'tabindex="0" title="Enviar foto: toque, arraste a imagem ou cole (Ctrl+V)"' : ''}>${bpFotoGrande(i)}</div>
+    ${g ? `<div class="acoes"><label class="btn sec peq">${ic('camera')} <span id="bpFotoTxt">${i?.foto ? 'Trocar foto' : 'Enviar foto'}</span><input type="file" accept="image/*" id="bpFotoArq" hidden></label><button type="button" class="btn sec peq bp-x" id="bpFotoTira" ${i?.foto ? '' : 'hidden'}>${ic('trash')}</button></div>` : ''}</aside>`;
+  let pend = null;
+  const f = modal(cab, `<div class="bp-insmod"><div class="bp-inscampos">${leitura}${form}</div>${fotoBox}</div>${extra}`, {
+    ok: novo ? 'Cadastrar' : 'Salvar', larga: true, semRodape: !g,
     onOk: async f => {
       const r = await api('base_insumo_salvar', { insumo: { original: novo ? '' : i.codigo, codigo: f.codigo?.value, descricao: f.descricao.value, unidade: f.unidade.value, tipo: f.tipo.value,
         preco: bpPn(f.preco.value), data_preco: f.data_preco.value, grupo: f.grupo.value, fonte: f.fonte.value, obs: f.obs.value, ativo: f.ativo ? f.ativo.checked : true } });
+      if (pend) { try { await api('base_insumo_foto', { codigo: r.codigo, arquivo: pend }); } catch (e) { toast('Insumo salvo, mas a foto não subiu: ' + e.message, 1); } }
       toast(r.msg);
       await bpCarregar(true);
       if (depois) depois(r.codigo); else rotear();
     }
   });
+  if (g) {
+    const box = $('#bpFotoBox'), mostra = url => { box.innerHTML = bpFotoGrande(url ? { foto: url } : null); $('#bpFotoTxt').textContent = url ? 'Trocar foto' : 'Enviar foto'; $('#bpFotoTira').hidden = !url; };
+    const usar = async arq => {
+      if (!arq) return;
+      try {
+        const a = await bpReduzir(arq);
+        if (novo) { pend = a; mostra(a.url); return; }
+        box.classList.add('enviando');
+        const r = await api('base_insumo_foto', { codigo: i.codigo, arquivo: a });
+        mostra(a.url);   // mostra a que acabou de subir (a miniatura do Drive leva alguns segundos para ficar pronta)
+        await bpCarregar(true);
+        const lin = $(`#bpLista [data-ins="${CSS.escape(i.codigo)}"] .bp-foto`);
+        if (lin) lin.outerHTML = bpFoto(BP.I[i.codigo], 'mini zoom');
+        toast(r.msg);
+      } catch (e) { toast(e.message, 1); }
+      box.classList.remove('enviando');
+    };
+    $('#bpFotoArq').onchange = e => usar(e.target.files[0]);
+    box.onclick = () => $('#bpFotoArq').click();
+    box.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#bpFotoArq').click(); } };
+    box.ondragover = e => { e.preventDefault(); box.classList.add('sobre'); };
+    box.ondragleave = () => box.classList.remove('sobre');
+    box.ondrop = e => { e.preventDefault(); box.classList.remove('sobre'); usar(e.dataTransfer.files[0]); };
+    f.addEventListener('paste', e => { const it = [...(e.clipboardData?.items || [])].find(x => x.type.startsWith('image/')); if (it) { e.preventDefault(); usar(it.getAsFile()); } });
+    $('#bpFotoTira').onclick = async () => {
+      if (novo) { pend = null; return mostra(''); }
+      if (!confirm('Remover a foto deste insumo?')) return;
+      try {
+        toast((await api('base_insumo_foto', { codigo: i.codigo, remover: true })).msg);
+        mostra('');
+        await bpCarregar(true);
+        const lin = $(`#bpLista [data-ins="${CSS.escape(i.codigo)}"] .bp-foto`);
+        if (lin) lin.outerHTML = bpFoto(BP.I[i.codigo], 'mini zoom');
+      } catch (e) { toast(e.message, 1); }
+    };
+  }
   if (!novo) {
     api('base_insumo_historico', { codigo: i.codigo }).then(r => { const el = $('#bpHist'); if (el) el.innerHTML = bpHistorico(r.historico, i); }).catch(e => { const el = $('#bpHist'); if (el) el.innerHTML = `<small>${esc(e.message)}</small>`; });
     const x = $('#bpExcluirI');
     if (x) x.onclick = async () => { if (!confirm(`Excluir o insumo ${i.codigo} · ${i.descricao}?`)) return; try { toast((await api('base_insumo_excluir', { codigo: i.codigo })).msg); fecharModal(); await bpCarregar(true); rotear(); } catch (e) { toast(e.message, 1); } };
   }
   return f;
+}
+function bpFotoGrande(i) {
+  return i && i.foto ? `<img src="${esc(i.foto)}" alt="Foto do insumo" referrerpolicy="no-referrer">`
+    : `<div class="bp-foto-vazia">${ic('camera')}<b>Sem foto</b>${bpGere() ? '<small>Toque para enviar, arraste a imagem ou cole com Ctrl+V</small>' : ''}</div>`;
 }
 function bpHistorico(h, i) {
   if (!h.length) return '<small>Sem registro de mudança de preço.</small>';

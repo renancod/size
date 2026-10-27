@@ -15,7 +15,7 @@ const SCHEMA_CENTRAL = {
   Aparelhos: ['token', 'usuario_id', 'usuario', 'ua', 'criado_em', 'vistos'],
   Log: ['data', 'usuario', 'obra', 'acao', 'detalhe'],
   // base de preços da empresa (módulo Orçamentos): vale para todos os orçamentos, antes de existir a obra
-  Insumos: ['codigo', 'descricao', 'unidade', 'tipo', 'grupo', 'preco', 'data_preco', 'fonte', 'obs', 'ativo', 'criado_em', 'atualizado_em', 'atualizado_por'],
+  Insumos: ['codigo', 'descricao', 'unidade', 'tipo', 'grupo', 'preco', 'data_preco', 'fonte', 'obs', 'ativo', 'criado_em', 'atualizado_em', 'atualizado_por', 'foto_id'],
   InsumoPrecos: ['insumo', 'data', 'de', 'para', 'origem', 'usuario'],
   Composicoes: ['codigo', 'descricao', 'unidade', 'grupo', 'obs', 'fonte', 'ativo', 'criado_em', 'atualizado_em', 'atualizado_por'],
   // item da composição: insumo (I) ou composição auxiliar (C) × coeficiente por unidade; preço próprio vazio = preço do cadastro

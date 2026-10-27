@@ -141,6 +141,7 @@ const ROTAS = {
   base_insumo_historico: { base: 'Ver', fn: baseInsumoHistorico_ },
   base_insumo_salvar: { base: 'Gerir', lock: true, fn: baseInsumoSalvar_ },
   base_insumo_excluir: { base: 'Gerir', lock: true, fn: baseInsumoExcluir_ },
+  base_insumo_foto: { base: 'Gerir', lock: true, fn: baseInsumoFoto_ },
   base_composicao_salvar: { base: 'Gerir', lock: true, fn: baseComposicaoSalvar_ },
   base_composicao_excluir: { base: 'Gerir', lock: true, fn: baseComposicaoExcluir_ },
   base_composicao_duplicar: { base: 'Gerir', lock: true, fn: baseComposicaoDuplicar_ },
