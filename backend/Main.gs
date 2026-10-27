@@ -148,6 +148,16 @@ const ROTAS = {
   base_composicao_duplicar: { base: 'Gerir', lock: true, fn: baseComposicaoDuplicar_ },
   base_precos: { base: 'Gerir', lock: true, fn: basePrecos_ },
   base_importar: { base: 'Gerir', lock: true, fn: baseImportar_ },
+  // orçamentos de clientes (fora de obra) e o painel da empresa (tela Início)
+  empresa_dados: { fn: empresaDados_ },
+  prop_listar: { base: 'Ver', fn: propListar_ },
+  prop_detalhe: { base: 'Ver', fn: propDetalhe_ },
+  prop_salvar: { base: 'Gerir', lock: true, fn: propSalvar_ },
+  prop_status: { base: 'Gerir', lock: true, fn: propStatus_ },
+  prop_copiar: { base: 'Gerir', lock: true, fn: propCopiar_ },
+  prop_precos: { base: 'Gerir', lock: true, fn: propAtualizarPrecos_ },
+  prop_excluir: { base: 'Gerir', lock: true, fn: propExcluir_ },
+  prop_gerar_obra: { admin: true, base: 'Gerir', lock: true, fn: propGerarObra_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },

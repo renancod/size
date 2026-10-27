@@ -120,4 +120,18 @@ Módulo **Orçamentos** (`#/orc`, `Base.gs` + `base.js`): a base de preços da e
 - **Importar do RDObras:** a planilha exportada (aba *Composições*: Item, Tipo, Código, Descrição, Un, Quant., Custo unit.) é lida no navegador (SheetJS, do cdnjs) e conferida **antes de gravar**: o coeficiente vem da quantidade do item ÷ quantidade do serviço; o mesmo código com itens diferentes vira variante (`10075-2`); serviço repetido entra uma vez; preço de insumo diferente dentro do arquivo vira preço próprio; item sem código ganha `INS-…`; se a aba do orçamento vier junto, a etapa vira o grupo da composição. Importar de novo atualiza, não duplica.
 - **Acesso:** em Usuários e acessos → **Orçamentos**: *Ver* ou *Gerir* (o administrador gere). Quem só tem esse acesso entra direto na base de preços.
 - Abas novas na planilha central: `Insumos`, `InsumoPrecos`, `Composicoes`, `ComposicaoItens`; coluna `Usuarios.orcamentos`. Códigos com zero à esquerda (`008`) são gravados como texto.
-- Próximas etapas: orçamento do cliente (etapas, itens, BDI, proposta em PDF) e **gerar a obra** a partir do orçamento aprovado.
+- **Foto do insumo:** no Drive (`Compras Size / Base de preços / Fotos dos insumos`, aberta para quem tem o link), ao lado do cadastro e em miniatura nas listas.
+- **Contratos:** o serviço da planilha do contrato é escolhido na base (referência sem material), no catálogo ou digitado como novo; "Puxar da base de preços" traz vários de uma vez (`ContratoItens.comp_cod`).
+
+## Início da empresa e obra aberta
+- **Início** (`#/inicio`, `empresa.js`): saudação, ações rápidas (novo orçamento, composição, insumo, importar, nova obra, usuários), **obras** em mapa (Leaflet + OpenStreetMap, pelas coordenadas do cadastro da obra) e cartões com pedidos em andamento/urgentes, frentes, último diário e pendências; **orçamentos de clientes** (em elaboração, aguardando o cliente, aprovados, taxa de aprovação) e a base de preços. Rota `empresa_dados` (resumo de cada obra guardado 3 min).
+- **Dois níveis no menu:** sem obra aberta, só Início e **Empresa** (Orçamentos e administração). Ao tocar numa obra, ela fica em destaque no topo do menu (botão **Trocar**) e aparecem só os módulos que dependem da planilha da obra, com o **Painel da obra** (`#/painel`). Tela de obra sem obra aberta volta para o Início.
+- O app abre no Início; entra direto na obra quando o link é de uma tela da obra (notificação), está sem sinal (diário offline) ou a pessoa só tem uma obra e nada fora dela.
+
+## Orçamentos de clientes
+Módulo **Orçamentos → Orçamentos de clientes** (`#/orc/orcamentos`, `Propostas.gs` + `prop.js`), na planilha central (abas `Propostas`, `PropostaItens`).
+- **Planilha:** etapas (1, 2, 3…) e itens (1.1, 1.2…): serviço da base × quantidade (o custo unitário por categoria fica **congelado** no orçamento; "Atualizar preços pela base" puxa de novo) ou **item de preço direto** (material e mão de obra por unidade).
+- **BDI e gestão** com % e base configuráveis (mão de obra + equipamento + serviços, ou custo total). Preço de venda do item = custo + BDI + gestão (2 casas por item, como na planilha).
+- **Situação:** rascunho → enviado → aprovado | perdido (com motivo) | cancelado; reabrir; **nova revisão** (ORC-0001 rev.1, a anterior fica "Revisado"); copiar como novo; histórico.
+- **Proposta para imprimir/PDF:** a do cliente (preço de venda) e a planilha interna (custo, material, MO, BDI, gestão).
+- **Gerar obra** (administrador, orçamento aprovado): cria a obra (planilha e pasta no Drive) com uma frente geral por etapa, os serviços com quantidade, material, mão de obra e preço de venda, a receita e o custo de cada frente e os **materiais** de cada serviço (insumos de material das composições, com o coeficiente) — o Orçamento da obra já nasce pronto.

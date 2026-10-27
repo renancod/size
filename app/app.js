@@ -255,11 +255,12 @@ const MODULOS = [
     ]
   },
   {
-    id: 'orcamentos', t: 'Orçamentos', i: 'calc', home: '#/orc', global: true,   // global: aparece mesmo sem obra escolhida
-    desc: 'Base de preços da Size: insumos e composições de serviço (como no RDObras e no OrçaFácil), para orçar novos clientes',
+    id: 'orcamentos', t: 'Orçamentos', i: 'calc', home: '#/orc/orcamentos', global: true,   // global: fica na parte "Empresa", sem depender de obra
+    desc: 'Orçamentos de novos clientes a partir da base de preços da Size (insumos e composições, como no RDObras e no OrçaFácil); o orçamento aprovado vira obra',
     rotas: /^#\/orc/,
     itens: [
-      { h: '#/orc', t: 'Painel da base', i: 'chart', ok: () => !!baseNivel() },
+      { h: '#/orc/orcamentos', t: 'Orçamentos de clientes', i: 'file', ok: () => !!baseNivel() },
+      { h: '#/orc', t: 'Base de preços', i: 'chart', ok: () => !!baseNivel() },
       { h: '#/orc/composicoes', t: 'Composições', i: 'layers', ok: () => !!baseNivel() },
       { h: '#/orc/insumos', t: 'Insumos', i: 'box', ok: () => !!baseNivel() },
       { h: '#/orc/importar', t: 'Importar do RDObras', i: 'upload', ok: () => baseNivel() === 'Gerir' }
@@ -286,7 +287,7 @@ function montarShell() {
   $('#raiz').innerHTML = `<div class="shell">
     <aside class="menu" id="menu">
       <div class="marca"><img src="icon-192.png" alt=""><div><b>Size Engenharia</b><small>Sistema de gestão</small></div></div>
-      <label class="obrasel">Obra<select id="obrasel"></select></label>
+      <div class="obrabox" id="obrabox"></div>
       <nav class="nav" id="nav"></nav>
       ${botaoInstalar('no-menu')}
       <div class="rodape"><a href="#/conta">${ic('user')}<span>${esc(S.sess.usuario.nome)}</span></a><button id="sair" title="Sair">${ic('logout')}</button></div>
@@ -304,7 +305,6 @@ function montarShell() {
   $('#nav').onclick = e => { if (e.target.closest('a')) abre(false); };
   $('#sair').onclick = () => { if (confirm('Sair do app?')) sair(); };
   $('#atualizar').onclick = async () => { S.ped = null; try { await recarregarDados(); } catch (e) { toast(e.message, 1); } rotear(); };
-  $('#obrasel').onchange = e => trocarObra(e.target.value);
   $('#sino').onclick = painelNotif;
   // arrastar da borda esquerda abre o menu; para a esquerda fecha (celular)
   let x0 = null;
@@ -320,18 +320,27 @@ function montarShell() {
 }
 
 function montarMenu() {
-  const obras = S.sess.obras;
-  $('#obrasel').innerHTML = obras.length ? obras.map(o => `<option value="${esc(o.id)}" ${o.id === S.obraId ? 'selected' : ''}>${esc(o.nome)}${o.ativa ? '' : ' (desativada)'}</option>`).join('') : '<option>Nenhuma obra liberada</option>';
-  $('#obranome').textContent = obraAtual()?.nome || '';
+  // obra aberta em destaque no topo do menu (trocar = voltar ao Início da empresa)
+  const ob = obraAtual();
+  $('#obrabox').innerHTML = ob ? `<div class="ob-atual"><span class="ob-sig">${esc(ob.sigla || ob.nome.slice(0, 2))}</span><div><small>Obra aberta</small><b>${esc(ob.nome)}</b>${ob.ativa ? '' : '<small>desativada</small>'}</div>
+      ${multiObra() ? `<button type="button" class="ob-trocar" id="obTrocar" title="Trocar de obra / voltar ao Início">${ic('refresh')}<span>Trocar</span></button>` : ''}</div>`
+    : S.sess.obras.length ? `<a class="ob-escolher" href="#/inicio">${ic('building')}<span><b>Nenhuma obra aberta</b><small>Escolha no Início</small></span></a>` : '';
+  if ($('#obTrocar')) $('#obTrocar').onclick = () => { $('#menu').classList.remove('on'); $('#scrim').classList.remove('on'); sairObra(); };
+  $('#obranome').textContent = ob?.nome || '';
   const link = n => n.breve ? `<div class="sub-breve">${ic(n.i)}<span>${n.t}</span><small>em breve</small></div>`  : `<a href="${n.h}" data-h="${n.h}">${ic(n.i)}<span>${n.t}</span>${n.c ? `<span class="cont" data-c="${n.c}" hidden></span>` : ''}</a>`;
   const aberto = LS.get('cs_mod') || 'compras';
-  $('#nav').innerHTML = `<a href="#/inicio" data-h="#/inicio">${ic('home')}<span>Início</span></a>
-    <div class="sep">Módulos</div>
-    ${MODULOS.filter(modOk).map(m => m.breve
-      ? `<div class="mod breve">${ic(m.i)}<span>${m.t}</span><small>em breve</small></div>`
-      : !S.dados && !m.global ? '' : `<button type="button" class="mod" data-mod="${m.id}" aria-expanded="${aberto === m.id}">${ic(m.i)}<span>${m.t}</span><span class="cont" data-c="mod-${m.id}" hidden></span>${ic('chevron')}</button>
-        <div class="sub" data-sub="${m.id}" ${aberto === m.id ? '' : 'hidden'}>${m.itens.filter(n => n.ok()).map(link).join('')}</div>`).join('')}
-    ${NAV_GERAL.filter(n => n.ok()).map(n => n.sep ? `<div class="sep">${n.sep}</div>` : link(n)).join('')}`;
+  const modulo = m => m.breve
+    ? `<div class="mod breve">${ic(m.i)}<span>${m.t}</span><small>em breve</small></div>`
+    : `<button type="button" class="mod" data-mod="${m.id}" aria-expanded="${aberto === m.id}">${ic(m.i)}<span>${m.t}</span><span class="cont" data-c="mod-${m.id}" hidden></span>${ic('chevron')}</button>
+        <div class="sub" data-sub="${m.id}" ${aberto === m.id ? '' : 'hidden'}>${m.itens.filter(n => n.ok()).map(link).join('')}</div>`;
+  // dois níveis: a obra aberta (só o que depende da planilha da obra) e a empresa (orçamentos, base de preços, administração)
+  const daObra = S.dados ? MODULOS.filter(m => !m.global && modOk(m)) : [], daEmpresa = MODULOS.filter(m => m.global && modOk(m));
+  const inicio = multiObra() || !S.dados ? '#/inicio' : '#/painel';
+  $('#nav').innerHTML = `<a href="${inicio}" data-h="${inicio}">${ic('home')}<span>Início</span></a>
+    ${daObra.length ? `<div class="sep">Obra</div><a href="#/painel" data-h="#/painel">${ic('grid')}<span>Painel da obra</span></a>${daObra.map(modulo).join('')}` : ''}
+    ${NAV_GERAL.filter(n => n.ok() && !n.sep && !n.h.startsWith('#/admin')).map(link).join('')}
+    ${daEmpresa.length || admin() ? '<div class="sep">Empresa</div>' : ''}${daEmpresa.map(modulo).join('')}
+    ${NAV_GERAL.filter(n => n.ok() && !n.sep && n.h.startsWith('#/admin')).map(link).join('')}`;
   $$('#nav .mod[data-mod]').forEach(b => {
     b.onclick = () => {
       const sub = $(`#nav [data-sub="${b.dataset.mod}"]`), abrir = sub.hidden;
@@ -370,13 +379,24 @@ async function trocarObra(id) {
   carregandoView();
   try { await recarregarDados(); } catch (e) { toast(e.message, 1); }
   montarMenu();
-  if (/^#\/(pedido\/|inicio)/.test(location.hash) || !location.hash) location.hash = '#/inicio';
-  rotear();
+  if (S.dados && !S.offline) pedidos().catch(() => {});
+  if (/^#\/(pedido\/|inicio)/.test(location.hash) || !location.hash || rotaEmpresa(location.hash)) location.hash = '#/painel';
+  else rotear();
 }
+/* sai da obra e volta para o Início da empresa */
+function sairObra() {
+  S.obraId = ''; S.dados = null; S.ped = null; LS.del('cs_obra');
+  montarMenu();
+  if (location.hash === '#/inicio') rotear(); else location.hash = '#/inicio';
+}
+/* telas que não dependem de obra (Início da empresa, Orçamentos, administração, conta) */
+const rotaEmpresa = h => /^(#\/?)?$|^#\/(inicio|orc|admin|conta)(\/|\?|$)/.test(h);
+/* tem mais de um lugar para ir: várias obras, administração ou o módulo Orçamentos */
+const multiObra = () => admin() || !!baseNivel() || (S.sess?.obras || []).filter(o => o.ativa).length > 1;
 
 /* ---------- rotas ---------- */
 const ROTAS = [
-  [/^#?\/?(inicio)?$/, vHome], [/^#\/compras$/, vInicio], [/^#\/novo$/, vNovo], [/^#\/pedidos(?:\?(.*))?$/, vPedidos], [/^#\/pedido\/(.+)$/, vPedido],
+  [/^#\/painel$/, vHome], [/^#\/compras$/, vInicio], [/^#\/novo$/, vNovo], [/^#\/pedidos(?:\?(.*))?$/, vPedidos], [/^#\/pedido\/(.+)$/, vPedido],
   [/^#\/estoque$/, vEstoque], [/^#\/financeiro(?:\?(.*))?$/, vFinanceiro], [/^#\/cad\/(\w+)$/, vCad], [/^#\/conta$/, vConta],
   [/^#\/admin\/usuarios$/, vUsuarios], [/^#\/admin\/obras$/, vObras], [/^#\/admin\/config$/, vConfig]
 ];
@@ -386,7 +406,13 @@ async function rotear() {
   const h = location.hash || '#/inicio', id = ++rotaN;
   marcarMenu();
   fecharModal();
-  if (!S.dados && !/^#\/(admin|conta|orc)/.test(h)) return semObra();
+  if (!S.dados && !rotaEmpresa(h)) {
+    // tela de obra sem obra aberta: escolher no Início (sem obra nenhuma liberada, o aviso de sempre)
+    if (!S.sess.obras.length && !baseNivel()) return semObra();
+    toast('Escolha a obra no Início.');
+    location.hash = '#/inicio';
+    return;
+  }
   for (const [re, fn] of ROTAS) {
     const m = h.match(re);
     if (!m) continue;
@@ -455,14 +481,16 @@ function telaTrocarSenha() {
 
 async function iniciar() {
   if (S.sess.usuario.trocar_senha) return telaTrocarSenha();
-  // ao entrar, abre uma obra ativa (a desativada só se for escolhida no menu)
-  const atual = S.sess.obras.find(o => o.id === S.obraId);
-  if (!atual || (!atual.ativa && S.sess.obras.some(o => o.ativa))) S.obraId = (S.sess.obras.find(o => o.ativa) || S.sess.obras[0])?.id || '';
-  if (S.obraId) LS.set('cs_obra', S.obraId);
+  // Início da empresa por padrão; entra direto na obra quando: o link é de uma tela da obra (notificação, atalho),
+  // está sem sinal (o diário funciona offline) ou a pessoa só tem uma obra e nada fora dela
+  const ativas = S.sess.obras.filter(o => o.ativa), atual = S.sess.obras.find(o => o.id === S.obraId);
+  const telaObra = !!location.hash && !rotaEmpresa(location.hash);
+  if (!multiObra() && ativas.length === 1) S.obraId = ativas[0].id;
+  else if (!(atual && (telaObra || S.offline))) S.obraId = '';
+  if (S.obraId) LS.set('cs_obra', S.obraId); else LS.del('cs_obra');
   S.dados = null;
   if (S.obraId) { try { await recarregarDados(); } catch (e) { toast(e.message, 1); } }
-  // quem só tem o módulo Orçamentos (sem obra) já abre na base de preços
-  if (!S.obraId && baseNivel() && /^(#\/inicio)?$/.test(location.hash)) history.replaceState(null, '', '#/orc');
+  if (S.obraId && /^(#\/inicio)?$/.test(location.hash)) history.replaceState(null, '', '#/painel');
   montarShell();
   rotear();
   if (S.dados && !S.offline) pedidos().catch(() => {});
@@ -532,6 +560,7 @@ async function buscarNotif() {
   NOTIF.conhecidos = new Set(r.itens.map(i => i.id));
   LS.set('cs_notif', JSON.stringify([...NOTIF.conhecidos]));
   atualizarSino();
+  if (typeof empAtualizarPend === 'function') empAtualizarPend();   // pendências nos cartões das obras do Início
 }
 function iniciarNotif() {
   clearInterval(NOTIF.timer);
@@ -639,20 +668,22 @@ async function verArquivo(id) {
 
 /* ---------- início ---------- */
 /* ---------- início: módulos ---------- */
+/* painel da obra aberta (o Início da empresa fica em empresa.js) */
 async function vHome() {
-  titulo('Início');
+  titulo('Painel da obra');
   if (S.dados && !S.offline) await pedidos().catch(() => {});
   if (S.dados && typeof carregarExec === 'function' && can(['exec_ver', 'exec_lancar', 'exec_planejar'])) await carregarExec().catch(() => {});
   const pend = pendenciasCompras();
-  view(`<div class="cab"><h2>Olá, ${esc(S.sess.usuario.nome.split(' ')[0])}</h2>${obraAtual() ? `<span class="badge">${esc(obraAtual().nome)}</span>` : ''}</div>
+  view(`<div class="cab"><h2>${obraAtual() ? esc(obraAtual().nome) : 'Obra'}</h2>${multiObra() ? `<button type="button" class="btn sec peq" id="painelTrocar">${ic('back')} Trocar obra</button>` : ''}</div>
     ${S.offline ? '<div class="aviso warn">Sem sinal: mostrando os dados guardados no aparelho. O diário de obra funciona e envia sozinho quando o sinal voltar.</div>' : ''}
     ${obraInativa() ? AVISO_INATIVA : ''}
-    <div class="modulos">${MODULOS.filter(modOk).map(m => m.breve
+    <div class="modulos">${MODULOS.filter(m => !m.global && modOk(m)).map(m => m.breve
       ? `<div class="modulo breve"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small><span class="badge">em breve</span></div>`
       : `<a class="modulo" href="${m.home}"><span class="mic">${ic(m.i)}</span><b>${m.t}</b><small>${esc(m.desc)}</small>
           ${m.id === 'compras' && pend ? `<span class="badge b-apr">${plural(pend, 'pendência', 'pendências')}</span>` : ''}
           ${m.id === 'execucao' && typeof contExec === 'function' && contExec('mod-execucao') ? `<span class="badge b-apr">${plural(contExec('mod-execucao'), 'pendência', 'pendências')}</span>` : ''}</a>`).join('')}</div>
     ${can('pedido_abrir') ? `<div class="acoes" style="margin-top:16px"><a class="btn" href="#/novo">${ic('plus')} Novo pedido de material</a></div>` : ''}`);
+  if ($('#painelTrocar')) $('#painelTrocar').onclick = sairObra;
 }
 
 /* ---------- compras: painel ---------- */

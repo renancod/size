@@ -166,6 +166,17 @@ console.log(G.rodar('criarObraAvaResidence()'));
   adm('base_precos', { itens: [{ codigo: 'PAV007', preco: 28.9 }, { codigo: 'BL1202', preco: 59.1 }], data_preco: d(-10), origem: 'Cotação Pré-Moldados Sul' });
   adm('admin_usuario_salvar', { usuario: { nome: 'Olívia Orçamentista', login: 'orc', ativo: true, orcamentos: 'Gerir' }, senha: 'Obra#Teste26', acessos: [] });
   console.log('Base de preços:', r.msg, '· login orc / Obra#Teste26 (só Orçamentos, sem obra)');
+  // orçamentos de clientes: um em elaboração, um enviado e um aprovado (pronto para "Gerar obra")
+  const prop = (cliente, empreendimento, local, itens, extra = {}) => adm('prop_salvar', { proposta: { cliente, empreendimento, local, bdi_pct: 18, bdi_base: 'servicos', gestao_pct: 6, gestao_base: 'total', prazo_txt: '6 meses a partir da ordem de serviço', pagamento_txt: 'Medições mensais, pagamento em 15 dias', ...extra }, itens }).id;
+  const p1 = prop('Construtora Mar Azul Ltda', 'Loteamento Dunas · infraestrutura', 'Xangri-lá/RS', [{ tipo: 'E', descricao: 'Terraplenagem' }, { comp_cod: 'LCMV', qtd: 12000, unidade: 'M2' }, { comp_cod: 'EML', qtd: 6500, unidade: 'M3' },
+    { tipo: 'E', descricao: 'Pavimentação' }, { comp_cod: '10034', qtd: 900, unidade: 'M3' }, { comp_cod: '10011', qtd: 6000, unidade: 'M2' }, { comp_cod: '10014', qtd: 2400, unidade: 'M' },
+    { tipo: 'E', descricao: 'Drenagem pluvial' }, { comp_cod: '10023', qtd: 1100, unidade: 'M' }, { comp_cod: '10006', qtd: 24, unidade: 'UN' }, { tipo: 'E', descricao: 'Canteiro' }, { descricao: 'Mobilização e canteiro de obras', unidade: 'VB', qtd: 1, unit_mat: 18000, unit_mo: 22000 }]);
+  adm('prop_status', { id: p1, op: 'enviar' });
+  const p2 = prop('Incorporadora Litoral', 'Condomínio Brisa · pavimentação', 'Capão da Canoa/RS', [{ tipo: 'E', descricao: 'Pavimentação' }, { comp_cod: '10011', qtd: 3200, unidade: 'M2' }, { comp_cod: 'CMP-0001', qtd: 1400, unidade: 'M' }]);
+  adm('prop_status', { id: p2, op: 'aprovar' });
+  prop('Prefeitura de Osório', 'Drenagem Rua das Palmeiras', 'Osório/RS', [{ tipo: 'E', descricao: 'Drenagem' }, { comp_cod: '10023', qtd: 380, unidade: 'M' }, { comp_cod: '10006', qtd: 8, unidade: 'UN' }], { bdi_pct: 22, gestao_pct: 0 });
+  // localização das outras obras no mapa do Início
+  adm('admin_dados').obras.filter(o => !o.lat).forEach((o, n) => adm('admin_obra_salvar', { id: o.id, nome: o.nome, endereco: o.endereco, ativa: true, lat: [-29.64, -29.89][n % 2], lng: [-49.99, -50.27][n % 2] }));
 }
 
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');

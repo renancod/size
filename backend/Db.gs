@@ -19,7 +19,13 @@ const SCHEMA_CENTRAL = {
   InsumoPrecos: ['insumo', 'data', 'de', 'para', 'origem', 'usuario'],
   Composicoes: ['codigo', 'descricao', 'unidade', 'grupo', 'obs', 'fonte', 'ativo', 'criado_em', 'atualizado_em', 'atualizado_por'],
   // item da composição: insumo (I) ou composição auxiliar (C) × coeficiente por unidade; preço próprio vazio = preço do cadastro
-  ComposicaoItens: ['composicao', 'ordem', 'ref_tipo', 'ref', 'coef', 'preco', 'obs']
+  ComposicaoItens: ['composicao', 'ordem', 'ref_tipo', 'ref', 'coef', 'preco', 'obs'],
+  // orçamentos de clientes (antes de existir a obra): cada revisão é uma linha; os custos dos itens ficam congelados no orçamento
+  Propostas: ['id', 'numero', 'revisao', 'status', 'cliente', 'cliente_doc', 'contato', 'telefone', 'email', 'empreendimento', 'local', 'data_base', 'validade_dias',
+    'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs', 'motivo', 'obra_id', 'historico_json',
+    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em'],
+  // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
+  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs']
 };
 const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',
