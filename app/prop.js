@@ -88,7 +88,10 @@ async function vProp(id) {
     ${p.status === 'Perdido' && p.motivo ? `<div class="aviso warn">Perdido: ${esc(p.motivo)}</div>` : ''}
     ${d && d.revisoes.length > 1 ? `<div class="pp-revs">${d.revisoes.map(r => `<a class="chip ${r.id === id ? 'on' : ''}" href="#/orc/orcamento/${enc(r.id)}">${esc(r.rotulo)} <small>${esc(r.status)}</small></a>`).join('')}</div>` : ''}`;
   if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d));
-  else bpTela('props', cab + ppLeitura(d));
+  else {
+    bpTela('props', cab + ppLeitura(d));
+    $$('[data-ver-cod]').forEach(b => { b.onclick = () => { const i = d.itens.find(x => x.codigo === b.dataset.verCod); if (i) ppInsumos(i, i); }; });
+  }
   ppLigarAcoes(d);
   if (edita) ppEditorLigar();
 }
@@ -145,7 +148,7 @@ function ppTabela(itens, etapas, T, interna) {
   etapas.forEach(e => { et[e.codigo] = e; });
   return `<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
     ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${bpM((et[i.codigo] || {}).preco)}</b></td></tr>`
-      : `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descricao)}${interna && i.comp_cod ? ` <small><code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
+      : `<tr><td>${esc(i.codigo)}</td><td>${i.comp_cod ? `<button type="button" class="bp-lnk pp-ver" data-ver-cod="${esc(i.codigo)}" title="Ver os insumos deste serviço">${esc(i.descricao)}</button>` : esc(i.descricao)}${interna && i.comp_cod ? ` <small><code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
         ${interna ? `<td class="n bp-mono">${bpM(i.custo_unit)}</td><td class="n bp-mono">${bpM(i.v_mat)}</td><td class="n bp-mono">${bpM(i.v_serv)}</td><td class="n bp-mono">${bpM(i.bdi)}</td><td class="n bp-mono">${bpM(i.gestao)}</td>` : ''}
         <td class="n bp-mono">${bpM(i.preco_unit)}</td><td class="n bp-mono"><b>${bpM(i.preco)}</b></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot></table></div>`;
@@ -237,7 +240,7 @@ function ppDesenhar(estrutura) {
       const comp = l.comp_cod ? BP.C[l.comp_cod] : null;
       const tx = `<span class="pp-tx" title="Toque para tirar ou pôr este item no BDI / na gestão"><button type="button" data-tx="sem_bdi" class="${l.sem_bdi ? 'off' : ''}">BDI</button><button type="button" data-tx="sem_gestao" class="${l.sem_gestao ? 'off' : ''}">Gestão</button></span>`;
       return `<div class="pp-l it ${l.comp_cod ? 'base' : 'dir'}" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span>
-        <span class="pp-d">${tx}${l.comp_cod ? `<b>${esc(l.descricao)}</b><small><code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}</small>`
+        <span class="pp-d">${tx}${l.comp_cod ? `<button type="button" class="bp-lnk pp-ver" data-ver="${n}" title="Ver os insumos deste serviço">${esc(l.descricao)}</button><small><code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}</small>`
           : `<input data-c="descricao" value="${esc(l.descricao)}" placeholder="Descrição do item (preço direto)"><span class="pp-dir"><label>Material/un<input data-c="unit_mat" inputmode="decimal" value="${esc(bpV(l.unit_mat))}" placeholder="0,00"></label><label>Mão de obra/un<input data-c="unit_mo" inputmode="decimal" value="${esc(bpV(l.unit_mo))}" placeholder="0,00"></label></span>`}</span>
         <label class="pp-un"><small>Un</small>${l.comp_cod ? `<span>${esc(l.unidade)}</span>` : `<input data-c="unidade" value="${esc(l.unidade)}">`}</label>
         <label class="pp-q"><small>Quant.</small><input data-c="qtd" inputmode="decimal" value="${esc(l.qtd)}" placeholder="0"></label>
@@ -248,6 +251,8 @@ function ppDesenhar(estrutura) {
     $$('#ppLin .pp-l').forEach(el => {
       const n = +el.dataset.n;
       $$('input[data-c]', el).forEach(i => { i.oninput = () => { E.linhas[n][i.dataset.c] = i.value; E.sujo = true; ppDesenhar(false); }; });
+      const ver = $('[data-ver]', el);
+      if (ver) ver.onclick = () => ppInsumos(E.linhas[n], C.linhas[n]);
       $$('[data-tx]', el).forEach(b => { b.onclick = () => { const k = b.dataset.tx; E.linhas[n][k] = !E.linhas[n][k]; b.classList.toggle('off', E.linhas[n][k]); E.sujo = true; ppDesenhar(false); }; });
       $$('[data-a]', el).forEach(b => { b.onclick = () => {
         ppColher();
@@ -333,6 +338,26 @@ function ppBusca() {
     else if (e.key === 'Enter') { e.preventDefault(); escolher(ops[sel]?.dataset.n); }
     else if (e.key === 'Escape') res.hidden = true;
   };
+}
+
+/* ---------- insumos de um item do orçamento (só consulta) ----------
+ * abre a composição da base até os insumos: coeficiente, preço, custo por unidade e quanto vai para a quantidade do item.
+ * l = linha do orçamento (comp_cod, qtd, custos congelados); c = a mesma linha já calculada (custo_unit) */
+function ppInsumos(l, c) {
+  const comp = BP.C[l.comp_cod], q = bpPn(l.qtd) || 0, congelado = c.custo_unit != null ? c.custo_unit : bpPn(l.unit_mat) + bpPn(l.unit_mo) + bpPn(l.unit_eq) + bpPn(l.unit_sv);
+  if (!comp) return modal('Insumos', `<div class="aviso warn">A composição <code>${esc(l.comp_cod)}</code> não está mais na base de preços. O orçamento continua com o custo congelado de ${bpM(congelado)}/${esc(l.unidade)}.</div>`, { semRodape: true });
+  const lista = Object.values(bpExplodir(comp.itens, 1, {}, [comp.codigo])).map(a => Object.assign(a, { custo: a.coef * a.preco }));
+  const ordem = ['Material', 'Mão de obra', 'Equipamento', 'Serviço'], porTipo = ordem.map(t => [t, lista.filter(a => a.i.tipo === t).sort((x, y) => y.custo - x.custo)]).filter(([, l2]) => l2.length);
+  const base = comp.custo.total, dif = Math.abs(base - congelado) > 0.005;
+  modal(`${ic('layers')} ${esc(c.codigo || '')} · Insumos do serviço`, `<div class="pp-ins-cab"><b>${esc(l.descricao)}</b>
+      <small><code>${esc(comp.codigo)}</code> · ${nf(q)} ${esc(l.unidade)} no orçamento · custo ${bpM(congelado)}/${esc(l.unidade)} · total ${bpM(q * congelado)}</small></div>
+    ${dif ? `<div class="aviso warn">O orçamento está com o custo congelado de <b>${bpM(congelado)}</b>/${esc(l.unidade)}; na base hoje esta composição custa <b>${bpM(base)}</b>. A lista abaixo é a da base hoje. Para trazer os preços novos, use "Atualizar preços pela base".</div>` : ''}
+    <div class="rolar"><table class="tab bp-tab"><thead><tr><th>Insumo</th><th>Un</th><th class="n">Coef. por ${esc(l.unidade)}</th><th class="n">Preço</th><th class="n">Custo / ${esc(l.unidade)}</th><th class="n">Quant. total</th><th class="n">Custo total</th></tr></thead><tbody>
+    ${porTipo.map(([t, l2]) => `<tr class="pp-et"><td colspan="7"><i class="bp-dot k-${bpK(t)}"></i> <b>${t}</b> · ${bpM(l2.reduce((s, a) => s + a.custo, 0))}/${esc(l.unidade)}</td></tr>`
+      + l2.map(a => `<tr><td><div class="bp-cel">${bpFoto(a.i, 'mini zoom')}<span>${esc(a.i.descricao)} <small><code>${esc(a.i.codigo)}</code></small>${a.proprio ? ' <span class="bp-flag">preço próprio</span>' : ''}</span></div></td><td>${esc(a.i.unidade)}</td>
+        <td class="n bp-mono">${bpN(a.coef)}</td><td class="n bp-mono">${bpM(a.preco)}</td><td class="n bp-mono">${bpM(a.custo)}</td><td class="n bp-mono"><b>${nf(q * a.coef)}</b></td><td class="n bp-mono">${bpM(q * a.custo)}</td></tr>`).join('')).join('')}</tbody>
+    <tfoot><tr><td colspan="4">Custo do serviço (base hoje)</td><td class="n bp-mono"><b>${bpM(base)}</b></td><td></td><td class="n bp-mono"><b>${bpM(q * base)}</b></td></tr></tfoot></table></div>
+    <div class="acoes" style="margin-top:12px"><a class="btn sec peq" href="#/orc/composicao/${enc(comp.codigo)}">${ic('layers')} Abrir a ficha da composição</a></div>`, { semRodape: true, larga: true });
 }
 
 /* ---------- gerar a obra ---------- */

@@ -1197,4 +1197,6 @@ details.pp-sec>summary::-webkit-details-marker{display:none}
 details.pp-sec>summary h3{margin:0;display:flex;align-items:center;gap:8px}
 details.pp-sec>summary small{color:var(--mute);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 details.pp-sec>summary::after{content:"Editar";font-size:.76rem;font-weight:700;color:var(--teal)}
-details.pp-sec[open]>summary{margin-bottom:12px}details.pp-sec[open]>summary::after{content:"Recolher"}
+details.pp-sec[open]>summary{margin-bottom:12px}details.pp-sec[open]>summary::after{content:"Recolher"}.pp-ins-cab{display:grid;gap:2px;margin-bottom:10px}.pp-ins-cab b{color:var(--bp-ink);font-size:1rem}
+.pp-ver{font-weight:600;font-size:.9rem;line-height:1.25;text-decoration:underline dotted #B8C2D2;text-underline-offset:3px}.pp-ver:hover{text-decoration-color:var(--teal)}
+@media print{.pp-ver{text-decoration:none;font-weight:400}}
