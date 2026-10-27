@@ -48,8 +48,9 @@ function propCalc_(p, itens) {
       tipo: 'I', codigo: String(x.codigo), comp_cod: String(x.comp_cod || ''), descricao: x.descricao, unidade: x.unidade, qtd: q, unit_mat: u.mat, unit_mo: u.mo, unit_eq: u.eq, unit_sv: u.sv, obs: x.obs || '',
       custo_unit: u.mat + u.mo + u.eq + u.sv, custo: propR2_(q * (u.mat + u.mo + u.eq + u.sv)), v_mat: propR2_(q * u.mat), v_serv: propR2_(q * (u.mo + u.eq + u.sv))
     };
-    i.bdi = propR2_(base(p.bdi_base, i) * bdiPct);
-    i.gestao = propR2_(base(p.gestao_base, i) * gesPct);
+    i.sem_bdi = sim_(x.sem_bdi); i.sem_gestao = sim_(x.sem_gestao);
+    i.bdi = i.sem_bdi ? 0 : propR2_(base(p.bdi_base, i) * bdiPct);
+    i.gestao = i.sem_gestao ? 0 : propR2_(base(p.gestao_base, i) * gesPct);
     i.preco = propR2_(i.custo + i.bdi + i.gestao);
     i.preco_unit = q ? propR2_(i.preco / q) : 0;
     if (et) soma(et, i);
@@ -127,7 +128,8 @@ function propItensValidos_(lista, id, ix) {
     if (comp && (x.recalcular || ['unit_mat', 'unit_mo', 'unit_eq', 'unit_sv'].every(k => x[k] === '' || x[k] == null))) u = propCustoBase_(ix, memo, comp);
     Object.keys(u).forEach(k => { if (u[k] < 0) throw new Error('Valor negativo em ' + (desc || comp) + '.'); });
     ni++;
-    out.push(Object.assign({ proposta: id, ordem: out.length + 1, tipo: 'I', codigo: ne + '.' + ni, comp_cod: comp, descricao: (desc || (ix.C[comp] ? ix.C[comp].descricao : comp)).slice(0, 300), unidade: un.slice(0, 20), qtd: qtd, obs: String(x.obs || '').trim().slice(0, 300) }, u));
+    out.push(Object.assign({ proposta: id, ordem: out.length + 1, tipo: 'I', codigo: ne + '.' + ni, comp_cod: comp, descricao: (desc || (ix.C[comp] ? ix.C[comp].descricao : comp)).slice(0, 300), unidade: un.slice(0, 20), qtd: qtd, obs: String(x.obs || '').trim().slice(0, 300),
+      sem_bdi: sim_(x.sem_bdi) ? 'Sim' : '', sem_gestao: sim_(x.sem_gestao) ? 'Sim' : '' }, u));
   });
   return out;
 }
@@ -238,6 +240,33 @@ function propExcluir_(q, ctx) {
   I.substituir(I.all().filter(x => String(x.proposta) !== String(p.id)));
   log_(ctx, 'proposta_excluir', propRotulo_(p));
   return { msg: 'Orçamento ' + propRotulo_(p) + ' excluído.' };
+}
+
+/* ---------- importar um orçamento do RDObras (a mesma planilha da base: aba do orçamento + aba Composições) ----------
+ * conferir (sem gravar) ou aplicar: atualiza a base de preços com as composições do arquivo e cria o orçamento em rascunho,
+ * com uma etapa por grupo do RDObras, cada item ligado à composição e na quantidade da planilha; BDI e gestão vêm do arquivo */
+function propImportar_(q, ctx) {
+  const P = baseLerRdo_(q.abas), plano = basePlanoImport_(P, q.atualizar !== false && q.atualizar !== 'false');
+  const itens = [];
+  let et = null, precoPlan = 0;
+  P.blocos.forEach(b => {
+    const e = String(b.item).split('.')[0] || '1';
+    if (e !== et) { et = e; itens.push({ tipo: 'E', descricao: P.etapasNomes[e] || 'Etapa ' + e }); }
+    const fx = P.semTaxa[String(b.item)] || {};
+    itens.push({ tipo: 'I', comp_cod: b.cod_final, descricao: b.descricao, unidade: b.unidade, qtd: num_(b.qtd) || 1, sem_bdi: !!fx.bdi, sem_gestao: !!fx.gestao });
+    precoPlan += (num_(b.qtd) || 1) * (b.unit == null ? 0 : b.unit);
+  });
+  const sugestao = { empreendimento: P.titulo, bdi_pct: P.taxas.bdi == null ? '' : P.taxas.bdi, bdi_base: P.taxas.bdi_base || 'servicos', gestao_pct: P.taxas.gestao == null ? '' : P.taxas.gestao, gestao_base: P.taxas.gestao_base || 'total' };
+  const resumo = { base: plano.resumo, etapas: itens.filter(i => i.tipo === 'E').length, itens: itens.filter(i => i.tipo === 'I').length, custo_planilha: propR2_(precoPlan), sugestao: sugestao, avisos: plano.avisos,
+    sem_bdi: itens.filter(i => i.sem_bdi).map(i => i.descricao), sem_gestao: itens.filter(i => i.sem_gestao).map(i => i.descricao) };
+  if (!q.aplicar) return resumo;
+  // 1º a base (mesmo plano: os códigos das composições são os mesmos), depois o orçamento
+  baseImportar_({ abas: q.abas, atualizar: q.atualizar, aplicar: true, data_preco: q.data_preco, fonte: q.fonte }, ctx);
+  const d = Object.assign({}, sugestao, q.proposta || {});
+  ['bdi_pct', 'gestao_pct'].forEach(k => { if (d[k] === '' || d[k] == null) d[k] = 0; });
+  if (!d.data_base) d.data_base = q.data_preco;
+  const r = propSalvar_({ proposta: d, itens: itens }, ctx);
+  return Object.assign(resumo, { id: r.id, msg: r.msg });
 }
 
 /* ---------- gerar a obra a partir do orçamento aprovado ---------- */

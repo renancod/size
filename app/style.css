@@ -1163,4 +1163,10 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
   .pp-doc{border:0;box-shadow:none;padding:0;max-width:none}
   .pp-doc-tot{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .pp-tab tr{break-inside:avoid}
-}
+}.pp-tx{display:flex;gap:4px;order:9}
+.pp-tx button{border:1px solid #CFE3D6;background:var(--ok-l);color:var(--ok);font:700 .62rem var(--bp-mono);text-transform:uppercase;letter-spacing:.04em;border-radius:5px;padding:2px 6px;cursor:pointer}
+.pp-tx button.off{background:#fff;color:#A7B3C7;border-color:var(--line);text-decoration:line-through}.pp-doc.interna{max-width:1500px;padding:28px 30px}
+.pp-doc.interna .pp-tab{font-size:.74rem}
+.pp-doc.interna .pp-tab td:nth-child(2){min-width:280px}
+.pp-doc.interna .pp-tab th{white-space:nowrap}
+@media print{.pp-doc.interna .pp-tab{font-size:7.5pt}.pp-doc.interna .pp-tab td:nth-child(2){min-width:0}}.view:has(.pp-doc.interna){max-width:1560px}

@@ -777,15 +777,19 @@ function bpImpArquivo() {
     bpImpConferir();
   };
 }
+/* planilha do Excel → abas com as linhas (valores, como o Excel mostra), para mandar ao servidor */
+async function bpLerPlanilha(f) {
+  if (!window.XLSX) await bpScript(BP_XLSX);
+  const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+  return wb.SheetNames.map(n => ({ nome: n, linhas: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }).slice(0, 6000).map(r => r.slice(0, 24)) }))
+    .map(a => { while (a.linhas.length && a.linhas[a.linhas.length - 1].every(x => x === '')) a.linhas.pop(); return a; });
+}
 async function bpImpLer(f) {
   const M = BP.imp;
   $('#bpImp').innerHTML = `<div class="card bp-lendo"><span class="spin"></span><b>Lendo ${esc(f.name)}…</b></div>`;
   try {
-    if (!window.XLSX) await bpScript(BP_XLSX);
-    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+    M.abas = await bpLerPlanilha(f);
     M.nome = f.name;
-    M.abas = wb.SheetNames.map(n => ({ nome: n, linhas: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }).slice(0, 6000).map(r => r.slice(0, 24)) }))
-      .map(a => { while (a.linhas.length && a.linhas[a.linhas.length - 1].every(x => x === '')) a.linhas.pop(); return a; });
     await bpImpConferir();
   } catch (e) { toast(e.message, 1); bpImpArquivo(); }
 }

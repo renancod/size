@@ -158,6 +158,7 @@ const ROTAS = {
   prop_precos: { base: 'Gerir', lock: true, fn: propAtualizarPrecos_ },
   prop_excluir: { base: 'Gerir', lock: true, fn: propExcluir_ },
   prop_gerar_obra: { admin: true, base: 'Gerir', lock: true, fn: propGerarObra_ },
+  prop_importar: { base: 'Gerir', lock: true, fn: propImportar_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },

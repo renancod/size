@@ -25,7 +25,8 @@ const SCHEMA_CENTRAL = {
     'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs', 'motivo', 'obra_id', 'historico_json',
     'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em'],
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
-  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs']
+  // sem_bdi / sem_gestao: item fora do BDI ou da gestão (ex. AVA: mobilização e canteiro sem BDI)
+  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs', 'sem_bdi', 'sem_gestao']
 };
 const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',

@@ -106,6 +106,46 @@ test('acesso: "Ver" consulta; sem acesso não vê; gerar obra só administrador'
   assert.deepEqual(e.obras, []);
 });
 
+/* planilha do RDObras: aba do orçamento (com BDI e gestão no topo e a mobilização sem BDI) + aba Composições */
+const ORC = [
+  ['', '', 'PLANILHA ORÇAMENTÁRIA · MATERIAL x MÃO DE OBRA', '', '', '', '', '', '', '', '', '', '', 'BDI s/ serviços (%)', 0.18],
+  ['', '', 'Residencial Dunas · Xangri-lá/RS · Orçamento nº 7', '', '', '', '', '', '', '', '', '', '', 'Gestão de obra (%)', 0.06],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', 'BDI (R$)', 3000],
+  [],
+  ['ITEM', 'CÓD.', 'DESCRIÇÃO', 'UN', 'QUANT.', 'PREÇO UNIT. (R$)', 'MATERIAL UNIT. (R$)', 'MÃO DE OBRA UNIT. (R$)', 'PREÇO TOTAL (R$)', 'MATERIAL TOTAL (R$)', 'MÃO DE OBRA / SERVIÇO TOTAL (R$)', 'SEM DETALHE (R$)', '% MATERIAL', 'BDI S/ SERVIÇOS (R$)', 'GESTÃO DE OBRA (R$)'],
+  ['1', '', 'PAVIMENTAÇÃO'],
+  ['1.1', '10014', 'GUIA', 'M', 100, 44.18, 28.18, 16, 4417.5, 2817.5, 1600, 0, 0.64, 288, 265.05],
+  ['2', '', 'MOBILIZAÇÃO E CANTEIRO'],
+  ['2.1', '', 'MOBILIZAÇÃO', 'VB', 1, 5000, 0, 5000, 5000, 0, 5000, 0, 0, 0, 300]
+];
+const COMP = [
+  ['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF.', 'CUSTO UNIT. (R$)'],
+  ['1.1', '', '10014', 'GUIA', 'M', 100, '', 44.18],
+  ['1.1', 'Material', 'PAV007', 'Meio-fio de concreto', 'M', 100, '', 27],
+  ['1.1', 'Material', 'APV', 'Argamassa pronta 20 kg', 'SC', 5, '', 23.5],
+  ['1.1', 'Mão de obra / serviço', '1148', 'Assentamento de meio-fio', 'M', 100, '', 16],
+  ['2.1', '', '', 'MOBILIZAÇÃO', 'VB', 1, '', 5000],
+  ['2.1', 'Mão de obra / serviço', 'MOB1', 'MOBILIZAÇÃO DE EQUIPE', 'VB', 1, '', 5000]
+];
+test('importar orçamento do RDObras: etapas, quantidades, BDI e gestão do arquivo, item sem BDI e composições na base', () => {
+  const t = preparar();
+  const abas = [{ nome: 'Material x Mão de obra', linhas: ORC }, { nome: 'Composições', linhas: COMP }];
+  const pre = t.adm('prop_importar', { abas });
+  assert.deepEqual([pre.etapas, pre.itens], [2, 2]);
+  assert.deepEqual(pre.sugestao, { empreendimento: 'Residencial Dunas · Xangri-lá/RS · Orçamento nº 7', bdi_pct: 18, bdi_base: 'servicos', gestao_pct: 6, gestao_base: 'total' });
+  assert.deepEqual(pre.sem_bdi, ['MOBILIZAÇÃO']);
+  assert.equal(t.adm('prop_listar').propostas.length, 0);           // conferir não grava
+  const r = t.adm('prop_importar', { abas, aplicar: true, proposta: { cliente: 'Mar Azul', bdi_pct: 18, bdi_base: 'servicos', gestao_pct: 6, gestao_base: 'total' } });
+  const d = t.adm('prop_detalhe', { id: r.id });
+  assert.deepEqual(d.etapas.map(e => e.descricao), ['Pavimentação', 'Mobilização e canteiro']);
+  const [g, mob] = d.itens.filter(i => i.tipo === 'I');
+  assert.deepEqual([g.comp_cod, g.qtd, g.bdi, g.gestao], ['10014', 100, 288, 265.05]);
+  assert.deepEqual([mob.sem_bdi, mob.bdi, mob.gestao, mob.preco], [true, 0, 300, 5300]);
+  assert.ok(mob.comp_cod.startsWith('CMP-'));                        // serviço sem código ganhou composição na base
+  assert.equal(d.proposta.empreendimento, 'Residencial Dunas · Xangri-lá/RS · Orçamento nº 7');
+  assert.ok(t.adm('base_dados').insumos.some(i => i.codigo === 'MOB1'));
+});
+
 test('gerar obra: frentes = etapas, serviços com material, mão de obra e preço de venda, materiais das composições', () => {
   const t = preparar();
   const id = novo(t);

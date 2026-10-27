@@ -328,7 +328,8 @@ function baseComposicaoDuplicar_(q, ctx) {
 }
 
 /* ---------- importação do RDObras ---------- */
-const RDO_COLS_ = { item: /^item$/, tipo: /^tipo$/, cod: /^(cod|codigo)\b/, desc: /^descri/, un: /^(un|und|unid|unidade)\.?$/, qtd: /^quant/, unit: /^(custo|preco|valor) unit/ };
+const RDO_COLS_ = { item: /^item$/, tipo: /^tipo$/, cod: /^(cod|codigo)\b/, desc: /^descri/, un: /^(un|und|unid|unidade)\.?$/, qtd: /^quant/, unit: /^(custo|preco|valor) unit/,
+  bdi: /^bdi/, gest: /^gestao/, mot: /^mao de obra.*total/, ptot: /^preco total/ };   // as 4 últimas só na aba do orçamento (item sem BDI / sem gestão)
 function rdoCabecalho_(linhas, obrig) {
   for (let r = 0; r < Math.min(linhas.length, 40); r++) {
     const row = (linhas[r] || []).map(x => norm_(x)), c = {};
@@ -347,12 +348,37 @@ function baseLerRdo_(abas) {
     if (!orc) { const h = rdoCabecalho_(L, ['item', 'desc', 'un']); if (h) orc = { L: L, h: h }; }
   });
   if (!comp) throw new Error('Não encontrei a planilha de composições. Ela precisa das colunas Tipo, Código, Descrição, Un, Quant. e Custo unitário (como a aba "Composições" exportada do RDObras).');
-  const etapas = {};
+  const etapas = {}, taxas = {}, semTaxa = {};
+  let titulo = '';
   if (orc) {
+    // acima do cabeçalho: título do orçamento e as taxas (ex: "BDI s/ serviços (%)" 0,18 · "Gestão de obra (%)" 0,06)
+    for (let r = 0; r < orc.h.r; r++) {
+      const row = orc.L[r] || [];
+      row.forEach((x, j) => {
+        const s = norm_(x), v = row[j + 1];
+        // título: a 1ª linha do tipo "AVA Residences · Dorata · Maquiné/RS · Orçamento nº 15" (não o "PLANILHA ORÇAMENTÁRIA" nem as notas)
+        if (!titulo && typeof x === 'string' && /·/.test(x) && x.trim().length < 180 && !/^(planilha|bdi|gest|total|material|mao de obra|sem detalhe|preco)/.test(s)) titulo = x.trim();
+        if (v === '' || v == null || (typeof v !== 'number' && !/^\s*[\d.,]+\s*%?\s*$/.test(String(v)))) return;
+        let n = num_(String(v).replace('%', ''));
+        if (!(/%/.test(String(x)) || n <= 1)) return;          // "BDI (R$)" é valor, não taxa
+        if (n > 0 && n <= 1) n = Math.round(n * 10000) / 100;
+        const base = /serv|mao de obra/.test(s) ? 'servicos' : 'total';
+        if (/^bdi/.test(s) && taxas.bdi == null) { taxas.bdi = n; taxas.bdi_base = base; }
+        if (/^gest/.test(s) && taxas.gestao == null) { taxas.gestao = n; taxas.gestao_base = base; }
+      });
+    }
     const c = orc.h.c;
     for (let r = orc.h.r + 1; r < orc.L.length; r++) {
       const row = orc.L[r] || [], it = String(row[c.item] == null ? '' : row[c.item]).trim(), ds = String(row[c.desc] == null ? '' : row[c.desc]).trim();
       if (/^\d+$/.test(it) && ds && !String(row[c.un] == null ? '' : row[c.un]).trim()) etapas[it] = baseTitulo_(ds);
+      // BDI (ou gestão) zerado num item que tem valor: esse item fica fora da taxa (ex: mobilização e canteiro)
+      if (/^\d+(\.\d+)+$/.test(it)) {
+        const v = k => (c[k] >= 0 && row[c[k]] != null ? row[c[k]] : ''), zero = x => x === 0 || (typeof x === 'string' && x.trim() !== '' && !/^=/.test(x) && num_(x) === 0);
+        const mo = num_(v('mot')), pt = num_(v('ptot')), fx = {};
+        if (c.bdi >= 0 && zero(v('bdi')) && (mo > 0 || (c.mot < 0 && pt > 0))) fx.bdi = true;
+        if (c.gest >= 0 && zero(v('gest')) && pt > 0) fx.gestao = true;
+        if (fx.bdi || fx.gestao) semTaxa[it] = fx;
+      }
     }
   }
   const c = comp.h.c, cel = (row, k) => (c[k] >= 0 && row[c[k]] != null ? row[c[k]] : '');
@@ -374,7 +400,7 @@ function baseLerRdo_(abas) {
   // serviço sem detalhamento: vira um insumo "Serviço" com o preço da composição
   blocos.forEach(b => { if (!b.itens.length) b.itens.push({ tipo: 'Serviço', codigo: b.codigo, descricao: b.descricao, unidade: b.unidade, qtd: b.qtd || 1, preco: b.unit || 0 }); });
   if (!blocos.length) throw new Error('A aba "' + comp.nome + '" não tem nenhuma composição.');
-  return { aba: comp.nome, blocos: blocos, avisos: avisos, etapas: Object.keys(etapas).length };
+  return { aba: comp.nome, blocos: blocos, avisos: avisos, etapas: Object.keys(etapas).length, etapasNomes: etapas, taxas: taxas, semTaxa: semTaxa, titulo: titulo.slice(0, 200) };
 }
 /* o que a importação vai fazer: insumos e composições novos, atualizados, mantidos ou repetidos */
 function basePlanoImport_(P, atualizar) {
@@ -416,7 +442,8 @@ function basePlanoImport_(P, atualizar) {
       if (porCod[cod].assin === assin) { rep = porCod[cod]; break; }
       cod = base + '-' + (++n);
     }
-    if (rep) { rep.repetidas.push(b.item || b.descricao.slice(0, 30)); return; }
+    if (rep) { rep.repetidas.push(b.item || b.descricao.slice(0, 30)); b.cod_final = rep.codigo; return; }
+    b.cod_final = cod;   // composição da base que este item da planilha usa (para montar o orçamento do cliente)
     const calc = b.itens.reduce((s, x, i) => s + its[i].coef * x.preco, 0);
     const o = {
       codigo: cod, item: b.item, descricao: b.descricao, unidade: b.unidade, grupo: b.grupo, itens: its, assin: assin, variante: n > 1,

@@ -23,8 +23,8 @@ function ppCalc(p, linhas) {
     ni++;
     const q = bpPn(x.qtd), u = [bpPn(x.unit_mat), bpPn(x.unit_mo), bpPn(x.unit_eq), bpPn(x.unit_sv)];
     const i = Object.assign({}, x, { codigo: et.codigo + '.' + ni, q, custo_unit: u[0] + u[1] + u[2] + u[3], custo: ppR2(q * (u[0] + u[1] + u[2] + u[3])), v_mat: ppR2(q * u[0]), v_serv: ppR2(q * (u[1] + u[2] + u[3])) });
-    i.bdi = ppR2(base(p.bdi_base, i) * bdi);
-    i.gestao = ppR2(base(p.gestao_base, i) * ges);
+    i.bdi = x.sem_bdi ? 0 : ppR2(base(p.bdi_base, i) * bdi);
+    i.gestao = x.sem_gestao ? 0 : ppR2(base(p.gestao_base, i) * ges);
     i.preco = ppR2(i.custo + i.bdi + i.gestao);
     i.preco_unit = q ? ppR2(i.preco / q) : 0;
     soma(et, i); soma(tot, i);
@@ -44,7 +44,7 @@ async function vPropLista(qs) {
   const L = (await api('prop_listar')).propostas, p = new URLSearchParams(qs || ''), F = PP.fl;
   if (p.has('s')) F.s = p.get('s');
   const conta = s => L.filter(x => (s ? x.status === s : x.status !== 'Revisado')).length;
-  bpTela('props', `<div class="cab"><h2>Orçamentos de clientes</h2><span class="contagem" id="ppN"></span>${bpGere() ? `<a class="btn peq bp-ac" href="#/orc/orcamento/novo">${ic('plus')} Novo orçamento</a>` : ''}</div>
+  bpTela('props', `<div class="cab"><h2>Orçamentos de clientes</h2><span class="contagem" id="ppN"></span>${bpGere() ? `<span class="acoes"><a class="btn sec peq" href="#/orc/orcamento/importar">${ic('upload')} Importar do RDObras</a><a class="btn peq bp-ac" href="#/orc/orcamento/novo">${ic('plus')} Novo orçamento</a></span>` : ''}</div>
     <div class="busca">${ic('search')}<input type="search" id="ppQ" data-busca placeholder="Buscar por número, cliente, empreendimento ou local  ( / )" value="${esc(F.q)}"></div>
     <div class="chips" id="ppChips"><button class="chip ${!F.s ? 'on' : ''}" data-s="">Todos <b>${conta('')}</b></button>
       ${['Rascunho', 'Enviado', 'Aprovado', 'Perdido', 'Cancelado', 'Revisado'].map(s => conta(s) ? `<button class="chip ${F.s === s ? 'on' : ''}" data-s="${s}">${PP_ST[s][0]} <b>${conta(s)}</b></button>` : '').join('')}</div>
@@ -77,7 +77,7 @@ async function vProp(id) {
   const p = d ? d.proposta : { cliente: '', empreendimento: '', status: 'Rascunho', bdi_pct: 0, bdi_base: 'servicos', gestao_pct: 0, gestao_base: 'total', validade_dias: 30, data_base: hoje(), rotulo: 'novo' };
   titulo(id ? p.rotulo + ' · ' + p.empreendimento : 'Novo orçamento');
   const edita = !d || d.editavel;
-  PP.ed = { id: id || '', p: Object.assign({}, p), linhas: d ? d.itens.map(i => i.tipo === 'E' ? { tipo: 'E', descricao: i.descricao } : { tipo: 'I', comp_cod: i.comp_cod, descricao: i.descricao, unidade: i.unidade, qtd: bpV(i.qtd), unit_mat: i.unit_mat, unit_mo: i.unit_mo, unit_eq: i.unit_eq, unit_sv: i.unit_sv, obs: i.obs }) : [{ tipo: 'E', descricao: 'Serviços preliminares' }], sujo: false };
+  PP.ed = { id: id || '', p: Object.assign({}, p), linhas: d ? d.itens.map(i => i.tipo === 'E' ? { tipo: 'E', descricao: i.descricao } : { tipo: 'I', comp_cod: i.comp_cod, descricao: i.descricao, unidade: i.unidade, qtd: bpV(i.qtd), unit_mat: i.unit_mat, unit_mo: i.unit_mo, unit_eq: i.unit_eq, unit_sv: i.unit_sv, obs: i.obs, sem_bdi: !!i.sem_bdi, sem_gestao: !!i.sem_gestao }) : [{ tipo: 'E', descricao: 'Serviços preliminares' }], sujo: false };
   const cab = `<a href="#/orc/orcamentos" class="linkbtn">${ic('back')} Orçamentos de clientes</a>
     <div class="bp-hero pp-hero"><div class="bp-hero-t"><span class="bp-selo">${ic('file')} Orçamento <code>${esc(p.rotulo)}</code></span><h2>${esc(p.empreendimento || 'Novo orçamento')}</h2>
       <p>${p.cliente ? esc(p.cliente) + (p.local ? ' · ' + esc(p.local) : '') + ' · ' : ''}${ppSt(p.status)}${d && d.obra ? ` · <a class="pp-obra" href="#" data-obra="${esc(d.obra.id)}">${ic('building')} obra ${esc(d.obra.nome)}</a>` : ''}</p>
@@ -143,7 +143,7 @@ function ppTabela(itens, etapas, T, interna) {
   etapas.forEach(e => { et[e.codigo] = e; });
   return `<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
     ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${bpM((et[i.codigo] || {}).preco)}</b></td></tr>`
-      : `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descricao)}${interna && i.comp_cod ? ` <small><code>${esc(i.comp_cod)}</code></small>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
+      : `<tr><td>${esc(i.codigo)}</td><td>${esc(i.descricao)}${interna && i.comp_cod ? ` <small><code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
         ${interna ? `<td class="n bp-mono">${bpM(i.custo_unit)}</td><td class="n bp-mono">${bpM(i.v_mat)}</td><td class="n bp-mono">${bpM(i.v_serv)}</td><td class="n bp-mono">${bpM(i.bdi)}</td><td class="n bp-mono">${bpM(i.gestao)}</td>` : ''}
         <td class="n bp-mono">${bpM(i.preco_unit)}</td><td class="n bp-mono"><b>${bpM(i.preco)}</b></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot></table></div>`;
@@ -203,8 +203,9 @@ function ppDesenhar(estrutura) {
       const c = C.linhas[n], mv = `<span class="bp-it-a"><button type="button" class="icbtn" data-a="sobe" ${n ? '' : 'disabled'} title="Subir">${ic('up')}</button><button type="button" class="icbtn" data-a="desce" ${n < E.linhas.length - 1 ? '' : 'disabled'} title="Descer">${ic('down')}</button><button type="button" class="icbtn bp-x" data-a="tira" title="Tirar">${ic('x')}</button></span>`;
       if (l.tipo === 'E') return `<div class="pp-l et" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span><input data-c="descricao" value="${esc(l.descricao)}" placeholder="Nome da etapa (ex: Pavimentação)"><span class="bp-mono pp-sub" data-sub></span>${mv}</div>`;
       const comp = l.comp_cod ? BP.C[l.comp_cod] : null;
+      const tx = `<span class="pp-tx" title="Toque para tirar ou pôr este item no BDI / na gestão"><button type="button" data-tx="sem_bdi" class="${l.sem_bdi ? 'off' : ''}">BDI</button><button type="button" data-tx="sem_gestao" class="${l.sem_gestao ? 'off' : ''}">Gestão</button></span>`;
       return `<div class="pp-l it ${l.comp_cod ? 'base' : 'dir'}" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span>
-        <span class="pp-d">${l.comp_cod ? `<b>${esc(l.descricao)}</b><small><code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}</small>`
+        <span class="pp-d">${tx}${l.comp_cod ? `<b>${esc(l.descricao)}</b><small><code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}</small>`
           : `<input data-c="descricao" value="${esc(l.descricao)}" placeholder="Descrição do item (preço direto)"><span class="pp-dir"><label>Material/un<input data-c="unit_mat" inputmode="decimal" value="${esc(bpV(l.unit_mat))}" placeholder="0,00"></label><label>Mão de obra/un<input data-c="unit_mo" inputmode="decimal" value="${esc(bpV(l.unit_mo))}" placeholder="0,00"></label></span>`}</span>
         <label class="pp-un"><small>Un</small>${l.comp_cod ? `<span>${esc(l.unidade)}</span>` : `<input data-c="unidade" value="${esc(l.unidade)}">`}</label>
         <label class="pp-q"><small>Quant.</small><input data-c="qtd" inputmode="decimal" value="${esc(l.qtd)}" placeholder="0"></label>
@@ -213,6 +214,7 @@ function ppDesenhar(estrutura) {
     $$('#ppLin .pp-l').forEach(el => {
       const n = +el.dataset.n;
       $$('input[data-c]', el).forEach(i => { i.oninput = () => { E.linhas[n][i.dataset.c] = i.value; E.sujo = true; ppDesenhar(false); }; });
+      $$('[data-tx]', el).forEach(b => { b.onclick = () => { const k = b.dataset.tx; E.linhas[n][k] = !E.linhas[n][k]; b.classList.toggle('off', E.linhas[n][k]); E.sujo = true; ppDesenhar(false); }; });
       $$('[data-a]', el).forEach(b => { b.onclick = () => {
         ppColher();
         const a = b.dataset.a, L = E.linhas;
@@ -243,7 +245,7 @@ async function ppSalvar(silencioso) {
   if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
   try {
     const r = await api('prop_salvar', { proposta: Object.assign({}, E.p, { id: E.id || undefined }), itens: E.linhas.map(l => l.tipo === 'E' ? { tipo: 'E', descricao: l.descricao }
-      : { tipo: 'I', comp_cod: l.comp_cod, descricao: l.descricao, unidade: l.unidade, qtd: bpPn(l.qtd), unit_mat: bpPn(l.unit_mat), unit_mo: bpPn(l.unit_mo), unit_eq: bpPn(l.unit_eq), unit_sv: bpPn(l.unit_sv), obs: l.obs || '' }) });
+      : { tipo: 'I', comp_cod: l.comp_cod, descricao: l.descricao, unidade: l.unidade, qtd: bpPn(l.qtd), unit_mat: bpPn(l.unit_mat), unit_mo: bpPn(l.unit_mo), unit_eq: bpPn(l.unit_eq), unit_sv: bpPn(l.unit_sv), obs: l.obs || '', sem_bdi: !!l.sem_bdi, sem_gestao: !!l.sem_gestao }) });
     E.sujo = false;
     if (!silencioso) toast(r.msg);
     if (!E.id) { location.hash = '#/orc/orcamento/' + enc(r.id); return r; }
@@ -311,8 +313,9 @@ async function vPropDoc(id, qs) {
   const d = await api('prop_detalhe', { id }), p = d.proposta, interna = new URLSearchParams(qs || '').get('m') === 'i', T = d.total;
   const val = p.data_base && p.validade_dias ? (() => { const x = new Date(String(p.data_base).slice(0, 10) + 'T12:00'); x.setDate(x.getDate() + p.validade_dias); return iso(x); })() : '';
   titulo((interna ? 'Planilha interna ' : 'Proposta ') + p.rotulo);
-  view(`<div class="pp-doc-bar no-print"><a class="linkbtn" href="#/orc/orcamento/${enc(id)}">${ic('back')} Voltar ao orçamento</a><span class="acoes">
-      <a class="btn sec peq" href="#/orc/orcamento/${enc(id)}/proposta?m=${interna ? 'c' : 'i'}">${interna ? 'Ver a proposta do cliente' : 'Ver a planilha interna'}</a><button class="btn bp-ac" id="ppPrint">${ic('download')} Imprimir / salvar PDF</button></span></div>
+  // a planilha interna tem 11 colunas: sai deitada (A4 paisagem)
+  view(`<style>@page{size:A4 ${interna ? 'landscape' : 'portrait'};margin:10mm}</style><div class="pp-doc-bar no-print"><a class="linkbtn" href="#/orc/orcamento/${enc(id)}">${ic('back')} Voltar ao orçamento</a><span class="acoes">
+      <a class="btn sec peq" href="#/orc/orcamento/${enc(id)}/proposta?m=${interna ? 'c' : 'i'}">${interna ? 'Ver a proposta do cliente' : 'Ver a planilha interna'}</a><button class="btn sec" id="ppXls">${ic('grid2')} Baixar Excel</button><button class="btn bp-ac" id="ppPrint">${ic('download')} Imprimir / salvar PDF</button></span></div>
     ${interna ? '<div class="aviso warn no-print">Uso interno: mostra custos, BDI e gestão. Não envie ao cliente.</div>' : ''}
     <article class="pp-doc ${interna ? 'interna' : ''}">
       <header class="pp-doc-h"><img src="logo.png" alt=""><div><b>${esc(d.empresa)}</b><small>${interna ? 'Planilha orçamentária · uso interno' : 'Proposta comercial'}</small></div><div class="pp-doc-n"><b>${esc(p.rotulo)}</b><small>${fd(p.data_base)}</small></div></header>
@@ -328,9 +331,113 @@ async function vPropDoc(id, qs) {
       ${interna ? '' : `<footer class="pp-doc-ass"><div><span></span>${esc(d.empresa)}</div><div><span></span>De acordo: ${esc(p.cliente)}</div></footer>`}
     </article>`);
   $('#ppPrint').onclick = () => window.print();
+  $('#ppXls').onclick = async () => { const b = $('#ppXls'); b.disabled = true; try { await ppExcel(d); } catch (e) { toast(e.message, 1); } b.disabled = false; };
+}
+/* Excel no formato da planilha do RDObras: aba do orçamento (custo, material, MO, BDI, gestão, preço final) e aba Composições
+ * (cada item com os insumos); dá para importar de volta no sistema */
+async function ppExcel(d) {
+  await bpCarregar();
+  if (!window.XLSX) await bpScript(BP_XLSX);
+  const p = d.proposta, T = d.total, et = {};
+  d.etapas.forEach(e => { et[e.codigo] = e; });
+  const base = b => (b === 'total' ? 'sobre o total' : 's/ serviços');
+  const A = [
+    ['', '', 'PLANILHA ORÇAMENTÁRIA · MATERIAL x MÃO DE OBRA', '', '', '', '', '', '', 'Preço final (R$)', T.preco, '', 'BDI ' + base(p.bdi_base) + ' (%)', p.bdi_pct / 100],
+    ['', '', [p.empreendimento, p.local, p.cliente, p.rotulo].filter(Boolean).join(' · '), '', '', '', '', '', '', 'Custo direto (R$)', T.custo, '', 'Gestão de obra ' + base(p.gestao_base) + ' (%)', p.gestao_pct / 100],
+    ['', '', 'Data-base ' + fd(p.data_base) + ' · ' + d.empresa, '', '', '', '', '', '', 'Material (R$)', T.v_mat, '', 'BDI (R$)', T.bdi],
+    ['', '', '', '', '', '', '', '', '', 'Mão de obra / serviço (R$)', T.v_serv, '', 'Gestão de obra (R$)', T.gestao],
+    [],
+    ['ITEM', 'CÓD.', 'DESCRIÇÃO', 'UN', 'QUANT.', 'PREÇO UNIT. (R$)', 'MATERIAL UNIT. (R$)', 'MÃO DE OBRA UNIT. (R$)', 'PREÇO TOTAL (R$)', 'MATERIAL TOTAL (R$)', 'MÃO DE OBRA / SERVIÇO TOTAL (R$)', 'BDI S/ SERVIÇOS (R$)', 'GESTÃO DE OBRA (R$)', 'PREÇO FINAL TOTAL (R$)', 'PREÇO FINAL UNIT. (R$)']
+  ];
+  let aberta = null;
+  const fecha = () => { if (!aberta) return; const e = et[aberta]; A.push(['', '', 'Subtotal ' + aberta, '', '', '', '', '', e.custo, e.v_mat, e.v_serv, e.bdi, e.gestao, e.preco, '']); aberta = null; };
+  d.itens.forEach(i => {
+    if (i.tipo === 'E') { fecha(); aberta = i.codigo; A.push([i.codigo, '', String(i.descricao).toUpperCase()]); return; }
+    A.push([i.codigo, i.comp_cod || '', i.descricao, i.unidade, i.qtd, ppR2(i.custo_unit), ppR2(i.unit_mat), ppR2(i.unit_mo + i.unit_eq + i.unit_sv), i.custo, i.v_mat, i.v_serv, i.bdi, i.gestao, i.preco, i.preco_unit]);
+  });
+  fecha();
+  A.push([], ['', '', 'VALOR TOTAL', '', '', '', '', '', T.custo, T.v_mat, T.v_serv, T.bdi, T.gestao, T.preco, '']);
+  // composições: cabeçalho do item + insumos (as auxiliares abertas até o insumo; preço da base de hoje)
+  const TIPO = { 'Material': 'Material', 'Mão de obra': 'Mão de obra / serviço', 'Equipamento': 'Equipamento', 'Serviço': 'Serviço' };
+  const B = [['', '', '', 'COMPOSIÇÕES DO ORÇAMENTO ' + p.rotulo + ' · ' + p.empreendimento], [], ['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF. / UN ITEM', 'CUSTO UNIT. (R$)', 'CUSTO TOTAL (R$)']];
+  d.itens.filter(i => i.tipo === 'I').forEach(i => {
+    B.push([i.codigo, '', i.comp_cod || '', i.descricao, i.unidade, i.qtd, '', ppR2(i.custo_unit), i.custo]);
+    const c = i.comp_cod && BP.C[i.comp_cod];
+    if (c) {
+      Object.values(bpExplodir(c.itens, 1, {}, [c.codigo])).forEach(a => B.push([i.codigo, TIPO[a.i.tipo] || 'Material', a.i.codigo, a.i.descricao, a.i.unidade, Math.round(i.qtd * a.coef * 1e4) / 1e4, Math.round(a.coef * 1e6) / 1e6, a.preco, ppR2(i.qtd * a.coef * a.preco)]));
+    } else {
+      if (i.unit_mat) B.push([i.codigo, 'Material', '', i.descricao + ' – material', i.unidade, i.qtd, 1, i.unit_mat, i.v_mat]);
+      if (i.unit_mo + i.unit_eq + i.unit_sv) B.push([i.codigo, 'Mão de obra / serviço', '', i.descricao + ' – mão de obra', i.unidade, i.qtd, 1, i.unit_mo + i.unit_eq + i.unit_sv, i.v_serv]);
+    }
+  });
+  const folha = (L, larg, moeda) => {
+    const ws = XLSX.utils.aoa_to_sheet(L);
+    ws['!cols'] = larg.map(w => ({ wch: w }));
+    Object.keys(ws).forEach(k => { if (k[0] === '!') return; const col = XLSX.utils.decode_cell(k).c, cel = ws[k]; if (cel.t === 'n' && moeda.includes(col)) cel.z = '#,##0.00'; if (cel.t === 'n' && (col === 13 && /\(%\)/.test(String((L[XLSX.utils.decode_cell(k).r] || [])[12] || '')))) cel.z = '0.00%'; });
+    return ws;
+  };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, folha(A, [7, 10, 62, 6, 12, 14, 14, 14, 16, 16, 18, 16, 16, 18, 14], [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]), 'Material x Mão de obra');
+  XLSX.utils.book_append_sheet(wb, folha(B, [7, 20, 14, 62, 6, 14, 12, 14, 16], [7, 8]), 'Composições');
+  XLSX.writeFile(wb, (p.rotulo + ' - ' + p.empreendimento).replace(/[\\/:*?"<>|]/g, '-').slice(0, 100) + '.xlsx');
+}
+
+/* ---------- importar um orçamento do RDObras (vira orçamento em rascunho + composições na base) ---------- */
+async function vPropImportar() {
+  titulo('Importar orçamento do RDObras');
+  if (!bpGere()) return bpSem('Gerir');
+  await bpCarregar();
+  const M = PP.imp = { abas: null, nome: '', pre: null };
+  bpTela('props', `<a href="#/orc/orcamentos" class="linkbtn">${ic('back')} Orçamentos de clientes</a>
+    <div class="bp-hero bp-hero-imp"><div class="bp-hero-t"><span class="bp-selo">${ic('upload')} Importação</span><h2>Orçamento do RDObras</h2>
+      <p>Use a planilha com a <b>aba do orçamento</b> (Material x Mão de obra) e a <b>aba Composições</b>. As composições entram (ou são atualizadas) na base de preços e o orçamento é criado em rascunho, com as etapas, as quantidades, o BDI, a gestão e os itens sem BDI da planilha. Nada é gravado antes de você conferir.</p></div>
+      <ol class="bp-passos" id="bpPassos"><li class="on"><b>1</b>Arquivo</li><li><b>2</b>Conferir</li><li><b>3</b>Pronto</li></ol></div>
+    <div id="ppImp"></div>`);
+  const arquivo = () => {
+    bpPasso(0);
+    $('#ppImp').innerHTML = `<label class="bp-drop" id="ppDrop"><input type="file" id="ppArq" accept=".xlsx,.xlsm,.xls" hidden>${ic('upload')}<b>Arraste a planilha do orçamento aqui ou toque para escolher</b><small>.xlsx exportado do RDObras (ou baixado deste sistema)</small></label>`;
+    const dr = $('#ppDrop');
+    ['dragenter', 'dragover'].forEach(ev => dr.addEventListener(ev, e => { e.preventDefault(); dr.classList.add('sobre'); }));
+    ['dragleave', 'drop'].forEach(ev => dr.addEventListener(ev, e => { e.preventDefault(); dr.classList.remove('sobre'); }));
+    dr.addEventListener('drop', e => { if (e.dataTransfer.files[0]) ler(e.dataTransfer.files[0]); });
+    $('#ppArq').onchange = e => { if (e.target.files[0]) ler(e.target.files[0]); };
+  };
+  const ler = async f => {
+    $('#ppImp').innerHTML = `<div class="card bp-lendo"><span class="spin"></span><b>Lendo ${esc(f.name)}…</b></div>`;
+    try { M.abas = await bpLerPlanilha(f); M.nome = f.name; M.pre = await api('prop_importar', { abas: M.abas }); conferir(); }
+    catch (e) { toast(e.message, 1); arquivo(); }
+  };
+  const conferir = () => {
+    bpPasso(1);
+    const R = M.pre, S = R.sugestao, B = R.base, sel = (n, v) => `<select name="${n}">${PP_BASES.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+    const tile = (n, t, s, cl) => `<div class="bp-tile ${cl || ''} ${n ? '' : 'zero'}"><b>${n}</b><span>${t}</span>${s ? `<small>${s}</small>` : ''}</div>`;
+    $('#ppImp').innerHTML = `<form id="ppIf" autocomplete="off"><div class="card"><div class="bp-h"><h3>${ic('file')} ${esc(M.nome)}</h3><button type="button" class="linkbtn" id="ppOutro">Escolher outro arquivo</button></div>
+        <div class="bp-tiles">${tile(R.etapas, 'etapas')}${tile(R.itens, 'itens')}${tile(bpM(R.custo_planilha), 'custo na planilha', 'sem BDI e gestão')}${tile(B.comp_novas, 'composições novas na base', '', 'ok')}${tile(B.comp_atualizar, 'composições a atualizar', '', 'atu')}${tile(B.insumos_novos, 'insumos novos', '', 'ok')}</div>
+        ${R.sem_bdi.length || R.sem_gestao.length ? `<div class="aviso info" style="margin-top:12px">${R.sem_bdi.length ? `<b>Sem BDI na planilha:</b> ${esc(R.sem_bdi.join(' · '))}. ` : ''}${R.sem_gestao.length ? `<b>Sem gestão:</b> ${esc(R.sem_gestao.join(' · '))}.` : ''}</div>` : ''}
+        ${R.avisos.length ? `<details class="bp-avisos"><summary>${ic('alert')} ${plural(R.avisos.length, 'observação', 'observações')} da base</summary><ul>${R.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}</div>
+      <div class="card"><h3>${ic('user')} Orçamento</h3>
+        <div class="bp-g3"><label class="bp-span2">Cliente<input name="cliente" required placeholder="ex: AVA Residences"></label><label>Local<input name="local" placeholder="cidade/UF"></label></div>
+        <label>Empreendimento / obra<input name="empreendimento" required value="${esc(S.empreendimento || M.nome.replace(/\.\w+$/, ''))}"></label>
+        <div class="pp-taxas"><label>BDI (%)<input name="bdi_pct" inputmode="decimal" value="${esc(bpV(S.bdi_pct))}"></label><label>sobre ${sel('bdi_base', S.bdi_base)}</label><label>Gestão (%)<input name="gestao_pct" inputmode="decimal" value="${esc(bpV(S.gestao_pct))}"></label><label>sobre ${sel('gestao_base', S.gestao_base)}</label></div>
+        <div class="g2"><label>Data-base dos preços<input type="date" name="data" value="${hoje()}"></label><label class="ck" style="align-self:end"><input type="checkbox" name="atu" checked> Atualizar na base as composições e os insumos que já existem (mesmo código)</label></div></div>
+      <div class="barra-acoes"><div class="acoes"><button type="button" class="btn sec" id="ppVolta">${ic('back')} Voltar</button><button class="btn bp-ac" id="ppGo">${ic('check')} Criar orçamento com ${plural(R.itens, 'item', 'itens')}</button></div></div></form>`;
+    $('#ppOutro').onclick = $('#ppVolta').onclick = arquivo;
+    $('#ppIf').onsubmit = async e => {
+      e.preventDefault();
+      const f = e.target, b = $('#ppGo'); b.disabled = true; b.textContent = 'Importando…';
+      try {
+        const r = await api('prop_importar', { abas: M.abas, aplicar: true, atualizar: f.atu.checked, data_preco: f.data.value, fonte: ('RDObras · ' + M.nome).slice(0, 80),
+          proposta: { cliente: f.cliente.value, empreendimento: f.empreendimento.value, local: f.local.value, bdi_pct: bpPn(f.bdi_pct.value), bdi_base: f.bdi_base.value, gestao_pct: bpPn(f.gestao_pct.value), gestao_base: f.gestao_base.value } });
+        toast(r.msg);
+        await bpCarregar(true);
+        location.hash = '#/orc/orcamento/' + enc(r.id);
+      } catch (x) { toast(x.message, 1); b.disabled = false; b.textContent = 'Tentar de novo'; }
+    };
+  };
+  arquivo();
 }
 
 ROTAS.push(
-  [/^#\/orc\/orcamentos(?:\?(.*))?$/, vPropLista], [/^#\/orc\/orcamento\/novo$/, () => vProp()],
+  [/^#\/orc\/orcamentos(?:\?(.*))?$/, vPropLista], [/^#\/orc\/orcamento\/novo$/, () => vProp()], [/^#\/orc\/orcamento\/importar$/, vPropImportar],
   [/^#\/orc\/orcamento\/([^/?]+)\/proposta(?:\?(.*))?$/, vPropDoc], [/^#\/orc\/orcamento\/([^/?]+)$/, vProp]
 );
