@@ -110,6 +110,27 @@ test('foto do insumo: vai para a pasta da base no Drive, aberta pelo link; troca
   assert.throws(() => t.usuario('vendo', 'Ver')('base_insumo_foto', { codigo: 'PAV007', remover: true }), /só pode consultar/);
 });
 
+test('contrato de empreiteiro escolhe serviços da base de preços (referência sem material) e guarda de qual composição veio', () => {
+  const t = preparar();
+  base(t);
+  const obra = t.adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const o = (acao, d = {}) => t.adm(acao, { obra, ...d });
+  // quem gere contratos na obra enxerga a base, mesmo sem acesso ao módulo Orçamentos
+  t.adm('admin_usuario_salvar', { usuario: { nome: 'ctr', login: 'ctr', ativo: true }, senha: 'Senha-Forte-26', acessos: [{ obra_id: obra, perfil: 'Personalizado', permissoes: ['contrato_gerir', 'contrato_ver'] }] });
+  const tk = t.G.chamar({ acao: 'login', login: 'ctr', senha: 'Senha-Forte-26' }).dados.token;
+  const ctr = (acao, d = {}) => { const r = t.G.chamar({ acao, token: tk, obra, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
+  const L = ctr('base_para_contrato').composicoes;
+  const g = L.find(c => c.codigo === '10014'), m = L.find(c => c.codigo === 'CMP-0001');
+  assert.deepEqual([g.unidade, g.mo, g.sem_material, g.total], ['m', 16, 16, 44.18]);
+  assert.equal(m.sem_material, 26 + 3.6);               // mão de obra + equipamento
+  assert.throws(() => ctr('base_dados'), /não tem acesso/);
+  const emp = o('exec_equipe_salvar', { nome: 'Equipe Meio-fio', empresa: 'Pavi Sul' }).codigo;
+  const { id } = o('contrato_salvar', { empreiteiro: emp, objeto: 'Mão de obra de meio-fio', vigencia_ini: '2026-11-01', contratante_nome: 'SPE Teste',
+    itens: [{ grupo: 'Pavimentação', servico: g.descricao, unidade: 'm', qtd: 500, unitario: 16, comp_cod: '10014' }, { servico: 'Limpeza final', unidade: 'vb', qtd: 1, unitario: 800 }] });
+  const d = o('contrato_detalhe', { id });
+  assert.deepEqual(d.itens.map(i => i.comp_cod), ['10014', '']);
+});
+
 test('reajuste e preços colados: só muda o que mudou e avisa os códigos que não existem', () => {
   const t = preparar();
   base(t);

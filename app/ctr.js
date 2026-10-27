@@ -76,6 +76,8 @@ async function ctForm(id) {
   if (!L.empreiteiros.length) return view('<div class="aviso info">Cadastre o empreiteiro em <a href="#/med/empreiteiros">Empreiteiros</a> primeiro.</div>');
   let cat = [];
   try { cat = (await carregarExec()).catalogo || []; } catch (e) { /* sem acesso à execução: segue sem sugestões de serviço */ }
+  CT.base = [];
+  try { CT.base = (await api('base_para_contrato')).composicoes || []; } catch (e) { /* base de preços ainda vazia: só o catálogo */ }
   const m = d || Object.assign({}, L.modelo, { vigencia_ini: hoje() });
   const empSel = d ? d.empreiteiro : (new URLSearchParams(location.hash.split('?')[1] || '').get('emp') || '');
   view(`<a href="${id ? '#/ctr/' + esc(id) : '#/ctr'}" class="linkbtn">${ic('back')} ${id ? 'Contrato' : 'Contratos'}</a>
@@ -95,7 +97,7 @@ async function ctForm(id) {
       ${CT_TXT('prazo_txt', 'Prazo estimado de execução', m.prazo_txt, { ph: 'ex: 4 meses, possivelmente de setembro a dezembro de 2026', dica: '(texto do contrato)' })}</section>
     <section class="card rel-sec"><div class="rel-h"><b>3</b><div><h3>Planilha de serviços</h3><small>Etapa/grupo, serviço, unidade, quantidade e preço unitário</small></div></div>
       <div id="ctLin"></div>
-      <div class="ct-bt"><button type="button" class="btn sec" id="ctAdd">${ic('plus')} Serviço</button><button type="button" class="btn sec" id="ctOrc">${ic('building')} Puxar do orçamento da obra</button><button type="button" class="btn sec" id="ctColar">${ic('file')} Colar do Excel</button></div>
+      <div class="ct-bt"><button type="button" class="btn sec" id="ctAdd">${ic('plus')} Serviço</button><button type="button" class="btn sec" id="ctBase">${ic('layers')} Puxar da base de preços</button><button type="button" class="btn sec" id="ctOrc">${ic('building')} Puxar do orçamento da obra</button><button type="button" class="btn sec" id="ctColar">${ic('file')} Colar do Excel</button></div>
       <div class="ct-soma" id="ctSoma"></div>
       <div class="g2">${CT_TXT('valor_global', 'Valor global do contrato (R$)', ctV(m.valor_global), { dica: '(preço global; se vazio vale a soma da planilha)', ph: 'ex: 590.738,48' })}<div id="ctDif" class="ct-dif"></div></div></section>
     <section class="card rel-sec"><div class="rel-h"><b>4</b><div><h3>Pagamento e medição</h3></div></div>
@@ -121,6 +123,7 @@ async function ctForm(id) {
   $('#ctAdd').onclick = () => ctLinha(F, cat).querySelector('[name=s]').focus();
   $('#ctColar').onclick = () => ctColar(F, cat);
   $('#ctOrc').onclick = () => ctDoOrcamento(F, cat);
+  $('#ctBase').onclick = () => ctDaBase(F, cat);
   const orcPre = new URLSearchParams(location.hash.split('?')[1] || '').get('orc');
   if (orcPre && !d) ctDoOrcamento(F, cat, orcPre);
   F.valor_global.oninput = () => ctSoma(F);
@@ -144,18 +147,18 @@ function ctColher(F) {
   ['empreiteiro', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'objeto', 'escopo', 'data_assinatura', 'local_assinatura', 'vigencia_ini', 'vigencia_fim', 'prazo_txt',
     'pag_forma', 'pag_periodicidade', 'pag_obs', 'permuta_desc', 'retencoes', 'reajuste', 'garantia', 'foro', 'clausulas_extra', 'obs'].forEach(k => { o[k] = F.elements[k].value; });
   ['valor_global', 'permuta_valor', 'fat_nf_pct', 'fat_recibo_pct', 'multa1_pct', 'multa2_pct', 'multa_diaria', 'aviso_dias'].forEach(k => { const v = F.elements[k].value.trim(); o[k] = v === '' ? '' : ctPn(v); });
-  o.itens = $$('.ct-li', F).map(r => ({ id: r.dataset.id || undefined, grupo: $('[name=g]', r).value, codigo: $('[name=c]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: ctPn($('[name=q]', r).value), unitario: ctPn($('[name=p]', r).value), orc_item: r.dataset.orc || '' }))
+  o.itens = $$('.ct-li', F).map(r => ({ id: r.dataset.id || undefined, grupo: $('[name=g]', r).value, codigo: $('[name=c]', r).value, servico: $('[name=s]', r).value, servico_cod: r.dataset.cod || '', unidade: $('[name=u]', r).value, qtd: ctPn($('[name=q]', r).value), unitario: ctPn($('[name=p]', r).value), orc_item: r.dataset.orc || '', comp_cod: r.dataset.comp || '' }))
     .filter(x => x.servico || x.qtd || x.id);
   return o;
 }
 /* uma linha da planilha */
 function ctLinha(F, cat, i) {
   const r = document.createElement('div');
-  r.className = 'ct-li'; r.dataset.id = i && i.id ? i.id : ''; r.dataset.cod = (i && i.servico_cod) || ''; r.dataset.orc = (i && i.orc_item) || '';
+  r.className = 'ct-li'; r.dataset.id = i && i.id ? i.id : ''; r.dataset.cod = (i && i.servico_cod) || ''; r.dataset.orc = (i && i.orc_item) || ''; r.dataset.comp = (i && i.comp_cod) || '';
   const ant = $$('.ct-li', F).pop();
   r.innerHTML = `<label class="g">Etapa / grupo<input name="g" list="dl-ctg" value="${esc(i ? i.grupo : ant ? $('[name=g]', ant).value : '')}" placeholder="ex: 1.1 Rede de Água"></label>
     <label class="c">Item<input name="c" value="${esc(i ? i.codigo : '')}" placeholder="1.1.2"></label>
-    <label class="s">Serviço<input name="s" list="dl-ctsrv" value="${esc(i ? i.servico : '')}" placeholder="Digite ou busque no catálogo"></label>
+    <label class="s ct-sv">Serviço<input name="s" value="${esc(i ? i.servico : '')}" placeholder="Busque na base de preços ou digite um serviço novo"><div class="bp-res ct-res" hidden></div></label>
     <label class="u">Unid.<input name="u" value="${esc(i ? i.unidade : '')}" placeholder="M/L"></label>
     <label class="q">Quantidade<input name="q" inputmode="decimal" value="${i ? esc(String(i.qtd).replace('.', ',')) : ''}"></label>
     <label class="p">Unitário (R$)<input name="p" inputmode="decimal" value="${i ? esc(String(i.unitario).replace('.', ',')) : ''}"></label>
@@ -166,12 +169,102 @@ function ctLinha(F, cat, i) {
   if (solta) solta.onclick = () => { r.dataset.orc = ''; solta.parentNode.remove(); };
   const s = $('[name=s]', r), u = $('[name=u]', r);
   s.onchange = () => { const c = cat.find(x => norm(x.servico) === norm(s.value)); r.dataset.cod = c ? c.codigo : ''; if (c && !u.value) u.value = c.unidade; };
+  ctEscolha(F, r, cat);
+  if (r.dataset.comp) ctRefBase(r, CT.base.find(x => x.codigo === r.dataset.comp) || { codigo: r.dataset.comp });
   const calc = () => { $('.t b', r).textContent = ctM(ctPn($('[name=q]', r).value) * ctPn($('[name=p]', r).value)); ctSoma(F); };
   $('[name=q]', r).oninput = calc; $('[name=p]', r).oninput = calc; calc();
   $('[name=g]', r).onchange = () => ctGrupos(F);
   $('.rm', r).onclick = () => { r.remove(); ctSoma(F); };
   ctGrupos(F);
   return r;
+}
+/* serviço da linha: composição da base de preços, serviço do catálogo ou serviço novo (o que foi digitado) */
+function ctEscolha(F, r, cat) {
+  const s = $('[name=s]', r), u = $('[name=u]', r), res = $('.ct-res', r);
+  let sel = 0, ops = [], tF;
+  const desenhar = () => {
+    const t = norm(s.value).split(/\s+/).filter(Boolean), ok = x => t.every(w => x.includes(w));
+    const base = (t.length ? CT.base.filter(c => ok(norm(c.codigo + ' ' + c.descricao + ' ' + c.grupo))) : CT.base).slice(0, 12);
+    const catl = t.length ? cat.filter(c => ok(norm(c.servico + ' ' + c.grupo))).slice(0, 6) : [];
+    ops = [...base.map(o => ({ t: 'b', o })), ...catl.map(o => ({ t: 'c', o })), ...(s.value.trim() ? [{ t: 'n' }] : [])];
+    if (!ops.length) { res.hidden = true; return; }
+    sel = 0;
+    let h = '', ult = '';
+    ops.forEach((x, n) => {
+      const sec = { b: 'Composições da base de preços', c: 'Catálogo de serviços', n: 'Ou' }[x.t];
+      if (sec !== ult) { h += `<div class="ct-res-t">${sec}</div>`; ult = sec; }
+      h += x.t === 'b' ? `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}">${ic('layers')}<span><b>${esc(x.o.descricao)}</b><small><code>${esc(x.o.codigo)}</code> · ${esc(x.o.unidade)}${x.o.grupo ? ' · ' + esc(x.o.grupo) : ''}</small></span><span class="bp-mono" title="custo de referência sem material (mão de obra + equipamento + serviço)">${ctM(x.o.sem_material)}</span></button>`
+        : x.t === 'c' ? `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}">${ic('list')}<span><b>${esc(x.o.servico)}</b><small>${esc(x.o.grupo || '')}${x.o.unidade ? ' · ' + esc(x.o.unidade) : ''}</small></span></button>`
+        : `<button type="button" class="bp-op bp-op-novo ${n === sel ? 'on' : ''}" data-n="${n}">${ic('plus')}<span><b>Serviço novo: “${esc(s.value.trim())}”</b><small>fica só neste contrato, sem ligação com a base de preços</small></span></button>`;
+    });
+    res.innerHTML = h;
+    res.hidden = false;
+    $$('.bp-op', res).forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = e => { e.preventDefault(); escolher(+b.dataset.n); }; });
+  };
+  const escolher = n => {
+    const x = ops[n];
+    res.hidden = true;
+    if (!x) return;
+    if (x.t === 'b') {
+      const c = x.o, p = $('[name=p]', r), g = $('[name=g]', r);
+      s.value = c.descricao; u.value = c.unidade;
+      if (!ctPn(p.value)) p.value = String(c.sem_material).replace('.', ',');
+      if (!g.value.trim() && c.grupo) g.value = c.grupo;
+      r.dataset.comp = c.codigo; r.dataset.cod = '';
+      ctRefBase(r, c);
+      p.dispatchEvent(new Event('input')); ctGrupos(F);
+    } else if (x.t === 'c') {
+      s.value = x.o.servico; if (!u.value) u.value = x.o.unidade;
+      r.dataset.cod = x.o.codigo; ctSoltaBase(r);
+    } else { r.dataset.cod = ''; ctSoltaBase(r); }
+    $('[name=q]', r).focus();
+  };
+  s.addEventListener('input', () => {
+    clearTimeout(tF);
+    // mudou o texto de um serviço que veio da base: deixa de ser aquela composição
+    if (r.dataset.comp && norm(s.value) !== norm(r.dataset.compDesc || '')) ctSoltaBase(r);
+    desenhar();
+  });
+  s.addEventListener('focus', () => { clearTimeout(tF); desenhar(); });
+  s.addEventListener('blur', () => { tF = setTimeout(() => { res.hidden = true; }, 150); });
+  s.addEventListener('keydown', e => {
+    if (res.hidden) return;
+    const bs = $$('.bp-op', res);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length; bs.forEach((b, i) => b.classList.toggle('on', i === sel)); bs[sel].scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'Enter') { e.preventDefault(); escolher(sel); }
+    else if (e.key === 'Escape') res.hidden = true;
+  });
+}
+function ctRefBase(r, c) {
+  r.dataset.compDesc = c.descricao || $('[name=s]', r).value;
+  let el = $('.ct-bref', r);
+  if (!el) { el = document.createElement('small'); el.className = 'ct-bref'; r.appendChild(el); }
+  el.innerHTML = `${ic('layers')} Da base de preços: <code>${esc(c.codigo)}</code>${c.descricao ? ` · referência sem material ${ctM(c.sem_material)}/${esc(c.unidade)}` : ' · não está mais ativa na base'} <button type="button" class="linkbtn">desvincular</button>`;
+  $('button', el).onclick = () => ctSoltaBase(r);
+}
+function ctSoltaBase(r) { r.dataset.comp = ''; r.dataset.compDesc = ''; const el = $('.ct-bref', r); if (el) el.remove(); }
+/* vários serviços de uma vez da base de preços (a quantidade é de cada contrato; o preço vem com a referência sem material) */
+function ctDaBase(F, cat) {
+  if (!CT.base.length) return toast('A base de preços ainda não tem composições. Cadastre ou importe em Orçamentos.', 1);
+  const ja = new Set($$('.ct-li', F).map(r => r.dataset.comp).filter(Boolean)), grupos = [...new Set(CT.base.map(c => c.grupo || 'Sem grupo'))];
+  modal(`${ic('layers')} Puxar da base de preços`, `<small>Marque os serviços. O preço vem com o <b>custo de referência sem material</b> (mão de obra + equipamento + serviço): ajuste ao valor negociado e informe a quantidade.</small>
+    <div class="busca" style="margin-top:10px">${ic('search')}<input type="search" id="ctBq" placeholder="Buscar por código ou descrição"></div>
+    <div id="ctBl">${grupos.map(g => `<details class="or-ctf" open data-g="${esc(g)}"><summary><b>${esc(g)}</b></summary>${CT.base.filter(c => (c.grupo || 'Sem grupo') === g).map(c => `<label class="ck or-ctl ${ja.has(c.codigo) ? 'or-ja' : ''}" data-q="${esc(norm(c.codigo + ' ' + c.descricao + ' ' + (c.grupo || '')))}"><input type="checkbox" name="bc" value="${esc(c.codigo)}" ${ja.has(c.codigo) ? 'disabled' : ''}>
+      <span><b>${esc(c.descricao)}</b><small><code>${esc(c.codigo)}</code> · ${esc(c.unidade)} · ${ja.has(c.codigo) ? 'já está nesta planilha' : 'referência sem material ' + ctM(c.sem_material) + '/' + esc(c.unidade)}</small></span></label>`).join('')}</details>`).join('')}</div>`, {
+    larga: true, ok: 'Incluir na planilha',
+    onOk: f => {
+      const cods = $$('[name=bc]:checked', f).map(x => x.value);
+      if (!cods.length) throw new Error('Marque pelo menos um serviço.');
+      $$('.ct-li', F).filter(r => !$('[name=s]', r).value && !$('[name=q]', r).value).forEach(r => r.remove());
+      CT.base.filter(c => cods.includes(c.codigo)).forEach(c => ctLinha(F, cat, { id: '', grupo: c.grupo || '', codigo: '', servico: c.descricao, servico_cod: '', unidade: c.unidade, qtd: '', unitario: c.sem_material, comp_cod: c.codigo }));
+      ctSoma(F); toast(plural(cods.length, 'serviço incluído', 'serviços incluídos') + ' da base. Informe as quantidades e confira os preços.');
+    }
+  });
+  $('#ctBq').oninput = e => {
+    const t = norm(e.target.value).split(/\s+/).filter(Boolean);
+    $$('#ctBl [data-q]').forEach(l => { l.hidden = !t.every(w => l.dataset.q.includes(w)); });
+    $$('#ctBl details').forEach(d => { d.hidden = !$$('[data-q]', d).some(l => !l.hidden); });
+  };
 }
 function ctGrupos(F) { const dl = $('#dl-ctg'); if (dl) dl.innerHTML = [...new Set($$('.ct-li [name=g]', F).map(x => x.value.trim()).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join(''); }
 function ctSoma(F) {

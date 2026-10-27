@@ -56,7 +56,8 @@ const SCHEMA_OBRA = {
     'valor_global', 'permuta_valor', 'permuta_desc', 'pag_forma', 'pag_periodicidade', 'pag_obs', 'fat_nf_pct', 'fat_recibo_pct', 'retencoes', 'reajuste',
     'multa1_pct', 'multa2_pct', 'multa_diaria', 'garantia', 'aviso_dias', 'contratante_nome', 'contratante_doc', 'contratante_end', 'administradora', 'foro',
     'clausulas_extra', 'obs', 'pdf_id', 'pdf_nome', 'minuta_id', 'minuta_em', 'pasta_id', 'historico_json', 'criado_em', 'criado_por', 'atualizado_em'],
-  ContratoItens: ['id', 'contrato', 'ordem', 'grupo', 'codigo', 'servico_cod', 'servico', 'unidade', 'qtd', 'unitario', 'ativo', 'orc_item'],
+  // comp_cod: composição da base de preços (planilha central) de onde o serviço saiu
+  ContratoItens: ['id', 'contrato', 'ordem', 'grupo', 'codigo', 'servico_cod', 'servico', 'unidade', 'qtd', 'unitario', 'ativo', 'orc_item', 'comp_cod'],
   // responsabilidades técnicas do contrato (ART, RRT, TRT…): condição para liberar o contrato para assinatura
   ContratoRT: ['id', 'contrato', 'tipo', 'descricao', 'numero', 'profissional', 'registro', 'emissao', 'arquivo_id', 'arquivo_nome', 'criado_por', 'criado_em', 'anexado_por', 'anexado_em'],
   ContratoAditivos: ['id', 'contrato', 'numero', 'data', 'tipo', 'descricao', 'valor', 'nova_vigencia', 'criado_por', 'criado_em'],

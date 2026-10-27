@@ -1046,3 +1046,12 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .bp-foto-vazia{display:grid;justify-items:center;gap:4px;text-align:center;padding:16px;color:var(--mute)}
 .bp-foto-vazia .ic{width:34px;height:34px;color:var(--bp-ac)}.bp-foto-vazia b{color:var(--bp-ink)}.bp-foto-vazia small{font-size:.74rem}
 @media (max-width:759px){.bp-fotolado{order:-1}.bp-fotobox{max-width:220px;justify-self:center;width:100%}}
+/* contrato: serviço escolhido na base de preços, no catálogo ou novo */
+.ct-sv{position:relative}
+.ct-res{display:block;top:100%;margin-top:4px;min-width:min(560px,88vw);font-weight:400;color:var(--txt)}
+.ct-res .bp-op{display:flex;width:100%}.ct-res .bp-op>span:nth-child(2){flex:1;min-width:0;display:grid}.ct-res .bp-op .bp-mono{flex:none}
+.ct-res-t{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);padding:8px 10px 2px}
+.ct-res .bp-op>.ic{color:var(--bp-ac);width:18px;height:18px}
+.ct-li .ct-bref{grid-column:1/-1;margin-top:-2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#8A5A00}
+.ct-li .ct-bref .ic{width:15px;height:15px;color:var(--bp-ac)}
+.ct-li .ct-bref code{font-family:var(--bp-mono);font-size:.8rem}

@@ -128,6 +128,7 @@ const ROTAS = {
   contrato_anexo_ver: { obra: true, perm: ['contrato_ver', 'contrato_gerir'], fn: ctrAnexoVer_ },
   orc_dados: { obra: true, perm: ['orc_ver', 'orc_gerir'], fn: orcDados_ },
   orc_para_contrato: { obra: true, perm: 'contrato_gerir', fn: orcParaContrato_ },
+  base_para_contrato: { obra: true, perm: 'contrato_gerir', fn: baseParaContrato_ },
   obra_relatorio: { obra: true, perm: ['orc_ver', 'orc_gerir', 'exec_planejar'], fn: obraRelatorio_ },
   obra_relatorio_email: { obra: true, perm: ['orc_ver', 'orc_gerir', 'exec_planejar'], fn: execRelatorioEmail_ },
   orc_frente_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcFrenteSalvar_ },

@@ -139,6 +139,20 @@ function baseInsumoHistorico_(q, ctx) {
   };
 }
 
+/* serviços da base para a planilha do contrato de empreiteiro (quem gere contratos na obra, mesmo sem acesso ao módulo Orçamentos):
+ * só as composições ativas, com o custo de referência sem material (mão de obra + equipamento + serviço de terceiro) */
+function baseParaContrato_(q, ctx) {
+  const ix = baseIndice_(), memo = {};
+  return {
+    composicoes: Object.keys(ix.C).filter(k => baseAtivo_(ix.C[k])).map(k => {
+      const c = ix.C[k];
+      let r;
+      try { r = baseCusto_(ix, k, memo); } catch (e) { r = { mat: 0, mo: 0, eq: 0, sv: 0, total: 0 }; }
+      return { codigo: k, descricao: c.descricao, unidade: c.unidade, grupo: c.grupo, mo: baseR2_(r.mo), sem_material: baseR2_(r.mo + r.eq + r.sv), total: baseR2_(r.total) };
+    }).sort((a, b) => String(a.grupo).localeCompare(String(b.grupo)) || String(a.descricao).localeCompare(String(b.descricao)))
+  };
+}
+
 /* ---------- insumos ---------- */
 function baseInsumoSalvar_(q, ctx) {
   const T = central_('Insumos'), d = q.insumo || {};

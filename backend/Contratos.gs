@@ -61,7 +61,7 @@ function ctrLinhas_(itens, met) {
   return itens.map(i => {
     const m = met[i.id] || { executado: 0, programado: 0, medido: 0, pago: 0 }, q = num_(i.qtd), u = num_(i.unitario);
     return {
-      id: i.id, ordem: num_(i.ordem), grupo: i.grupo || '', codigo: i.codigo || '', servico_cod: i.servico_cod || '', servico: i.servico, unidade: i.unidade, qtd: q, unitario: u, total: r2_(q * u), orc_item: String(i.orc_item || ''),
+      id: i.id, ordem: num_(i.ordem), grupo: i.grupo || '', codigo: i.codigo || '', servico_cod: i.servico_cod || '', servico: i.servico, unidade: i.unidade, qtd: q, unitario: u, total: r2_(q * u), orc_item: String(i.orc_item || ''), comp_cod: String(i.comp_cod || ''),
       programado: r2_(m.programado), executado: r2_(m.executado), medido: r2_(m.medido), pago: r2_(m.pago), saldo: r2_(q - m.medido), a_programar: r2_(q - m.programado),
       v_exec: r2_(m.executado * u), v_med: r2_(m.medido * u), v_pago: r2_(m.pago * u), v_saldo: r2_((q - m.medido) * u),
       pct_exec: q ? r2_(m.executado / q * 100) : 0, pct_med: q ? r2_(m.medido / q * 100) : 0, acima: m.executado > q + 0.0001
@@ -274,8 +274,9 @@ function ctrSalvar_(q, ctx) {
       const qtd = num_(x.qtd), unit = ctrNum_(x.unitario, 'Preço unitário de ' + servico);
       if (!(qtd > 0)) throw new Error('Informe a quantidade de ' + servico + '.');
       if (x.orc_item && !orcIds[x.orc_item]) throw new Error('"' + servico + '" não está mais no orçamento da obra (atualize a tela).');
-      const reg = { ordem: ++ordem, grupo: String(x.grupo || '').trim().slice(0, 120), codigo: String(x.codigo || '').trim().slice(0, 30), servico_cod: String(x.servico_cod || '').trim(), servico: servico.slice(0, 200), unidade: unidade.slice(0, 20), qtd: qtd, unitario: unit, orc_item: String(x.orc_item || '') };
+      const reg = { ordem: ++ordem, grupo: String(x.grupo || '').trim().slice(0, 120), codigo: String(x.codigo || '').trim().slice(0, 30), servico_cod: String(x.servico_cod || '').trim(), servico: servico.slice(0, 200), unidade: unidade.slice(0, 20), qtd: qtd, unitario: unit, orc_item: String(x.orc_item || ''), comp_cod: String(x.comp_cod || '').trim().slice(0, 40) };
       if (x.orc_item === undefined) delete reg.orc_item;          // tela antiga sem o campo: mantém o vínculo que já existe
+      if (x.comp_cod === undefined) delete reg.comp_cod;
       const ex = x.id ? atuais.find(i => String(i.id) === String(x.id)) : null;
       if (x.id && !ex) throw new Error('Linha da planilha não pertence a este contrato.');
       if (ex) { Object.assign(ex, reg); mantidos[ex.id] = 1; I.update(ex); } else linhas.push(Object.assign({ id: 'CI-' + Utilities.getUuid().slice(0, 6), contrato: c.id, ativo: 'Sim' }, reg));
