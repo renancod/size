@@ -78,6 +78,8 @@ async function vProp(id) {
   titulo(id ? p.rotulo + ' · ' + p.empreendimento : 'Novo orçamento');
   const edita = !d || d.editavel;
   PP.ed = { id: id || '', p: Object.assign({}, p), linhas: d ? d.itens.map(i => i.tipo === 'E' ? { tipo: 'E', descricao: i.descricao } : { tipo: 'I', comp_cod: i.comp_cod, descricao: i.descricao, unidade: i.unidade, qtd: bpV(i.qtd), unit_mat: i.unit_mat, unit_mo: i.unit_mo, unit_eq: i.unit_eq, unit_sv: i.unit_sv, obs: i.obs, sem_bdi: !!i.sem_bdi, sem_gestao: !!i.sem_gestao }) : [{ tipo: 'E', descricao: 'Serviços preliminares' }], sujo: false };
+  // orçamento grande abre com as etapas recolhidas (só nome, quantidade de itens e subtotal)
+  if (PP.ed.linhas.filter(l => l.tipo === 'I').length > 10) PP.ed.linhas.forEach(l => { if (l.tipo === 'E') l._fechada = true; });
   const cab = `<a href="#/orc/orcamentos" class="linkbtn">${ic('back')} Orçamentos de clientes</a>
     <div class="bp-hero pp-hero"><div class="bp-hero-t"><span class="bp-selo">${ic('file')} Orçamento <code>${esc(p.rotulo)}</code></span><h2>${esc(p.empreendimento || 'Novo orçamento')}</h2>
       <p>${p.cliente ? esc(p.cliente) + (p.local ? ' · ' + esc(p.local) : '') + ' · ' : ''}${ppSt(p.status)}${d && d.obra ? ` · <a class="pp-obra" href="#" data-obra="${esc(d.obra.id)}">${ic('building')} obra ${esc(d.obra.nome)}</a>` : ''}</p>
@@ -153,22 +155,23 @@ function ppTabela(itens, etapas, T, interna) {
 function ppEditorHtml(p, novo) {
   const sel = (n, v) => `<select name="${n}">${PP_BASES.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
   return `<form id="ppF" class="bp-bancada" autocomplete="off"><div class="bp-ed-main">
-    <div class="card"><h3>${ic('user')} Cliente e obra</h3>
+    <details class="card pp-sec" ${novo ? 'open' : ''}><summary><h3>${ic('user')} Cliente e obra</h3><small>${esc([p.cliente, p.local].filter(Boolean).join(' · ') || 'preencha o cliente e o empreendimento')}</small></summary>
       <div class="bp-g3"><label class="bp-span2">Cliente<input name="cliente" required value="${esc(p.cliente || '')}" placeholder="ex: Construtora Mar Azul Ltda"></label><label>CNPJ / CPF<input name="cliente_doc" value="${esc(p.cliente_doc || '')}"></label></div>
       <div class="bp-g3"><label>Contato<input name="contato" value="${esc(p.contato || '')}"></label><label>Telefone<input name="telefone" type="tel" value="${esc(p.telefone || '')}"></label><label>E-mail<input name="email" type="email" value="${esc(p.email || '')}"></label></div>
       <div class="bp-g3"><label class="bp-span2">Empreendimento / obra<input name="empreendimento" required value="${esc(p.empreendimento || '')}" placeholder="ex: Loteamento Dunas · infraestrutura"></label><label>Local<input name="local" value="${esc(p.local || '')}" placeholder="cidade/UF"></label></div>
-      <div class="bp-g3"><label>Data-base dos preços<input name="data_base" type="date" value="${esc(p.data_base || hoje())}"></label><label>Validade da proposta (dias)<input name="validade_dias" inputmode="numeric" value="${esc(p.validade_dias ?? 30)}"></label></div></div>
-    <div class="card"><div class="bp-h"><h3>${ic('list')} Planilha <small>etapas e itens</small></h3><span class="acoes"><button type="button" class="btn sec peq" id="ppEt">${ic('plus')} Etapa</button><button type="button" class="btn sec peq" id="ppDir">${ic('plus')} Item de preço direto</button></span></div>
+      <div class="bp-g3"><label>Data-base dos preços<input name="data_base" type="date" value="${esc(p.data_base || hoje())}"></label><label>Validade da proposta (dias)<input name="validade_dias" inputmode="numeric" value="${esc(p.validade_dias ?? 30)}"></label></div></details>
+    <div class="card"><div class="bp-h"><h3>${ic('list')} Planilha <small>etapas e itens</small></h3><span class="acoes"><button type="button" class="btn sec peq" id="ppTodas">${ic('layers')} Recolher tudo</button><button type="button" class="btn sec peq" id="ppEt">${ic('plus')} Etapa</button><button type="button" class="btn sec peq" id="ppDir">${ic('plus')} Item de preço direto</button></span></div>
       <div class="bp-add"><div class="busca">${ic('search')}<input id="ppBusca" data-busca placeholder="Incluir serviço da base de preços: código ou descrição  ( / )"></div><div class="bp-res" id="ppRes" hidden></div></div>
+      <div class="pp-alvo" id="ppAlvo" hidden></div>
       <div id="ppLin" class="pp-lin"></div></div>
-    <div class="card"><h3>${ic('percent')} BDI e gestão</h3>
+    <details class="card pp-sec" ${novo ? 'open' : ''}><summary><h3>${ic('percent')} BDI e gestão</h3><small>BDI ${esc(bpV(p.bdi_pct))}% ${p.bdi_base === 'total' ? 'sobre o total' : 's/ serviços'} · gestão ${esc(bpV(p.gestao_pct))}% ${p.gestao_base === 'total' ? 'sobre o total' : 's/ serviços'}</small></summary>
       <div class="pp-taxas"><label>BDI (%)<input name="bdi_pct" inputmode="decimal" value="${esc(bpV(p.bdi_pct))}"></label><label>sobre ${sel('bdi_base', p.bdi_base)}</label>
         <label>Gestão de obra (%)<input name="gestao_pct" inputmode="decimal" value="${esc(bpV(p.gestao_pct))}"></label><label>sobre ${sel('gestao_base', p.gestao_base)}</label></div>
-      <small>Ex. da AVA: BDI 18% só sobre mão de obra e serviços e gestão 6% sobre o custo total. O preço de venda de cada item = custo + BDI + gestão.</small></div>
-    <div class="card"><h3>${ic('file')} Texto da proposta</h3>
+      <small>Ex. da AVA: BDI 18% só sobre mão de obra e serviços e gestão 6% sobre o custo total. O preço de venda de cada item = custo + BDI + gestão.</small></details>
+    <details class="card pp-sec" ${novo ? 'open' : ''}><summary><h3>${ic('file')} Texto da proposta</h3><small>${esc(p.prazo_txt || p.pagamento_txt ? [p.prazo_txt, p.pagamento_txt].filter(Boolean).join(' · ') : 'prazo, pagamento e observações')}</small></summary>
       <div class="g2"><label>Prazo de execução<input name="prazo_txt" value="${esc(p.prazo_txt || '')}" placeholder="ex: 8 meses a partir da ordem de serviço"></label><label>Condições de pagamento<input name="pagamento_txt" value="${esc(p.pagamento_txt || '')}" placeholder="ex: medições mensais, pagamento em 15 dias"></label></div>
       <label>Observações para o cliente<textarea name="texto_cliente" rows="3" placeholder="ex: não inclui licenças, projetos e ligações definitivas">${esc(p.texto_cliente || '')}</textarea></label>
-      <label>Observações internas <small>(não saem na proposta)</small><textarea name="obs" rows="2">${esc(p.obs || '')}</textarea></label></div>
+      <label>Observações internas <small>(não saem na proposta)</small><textarea name="obs" rows="2">${esc(p.obs || '')}</textarea></label></details>
   </div><aside class="bp-ed-lado"><div class="bp-resumo" id="ppResumo"></div></aside></form>`;
 }
 function ppEditorLigar() {
@@ -177,10 +180,25 @@ function ppEditorLigar() {
   f.onchange = e => { if (/^(bdi|gestao)_/.test(e.target.name)) { ppColher(); ppDesenhar(false); } };
   f.onkeydown = e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); };
   f.onsubmit = e => { e.preventDefault(); ppSalvar(); };
-  $('#ppEt').onclick = () => { ppColher(); E.linhas.push({ tipo: 'E', descricao: '' }); E.sujo = true; ppDesenhar(true); const l = $$('#ppLin .pp-l.et input'); if (l.length) l[l.length - 1].focus(); };
+  // campo obrigatório dentro de um bloco recolhido: abre o bloco para mostrar o que falta
+  f.addEventListener('invalid', e => { const d = e.target.closest('details'); if (d) d.open = true; }, true);
+  $('#ppEt').onclick = () => { ppColher(); const et = { tipo: 'E', descricao: '' }; E.linhas.push(et); E.alvo = et; E.sujo = true; ppDesenhar(true); ppMostraAlvo(); const l = $$('#ppLin .pp-l.et input'); if (l.length) l[l.length - 1].focus(); };
   $('#ppDir').onclick = () => ppIncluir({ tipo: 'I', comp_cod: '', descricao: '', unidade: 'vb', qtd: '1', unit_mat: '', unit_mo: '', unit_eq: 0, unit_sv: 0 }, true);
+  // recolher / expandir todas as etapas de uma vez (tela mais limpa)
+  $('#ppTodas').onclick = () => { const ets = E.linhas.filter(l => l.tipo === 'E'), fecha = ets.some(l => !l._fechada); ets.forEach(l => { l._fechada = fecha; }); ppDesenhar(true); };
   ppBusca();
   ppDesenhar(true);
+  ppMostraAlvo();
+}
+/* etapa onde entram os itens da busca e do "item de preço direto" (o "+ Item" da etapa escolhe) */
+function ppMostraAlvo() {
+  const E = PP.ed, el = $('#ppAlvo');
+  if (!el) return;
+  if (E.alvo && !E.linhas.includes(E.alvo)) E.alvo = null;
+  const n = E.alvo ? E.linhas.filter((l, k) => l.tipo === 'E' && k <= E.linhas.indexOf(E.alvo)).length : 0;
+  el.hidden = !E.alvo;
+  el.innerHTML = E.alvo ? `${ic('plus')} Incluindo itens na etapa <b>${n} · ${esc(E.alvo.descricao || 'sem nome')}</b><button type="button" class="linkbtn" id="ppAlvoX">no fim da planilha</button>` : '';
+  if ($('#ppAlvoX')) $('#ppAlvoX').onclick = () => { E.alvo = null; ppMostraAlvo(); ppDesenhar(true); };
 }
 function ppColher() {
   const f = $('#ppF');
@@ -190,18 +208,32 @@ function ppColher() {
 function ppIncluir(l, foco) {
   ppColher();
   const E = PP.ed;
-  E.linhas.push(l); E.sujo = true;
+  // entra no fim da etapa escolhida ("+ Item" da etapa); sem escolha, no fim da planilha (última etapa)
+  let pos = E.linhas.length;
+  if (E.alvo && E.linhas.includes(E.alvo)) {
+    const i = E.linhas.indexOf(E.alvo), prox = E.linhas.findIndex((x, k) => k > i && x.tipo === 'E');
+    pos = prox < 0 ? E.linhas.length : prox;
+    E.alvo._fechada = false;
+  } else { const ult = E.linhas.filter(x => x.tipo === 'E').pop(); if (ult) ult._fechada = false; }
+  E.linhas.splice(pos, 0, l); E.sujo = true;
   ppDesenhar(true);
-  const rows = $$('#ppLin .pp-l.it'), r = rows[rows.length - 1];
+  const r = $(`#ppLin .pp-l.it[data-n="${pos}"]`);
   if (r) { r.classList.add('novo'); const i = $(foco && !l.comp_cod ? '[data-c=descricao]' : '[data-c=qtd]', r); if (i) { i.focus(); i.select && i.select(); } r.scrollIntoView({ block: 'nearest' }); }
 }
 /* desenha as linhas (estrutura = refaz tudo; senão só os números) */
 function ppDesenhar(estrutura) {
   const E = PP.ed, C = ppCalc(E.p, E.linhas);
   if (estrutura) {
+    let fechada = false;   // itens de etapa recolhida não são desenhados (continuam no cálculo)
     $('#ppLin').innerHTML = E.linhas.length ? E.linhas.map((l, n) => {
       const c = C.linhas[n], mv = `<span class="bp-it-a"><button type="button" class="icbtn" data-a="sobe" ${n ? '' : 'disabled'} title="Subir">${ic('up')}</button><button type="button" class="icbtn" data-a="desce" ${n < E.linhas.length - 1 ? '' : 'disabled'} title="Descer">${ic('down')}</button><button type="button" class="icbtn bp-x" data-a="tira" title="Tirar">${ic('x')}</button></span>`;
-      if (l.tipo === 'E') return `<div class="pp-l et" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span><input data-c="descricao" value="${esc(l.descricao)}" placeholder="Nome da etapa (ex: Pavimentação)"><span class="bp-mono pp-sub" data-sub></span>${mv}</div>`;
+      if (l.tipo === 'E') {
+        fechada = !!l._fechada;
+        return `<div class="pp-l et ${fechada ? 'fechada' : ''} ${E.alvo === l ? 'alvo' : ''}" data-n="${n}"><button type="button" class="pp-tg" data-a="tg" title="${fechada ? 'Expandir' : 'Recolher'} a etapa">${ic('chevron')}</button><span class="pp-cod">${esc(c.codigo)}</span>
+          <input data-c="descricao" value="${esc(l.descricao)}" placeholder="Nome da etapa (ex: Pavimentação)"><small class="pp-ni" data-ni></small><span class="bp-mono pp-sub" data-sub></span>
+          <button type="button" class="btn sec peq pp-add" data-a="add" title="Incluir um serviço nesta etapa">${ic('plus')}<span>Item</span></button>${mv}</div>`;
+      }
+      if (fechada) return '';
       const comp = l.comp_cod ? BP.C[l.comp_cod] : null;
       const tx = `<span class="pp-tx" title="Toque para tirar ou pôr este item no BDI / na gestão"><button type="button" data-tx="sem_bdi" class="${l.sem_bdi ? 'off' : ''}">BDI</button><button type="button" data-tx="sem_gestao" class="${l.sem_gestao ? 'off' : ''}">Gestão</button></span>`;
       return `<div class="pp-l it ${l.comp_cod ? 'base' : 'dir'}" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span>
@@ -211,6 +243,8 @@ function ppDesenhar(estrutura) {
         <label class="pp-q"><small>Quant.</small><input data-c="qtd" inputmode="decimal" value="${esc(l.qtd)}" placeholder="0"></label>
         <span class="pp-v"><small>Preço unit.</small><b class="bp-mono" data-pu></b></span><span class="pp-v"><small>Total</small><b class="bp-mono" data-pt></b></span>${mv}</div>`;
     }).join('') : `<div class="bp-itens-vazio">${ic('list')}<b>Planilha vazia</b><small>Crie uma etapa e busque acima os serviços da base de preços (ou inclua um item de preço direto).</small></div>`;
+    const tb = $('#ppTodas');
+    if (tb) tb.lastChild.textContent = E.linhas.some(l => l.tipo === 'E' && !l._fechada) ? ' Recolher tudo' : ' Expandir tudo';
     $$('#ppLin .pp-l').forEach(el => {
       const n = +el.dataset.n;
       $$('input[data-c]', el).forEach(i => { i.oninput = () => { E.linhas[n][i.dataset.c] = i.value; E.sujo = true; ppDesenhar(false); }; });
@@ -218,6 +252,13 @@ function ppDesenhar(estrutura) {
       $$('[data-a]', el).forEach(b => { b.onclick = () => {
         ppColher();
         const a = b.dataset.a, L = E.linhas;
+        if (a === 'tg') { L[n]._fechada = !L[n]._fechada; ppDesenhar(true); return; }
+        if (a === 'add') {
+          E.alvo = L[n]; L[n]._fechada = false;
+          ppDesenhar(true); ppMostraAlvo();
+          const bq = $('#ppBusca'); bq.scrollIntoView({ block: 'center' }); bq.focus();
+          return;
+        }
         if (a === 'tira') { if (L[n].tipo === 'E' && L.some((x, k) => k > n && x.tipo === 'I') && !confirm('Tirar a etapa? Os itens dela passam para a etapa anterior.')) return; L.splice(n, 1); }
         else { const m = a === 'sobe' ? n - 1 : n + 1; [L[n], L[m]] = [L[m], L[n]]; }
         E.sujo = true; ppDesenhar(true);
@@ -228,7 +269,12 @@ function ppDesenhar(estrutura) {
   C.etapas.forEach(e => { etapas[e.codigo] = e; });
   $$('#ppLin .pp-l').forEach(el => {
     const c = C.linhas[+el.dataset.n];
-    if (c.tipo === 'E') { const s = $('[data-sub]', el); if (s) s.textContent = bpM((etapas[c.codigo] || {}).preco); return; }
+    if (c.tipo === 'E') {
+      const e = etapas[c.codigo] || {}, s = $('[data-sub]', el), ni = $('[data-ni]', el);
+      if (s) s.textContent = bpM(e.preco);
+      if (ni) ni.textContent = plural(e.itens || 0, 'item', 'itens');
+      return;
+    }
     $('[data-pu]', el).textContent = bpM(c.preco_unit); $('[data-pt]', el).textContent = bpM(c.preco);
   });
   const T = C.total, salvo = !!E.id;

@@ -1180,3 +1180,21 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .ml-mapa .carregando{height:100%;display:grid;place-items:center}
 .ml-ll{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ml-ll input{font-family:var(--bp-mono);font-size:14px;min-height:38px}
 .ob-excluir{display:grid;gap:4px;justify-items:start;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}.pp-l.et .bp-it-a{flex:none}.pp-l.et input{flex:1 1 auto;width:auto}.pp-l.et .pp-sub{flex:none;white-space:nowrap;font-size:.84rem}
+
+/* etapas recolhíveis e "+ Item" por etapa */
+.pp-tg{display:grid;place-items:center;flex:none;width:30px;height:30px;border:0;border-radius:8px;background:none;color:var(--bp-ink);cursor:pointer}
+.pp-tg:hover{background:rgba(11,27,63,.06)}
+.pp-tg .ic{width:16px;height:16px;transition:transform .15s;transform:rotate(90deg)}
+.pp-l.et.fechada .pp-tg .ic{transform:none}
+.pp-l.et.fechada{background:#fff;border-color:var(--line);margin-top:4px}
+.pp-l.et.alvo{box-shadow:inset 4px 0 0 var(--bp-ac);border-color:var(--bp-ac)}
+.pp-ni{flex:none;color:var(--mute);font-size:.76rem;white-space:nowrap}
+.pp-add{flex:none;min-height:32px;padding:0 10px}
+.pp-alvo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-2px 0 10px;padding:8px 12px;border-radius:10px;background:#FFF6E3;color:#8A5A00;font-size:.84rem}
+.pp-alvo .ic{width:16px;height:16px}.pp-alvo .linkbtn{margin-left:auto;font-size:.8rem}
+@container (max-width:720px){.pp-ni{display:none}.pp-add span,.pp-l.et .icbtn[data-a=sobe],.pp-l.et .icbtn[data-a=desce]{display:none}.pp-add{width:36px;padding:0;justify-content:center}.pp-add .ic{margin:0}.pp-l.et{gap:6px}.pp-l.et .pp-sub{font-size:.76rem}}details.pp-sec>summary{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;cursor:pointer;list-style:none}
+details.pp-sec>summary::-webkit-details-marker{display:none}
+details.pp-sec>summary h3{margin:0;display:flex;align-items:center;gap:8px}
+details.pp-sec>summary small{color:var(--mute);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.pp-sec>summary::after{content:"Editar";font-size:.76rem;font-weight:700;color:var(--teal)}
+details.pp-sec[open]>summary{margin-bottom:12px}details.pp-sec[open]>summary::after{content:"Recolher"}
