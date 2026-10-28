@@ -147,11 +147,13 @@ function ppLeitura(d) {
 function ppTabela(itens, etapas, T, interna) {
   const et = {};
   etapas.forEach(e => { et[e.codigo] = e; });
-  return `<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
-    ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${bpM((et[i.codigo] || {}).preco)}</b></td></tr>`
+  // interna: 11 colunas; sem "R$" em cada célula (fica no cabeçalho) para caber num notebook a 100%
+  const vm = interna ? v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : bpM;
+  return `${interna ? '<p class="pp-moeda">Valores em R$</p>' : ''}<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
+    ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${vm((et[i.codigo] || {}).preco)}</b></td></tr>`
       : `<tr><td>${esc(i.codigo)}</td><td>${i.comp_cod && i.fonte !== 'SINAPI-INSUMO' ? `<button type="button" class="bp-lnk pp-ver" data-ver-cod="${esc(i.codigo)}" title="Ver os insumos deste serviço">${esc(i.descricao)}</button>` : esc(i.descricao)}${interna && i.comp_cod ? ` <small>${i.fonte ? 'SINAPI ' : ''}<code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
-        ${interna ? `<td class="n bp-mono">${bpM(i.custo_unit)}</td><td class="n bp-mono">${bpM(i.v_mat)}</td><td class="n bp-mono">${bpM(i.v_serv)}</td><td class="n bp-mono">${bpM(i.bdi)}</td><td class="n bp-mono">${bpM(i.gestao)}</td>` : ''}
-        <td class="n bp-mono">${bpM(i.preco_unit)}</td><td class="n bp-mono"><b>${bpM(i.preco)}</b></td></tr>`).join('')}</tbody>
+        ${interna ? `<td class="n bp-mono">${vm(i.custo_unit)}</td><td class="n bp-mono">${vm(i.v_mat)}</td><td class="n bp-mono">${vm(i.v_serv)}</td><td class="n bp-mono">${vm(i.bdi)}</td><td class="n bp-mono">${vm(i.gestao)}</td>` : ''}
+        <td class="n bp-mono">${vm(i.preco_unit)}</td><td class="n bp-mono"><b>${vm(i.preco)}</b></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot></table></div>`;
 }
 
