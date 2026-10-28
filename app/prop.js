@@ -186,7 +186,7 @@ function ppEditorLigar() {
   f.onsubmit = e => { e.preventDefault(); ppSalvar(); };
   // campo obrigatório dentro de um bloco recolhido: abre o bloco para mostrar o que falta
   f.addEventListener('invalid', e => { const d = e.target.closest('details'); if (d) d.open = true; }, true);
-  $('#ppEt').onclick = () => { ppColher(); const et = { tipo: 'E', descricao: '' }; E.linhas.push(et); E.alvo = et; E.sujo = true; ppDesenhar(true); ppMostraAlvo(); const l = $$('#ppLin .pp-l.et input'); if (l.length) l[l.length - 1].focus(); };
+  $('#ppEt').onclick = () => { ppColher(); const et = { tipo: 'E', descricao: '' }; E.linhas.push(et); E.alvo = et; E.sujo = true; ppDesenhar(true); ppMostraAlvo(); ppEditarEtapa(E.linhas.length - 1); };
   $('#ppDir').onclick = () => ppIncluir({ tipo: 'I', comp_cod: '', descricao: '', unidade: 'vb', qtd: '1', unit_mat: '', unit_mo: '', unit_eq: 0, unit_sv: 0 }, true);
   // recolher / expandir todas as etapas de uma vez (tela mais limpa)
   $('#ppTodas').onclick = () => { const ets = E.linhas.filter(l => l.tipo === 'E'), fecha = ets.some(l => !l._fechada); ets.forEach(l => { l._fechada = fecha; }); ppDesenhar(true); };
@@ -221,40 +221,43 @@ function ppIncluir(l, foco) {
   } else { const ult = E.linhas.filter(x => x.tipo === 'E').pop(); if (ult) ult._fechada = false; }
   E.linhas.splice(pos, 0, l); E.sujo = true;
   ppDesenhar(true);
-  const r = $(`#ppLin .pp-l.it[data-n="${pos}"]`);
-  if (r) { r.classList.add('novo'); const i = $(foco && !l.comp_cod ? '[data-c=descricao]' : '[data-c=qtd]', r); if (i) { i.focus(); i.select && i.select(); } r.scrollIntoView({ block: 'nearest' }); }
+  const r = $(`#ppLin .pp-r.pi[data-n="${pos}"]`);
+  if (r) { r.classList.add('novo'); r.scrollIntoView({ block: 'nearest' }); }
+  // preço direto ou celular: abre a edição; computador: cursor na quantidade da linha
+  if (!l.comp_cod || ppEstreito()) return ppEditarItem(pos);
+  const i = r && $('.pp-qin', r);
+  if (i) { i.focus(); i.select(); }
 }
 /* desenha as linhas (estrutura = refaz tudo; senão só os números) */
 function ppDesenhar(estrutura) {
   const E = PP.ed, C = ppCalc(E.p, E.linhas);
   if (estrutura) {
+    // linhas fechadas (só leitura): mexer no item ou na etapa é pelo "Editar"; remover só lá dentro, com confirmação.
+    // No computador a quantidade continua editável direto na linha.
     let fechada = false;   // itens de etapa recolhida não são desenhados (continuam no cálculo)
+    const ed = t => `<button type="button" class="pp-edit" data-a="ed" title="Editar ${t}">${ic('edit')}<span>Editar</span></button>`;
     $('#ppLin').innerHTML = E.linhas.length ? E.linhas.map((l, n) => {
-      const c = C.linhas[n], mv = `<span class="bp-it-a"><button type="button" class="icbtn" data-a="sobe" ${n ? '' : 'disabled'} title="Subir">${ic('up')}</button><button type="button" class="icbtn" data-a="desce" ${n < E.linhas.length - 1 ? '' : 'disabled'} title="Descer">${ic('down')}</button><button type="button" class="icbtn bp-x" data-a="tira" title="Tirar">${ic('x')}</button></span>`;
+      const c = C.linhas[n];
       if (l.tipo === 'E') {
         fechada = !!l._fechada;
-        return `<div class="pp-l et ${fechada ? 'fechada' : ''} ${E.alvo === l ? 'alvo' : ''}" data-n="${n}"><button type="button" class="pp-tg" data-a="tg" title="${fechada ? 'Expandir' : 'Recolher'} a etapa">${ic('chevron')}</button><span class="pp-cod">${esc(c.codigo)}</span>
-          <input data-c="descricao" value="${esc(l.descricao)}" placeholder="Nome da etapa (ex: Pavimentação)"><small class="pp-ni" data-ni></small><span class="bp-mono pp-sub" data-sub></span>
-          <button type="button" class="btn sec peq pp-add" data-a="add" title="Incluir um serviço nesta etapa">${ic('plus')}<span>Item</span></button>${mv}</div>`;
+        return `<div class="pp-r pe ${fechada ? 'fechada' : ''} ${E.alvo === l ? 'alvo' : ''}" data-n="${n}"><button type="button" class="pp-tg" data-a="tg" title="${fechada ? 'Expandir' : 'Recolher'} a etapa">${ic('chevron')}</button><span class="pp-cod">${esc(c.codigo)}</span>
+          <button type="button" class="pp-en" data-a="tg">${esc(l.descricao) || '<i>sem nome</i>'}</button><small class="pp-ni" data-ni></small><span class="bp-mono pp-sub" data-sub></span>
+          <button type="button" class="btn sec peq pp-add" data-a="add" title="Incluir um serviço nesta etapa">${ic('plus')}<span>Item</span></button>${ed('a etapa')}</div>`;
       }
       if (fechada) return '';
-      const comp = l.comp_cod ? BP.C[l.comp_cod] : null;
-      const tx = `<span class="pp-tx" title="Toque para tirar ou pôr este item no BDI / na gestão"><button type="button" data-tx="sem_bdi" class="${l.sem_bdi ? 'off' : ''}">BDI</button><button type="button" data-tx="sem_gestao" class="${l.sem_gestao ? 'off' : ''}">Gestão</button></span>`;
-      return `<div class="pp-l it ${l.comp_cod ? 'base' : 'dir'}" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span>
-        <span class="pp-d">${tx}${l.comp_cod ? `<button type="button" class="bp-lnk pp-ver" data-ver="${n}" title="Ver os insumos deste serviço">${esc(l.descricao)}</button><small><code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}</small>`
-          : `<input data-c="descricao" value="${esc(l.descricao)}" placeholder="Descrição do item (preço direto)"><span class="pp-dir"><label>Material/un<input data-c="unit_mat" inputmode="decimal" value="${esc(bpV(l.unit_mat))}" placeholder="0,00"></label><label>Mão de obra/un<input data-c="unit_mo" inputmode="decimal" value="${esc(bpV(l.unit_mo))}" placeholder="0,00"></label></span>`}</span>
-        <label class="pp-un"><small>Un</small>${l.comp_cod ? `<span>${esc(l.unidade)}</span>` : `<input data-c="unidade" value="${esc(l.unidade)}">`}</label>
-        <label class="pp-q"><small>Quant.</small><input data-c="qtd" inputmode="decimal" value="${esc(l.qtd)}" placeholder="0"></label>
-        <span class="pp-v"><small>Preço unit.</small><b class="bp-mono" data-pu></b></span><span class="pp-v"><small>Total</small><b class="bp-mono" data-pt></b></span>${mv}</div>`;
+      const comp = l.comp_cod ? BP.C[l.comp_cod] : null, fl = [l.sem_bdi && 'sem BDI', l.sem_gestao && 'sem gestão'].filter(Boolean);
+      return `<div class="pp-r pi ${l.comp_cod ? 'base' : 'dir'}" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span>
+        <div class="pp-rd"><b>${esc(l.descricao) || '<i>sem descrição</i>'}</b><small>${l.comp_cod ? `<code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'}` : 'preço direto'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}${fl.map(f => ` <span class="bp-flag">${f}</span>`).join('')}</small></div>
+        <div class="pp-rq"><small>Quant.</small><span><input class="pp-qin" data-c="qtd" inputmode="decimal" value="${esc(l.qtd)}" placeholder="0" aria-label="Quantidade"><b class="pp-qtx bp-mono">${l.qtd === '' ? '—' : nf(bpPn(l.qtd))}</b> <em>${esc(l.unidade)}</em></span></div>
+        <div class="pp-rv un"><small>Preço unit.</small><b class="bp-mono" data-pu></b></div><div class="pp-rv"><small>Total</small><b class="bp-mono" data-pt></b></div>${ed('o item')}</div>`;
     }).join('') : `<div class="bp-itens-vazio">${ic('list')}<b>Planilha vazia</b><small>Crie uma etapa e busque acima os serviços da base de preços (ou inclua um item de preço direto).</small></div>`;
     const tb = $('#ppTodas');
     if (tb) tb.lastChild.textContent = E.linhas.some(l => l.tipo === 'E' && !l._fechada) ? ' Recolher tudo' : ' Expandir tudo';
-    $$('#ppLin .pp-l').forEach(el => {
+    $$('#ppLin .pp-r').forEach(el => {
       const n = +el.dataset.n;
       $$('input[data-c]', el).forEach(i => { i.oninput = () => { E.linhas[n][i.dataset.c] = i.value; E.sujo = true; ppDesenhar(false); }; });
-      const ver = $('[data-ver]', el);
-      if (ver) ver.onclick = () => ppInsumos(E.linhas[n], C.linhas[n]);
-      $$('[data-tx]', el).forEach(b => { b.onclick = () => { const k = b.dataset.tx; E.linhas[n][k] = !E.linhas[n][k]; b.classList.toggle('off', E.linhas[n][k]); E.sujo = true; ppDesenhar(false); }; });
+      // celular: tocar no item abre a edição (os números ficam só para leitura)
+      if (el.classList.contains('pi')) el.onclick = e => { if (!e.target.closest('button,input') && ppEstreito()) ppEditarItem(n); };
       $$('[data-a]', el).forEach(b => { b.onclick = () => {
         ppColher();
         const a = b.dataset.a, L = E.linhas;
@@ -265,15 +268,13 @@ function ppDesenhar(estrutura) {
           const bq = $('#ppBusca'); bq.scrollIntoView({ block: 'center' }); bq.focus();
           return;
         }
-        if (a === 'tira') { if (L[n].tipo === 'E' && L.some((x, k) => k > n && x.tipo === 'I') && !confirm('Tirar a etapa? Os itens dela passam para a etapa anterior.')) return; L.splice(n, 1); }
-        else { const m = a === 'sobe' ? n - 1 : n + 1; [L[n], L[m]] = [L[m], L[n]]; }
-        E.sujo = true; ppDesenhar(true);
+        if (a === 'ed') L[n].tipo === 'E' ? ppEditarEtapa(n) : ppEditarItem(n);
       }; });
     });
   }
   const etapas = {};
   C.etapas.forEach(e => { etapas[e.codigo] = e; });
-  $$('#ppLin .pp-l').forEach(el => {
+  $$('#ppLin .pp-r').forEach(el => {
     const c = C.linhas[+el.dataset.n];
     if (c.tipo === 'E') {
       const e = etapas[c.codigo] || {}, s = $('[data-sub]', el), ni = $('[data-ni]', el);
@@ -282,6 +283,8 @@ function ppDesenhar(estrutura) {
       return;
     }
     $('[data-pu]', el).textContent = bpM(c.preco_unit); $('[data-pt]', el).textContent = bpM(c.preco);
+    const qt = $('.pp-qtx', el), q = E.linhas[+el.dataset.n].qtd;
+    if (qt) qt.textContent = q === '' ? '—' : nf(bpPn(q));
   });
   const T = C.total, salvo = !!E.id;
   $('#ppTopo').textContent = bpM(T.preco);
@@ -290,6 +293,120 @@ function ppDesenhar(estrutura) {
     <div class="bp-res-cats">${[['mat', 'Material', T.v_mat], ['mo', 'MO e serviços', T.v_serv], ['eq', 'BDI', T.bdi], ['sv', 'Gestão', T.gestao]].map(([k, t, v]) => `<div class="${v ? '' : 'zero'}"><i class="bp-dot k-${k}"></i><span>${t}</span><b class="bp-mono">${bpM(v)}</b><small>${T.preco ? Math.round(v / T.preco * 100) + '%' : ''}</small></div>`).join('')}</div>
     <small class="bp-res-n">custo direto ${bpM(T.custo)} · material ${ppPct(T.pct_material)} do custo</small>
     <button class="btn full bp-ac" id="ppSalvar">${ic('check')} ${salvo ? 'Salvar orçamento' : 'Criar orçamento'}</button>`;
+}
+/* celular (planilha estreita): quantidade só pelo "Editar" */
+const ppEstreito = () => ($('#ppLin') ? $('#ppLin').getBoundingClientRect().width : 999) < 560;
+/* "Desfazer" por alguns segundos depois de remover item ou etapa */
+function ppDesfazer(texto, antes) {
+  const p = document.createElement('p');
+  p.className = 'pp-undo';
+  p.innerHTML = `<span>${esc(texto)}</span><button type="button">Desfazer</button>`;
+  $('#toast').appendChild(p);
+  const t = setTimeout(() => p.remove(), 9000);
+  $('button', p).onclick = () => { clearTimeout(t); p.remove(); if (!PP.ed || !$('#ppLin')) return; PP.ed.linhas = antes; PP.ed.sujo = true; ppDesenhar(true); ppMostraAlvo(); toast('Desfeito.'); };
+}
+/* depois de mover: redesenha e destaca a linha */
+function ppDestaca(l) {
+  const E = PP.ed;
+  for (let k = E.linhas.indexOf(l); k >= 0; k--) if (E.linhas[k].tipo === 'E') { E.linhas[k]._fechada = false; break; }
+  E.sujo = true; ppDesenhar(true); ppMostraAlvo();
+  const r = $(`#ppLin .pp-r[data-n="${E.linhas.indexOf(l)}"]`);
+  if (r) { r.classList.add('novo'); r.scrollIntoView({ block: 'nearest' }); }
+}
+/* editar item: quantidade, BDI/gestão, observação, posição e etapa; (preço direto) descrição, unidade, material e MO; remover com confirmação */
+function ppEditarItem(n) {
+  ppColher();
+  const E = PP.ed, L = E.linhas, l = L[n];
+  if (!l || l.tipo !== 'I') return;
+  const C = ppCalc(E.p, L), c = C.linhas[n], dir = !l.comp_cod;
+  const ets = L.map((x, k) => [x, k]).filter(([x]) => x.tipo === 'E');
+  let minha = -1;
+  for (let k = n; k >= 0; k--) if (L[k].tipo === 'E') { minha = k; break; }
+  const f = modal(`${ic('edit')} Item ${esc(c.codigo)}`, `
+    ${dir ? `<label>Descrição<input name="descricao" required value="${esc(l.descricao)}" placeholder="Descrição do item (preço direto)"></label>
+      <div class="bp-g3"><label>Unidade<input name="unidade" required value="${esc(l.unidade)}"></label><label>Material / un (R$)<input name="unit_mat" inputmode="decimal" value="${esc(bpV(l.unit_mat))}" placeholder="0,00"></label><label>Mão de obra / un (R$)<input name="unit_mo" inputmode="decimal" value="${esc(bpV(l.unit_mo))}" placeholder="0,00"></label></div>`
+      : `<div class="pp-ed-cab"><div><b>${esc(l.descricao)}</b><small><code>${esc(l.comp_cod)}</code> · da base · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}</small></div><button type="button" class="btn sec peq" id="ppEdIns">${ic('layers')} Ver insumos</button></div>`}
+    <div class="bp-g3"><label>Quantidade (${esc(l.unidade)})<input name="qtd" inputmode="decimal" required value="${esc(l.qtd)}" placeholder="0"></label><label class="bp-span2">Observação<input name="obs" value="${esc(l.obs || '')}" placeholder="opcional"></label></div>
+    <div class="pp-ed-tx"><label class="ck"><input type="checkbox" name="bdi" ${l.sem_bdi ? '' : 'checked'}> Entra no BDI</label><label class="ck"><input type="checkbox" name="ges" ${l.sem_gestao ? '' : 'checked'}> Entra na gestão</label></div>
+    <div class="pp-ed-pv" id="ppEdPv"></div>
+    <div class="pp-ed-mv"><b>Posição</b><button type="button" class="btn sec peq" data-mv="-1" ${n > 1 ? '' : 'disabled'}>${ic('up')} Subir</button><button type="button" class="btn sec peq" data-mv="1" ${n < L.length - 1 ? '' : 'disabled'}>${ic('down')} Descer</button>
+      ${ets.length > 1 ? `<label>Etapa<select name="etapa">${ets.map(([x, k]) => `<option value="${k}" ${k === minha ? 'selected' : ''}>${esc(C.linhas[k].codigo)} · ${esc(x.descricao || 'sem nome')}</option>`).join('')}</select></label>` : ''}</div>
+    <div class="pp-ed-perigo"><button type="button" class="btn sec pp-rem" id="ppEdRem">${ic('trash')} Remover item</button></div>`, {
+    ok: 'Pronto',
+    onOk: ff => {
+      aplicar(ff);
+      const alvo = ff.etapa ? +ff.etapa.value : minha;
+      if (alvo !== minha && L[alvo]) {           // outra etapa: vai para o fim dela
+        L.splice(L.indexOf(l), 1);
+        const i = L.indexOf(ets.find(([, k]) => k === alvo)[0]), prox = L.findIndex((x, k) => k > i && x.tipo === 'E');
+        L.splice(prox < 0 ? L.length : prox, 0, l);
+      }
+      ppDestaca(l);
+    }
+  });
+  const ler = ff => {
+    const o = Object.assign({}, l, { qtd: ff.qtd.value, obs: ff.obs.value.trim(), sem_bdi: !ff.bdi.checked, sem_gestao: !ff.ges.checked });
+    if (dir) Object.assign(o, { descricao: ff.descricao.value.trim(), unidade: ff.unidade.value.trim(), unit_mat: ff.unit_mat.value, unit_mo: ff.unit_mo.value });
+    return o;
+  };
+  const aplicar = ff => { Object.assign(l, ler(ff)); E.sujo = true; };
+  const previa = () => {
+    const tmp = L.slice(); tmp[n] = ler(f);
+    const x = ppCalc(E.p, tmp).linhas[n];
+    $('#ppEdPv').innerHTML = `<span>Preço unit. <b class="bp-mono">${bpM(x.preco_unit)}</b></span><span>Total <b class="bp-mono">${bpM(x.preco)}</b></span><small>custo ${bpM(x.custo)} · BDI ${bpM(x.bdi)} · gestão ${bpM(x.gestao)}</small>`;
+  };
+  f.addEventListener('input', previa); f.addEventListener('change', previa); previa();
+  if ($('#ppEdIns')) $('#ppEdIns').onclick = () => { aplicar(f); ppInsumos(l, ppCalc(E.p, L).linhas[n]); };
+  $$('[data-mv]', f).forEach(b => { b.onclick = () => {
+    aplicar(f);
+    const m = n + +b.dataset.mv;
+    [L[n], L[m]] = [L[m], L[n]];
+    fecharModal(); ppDestaca(l);
+  }; });
+  $('#ppEdRem').onclick = () => {
+    if (!confirm(`Remover o item ${c.codigo} · ${l.descricao} (${bpM(c.preco)})?`)) return;
+    const antes = L.slice();
+    L.splice(n, 1); E.sujo = true;
+    fecharModal(); ppDesenhar(true); ppMostraAlvo();
+    ppDesfazer(`Item ${c.codigo} removido`, antes);
+  };
+  setTimeout(() => { const q = f.qtd; if (q && !ppEstreito()) { q.focus(); q.select(); } }, 60);
+}
+/* editar etapa: nome, posição (a etapa anda com os itens) e excluir (avisa quantos itens e quanto sai junto) */
+function ppEditarEtapa(n) {
+  ppColher();
+  const E = PP.ed, L = E.linhas, l = L[n];
+  if (!l || l.tipo !== 'E') return;
+  const C = ppCalc(E.p, L), cod = C.linhas[n].codigo, e = C.etapas.find(x => x.codigo === cod) || { itens: 0, preco: 0 };
+  const fimBloco = i => { let k = i + 1; while (k < L.length && L[k].tipo !== 'E') k++; return k; };
+  const nEt = L.filter(x => x.tipo === 'E').length, ordem = L.slice(0, n + 1).filter(x => x.tipo === 'E').length;
+  const f = modal(`${ic('edit')} Etapa ${esc(cod)}`, `<label>Nome da etapa<input name="nome" required value="${esc(l.descricao)}" placeholder="ex: Pavimentação"></label>
+    <small>${plural(e.itens, 'item', 'itens')} · ${bpM(e.preco)}</small>
+    <div class="pp-ed-mv"><b>Posição</b><button type="button" class="btn sec peq" data-mv="-1" ${ordem > 1 ? '' : 'disabled'}>${ic('up')} Subir etapa</button><button type="button" class="btn sec peq" data-mv="1" ${ordem < nEt ? '' : 'disabled'}>${ic('down')} Descer etapa</button><small>a etapa muda de lugar com todos os itens dela</small></div>
+    <div class="pp-ed-perigo"><button type="button" class="btn sec pp-rem" id="ppEdRem">${ic('trash')} Excluir etapa</button>${e.itens ? `<small>os ${plural(e.itens, 'item', 'itens')} dela (${bpM(e.preco)}) saem junto</small>` : ''}</div>`, {
+    ok: 'Pronto',
+    onOk: ff => { const v = ff.nome.value.trim(); if (!v) { toast('Dê um nome para a etapa.', 1); return false; } l.descricao = v; E.sujo = true; ppDesenhar(true); ppMostraAlvo(); }
+  });
+  $$('[data-mv]', f).forEach(b => { b.onclick = () => {
+    const v = f.nome.value.trim(); if (v) l.descricao = v;
+    const fim = fimBloco(n), bloco = L.slice(n, fim);
+    if (+b.dataset.mv < 0) {
+      let p = n - 1; while (p > 0 && L[p].tipo !== 'E') p--;
+      L.splice(n, bloco.length); L.splice(p, 0, ...bloco);
+    } else {
+      const fim2 = fimBloco(fim), prox = L.slice(fim, fim2);
+      L.splice(n, bloco.length + prox.length, ...prox, ...bloco);
+    }
+    fecharModal(); ppDestaca(l);
+  }; });
+  $('#ppEdRem').onclick = () => {
+    if (!confirm(`Excluir a etapa ${cod} · ${l.descricao || 'sem nome'}${e.itens ? ` e os ${plural(e.itens, 'item', 'itens')} dela (${bpM(e.preco)})` : ''}?`)) return;
+    const antes = L.slice();
+    L.splice(n, fimBloco(n) - n); E.sujo = true;
+    fecharModal(); ppDesenhar(true); ppMostraAlvo();
+    ppDesfazer(`Etapa ${cod} excluída`, antes);
+  };
+  setTimeout(() => { if (!l.descricao) f.nome.focus(); }, 60);
 }
 async function ppSalvar(silencioso) {
   ppColher();
