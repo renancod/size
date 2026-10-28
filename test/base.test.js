@@ -1,5 +1,5 @@
 // Orçamentos · base de preços: insumos, composições (com auxiliares e preço próprio), acesso sem obra,
-// atualização de preços com histórico e importação da planilha de composições do RDObras.
+// atualização de preços com histórico e importação da planilha de composições.
 const test = require('node:test');
 const assert = require('node:assert');
 const { criarGAS } = require('./gas-mock');
@@ -157,7 +157,7 @@ test('acesso: sem obra nenhuma; "Ver" consulta e não grava; sem acesso não ent
   assert.match(ger('base_insumo_salvar', { insumo: { descricao: 'Brita 1', unidade: 'm³', tipo: 'material', preco: '110,00' } }).msg, /INS-0001/);
 });
 
-/* planilha "Composições" como o RDObras exporta (linha de cabeçalho da composição sem Tipo; itens com a quantidade total) */
+/* planilha "Composições" da planilha de orçamento (linha de cabeçalho da composição sem Tipo; itens com a quantidade total) */
 const CAB = ['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF. / UN ITEM', 'CUSTO UNIT. (R$)', 'CUSTO TOTAL (R$)'];
 const MO = 'Mão de obra / serviço';
 const COMPOSICOES = [
@@ -189,7 +189,7 @@ const ORCAMENTO = [
 ];
 const ABAS = [{ nome: 'Material x Mão de obra', linhas: ORCAMENTO }, { nome: 'Composições', linhas: COMPOSICOES }];
 
-test('importação RDObras: conferência antes de gravar (repetidas, variantes, preço próprio, código gerado, etapas)', () => {
+test('importação de planilha: conferência antes de gravar (repetidas, variantes, preço próprio, código gerado, etapas)', () => {
   const t = preparar();
   const p = t.adm('base_importar', { abas: ABAS });
   const R = p.resumo;
@@ -215,9 +215,9 @@ test('importação RDObras: conferência antes de gravar (repetidas, variantes, 
   assert.equal(t.adm('base_dados').insumos.length, 0);
 });
 
-test('importação RDObras: grava, reproduz os custos e importar de novo não duplica', () => {
+test('importação de planilha: grava, reproduz os custos e importar de novo não duplica', () => {
   const t = preparar();
-  const r = t.adm('base_importar', { abas: ABAS, aplicar: true, data_preco: '2026-03-15', fonte: 'RDObras · ORC14' });
+  const r = t.adm('base_importar', { abas: ABAS, aplicar: true, data_preco: '2026-03-15', fonte: 'Planilha · ORC14' });
   assert.match(r.msg, /8 insumos novos/);
   let d = t.adm('base_dados');
   assert.equal(d.insumos.length, 8);
@@ -228,7 +228,7 @@ test('importação RDObras: grava, reproduz os custos e importar de novo não du
   assert.equal(comp(d, '10075').custo.total, 1406.8);
   assert.equal(comp(d, 'CMP-0001').custo.total, 74564);
   assert.equal(comp(d, 'EXMUR').custo.total, 560);
-  assert.equal(comp(d, '10014').fonte, 'RDObras · ORC14');
+  assert.equal(comp(d, '10014').fonte, 'Planilha · ORC14');
   assert.equal(d.insumos.find(i => i.codigo === '008').descricao, 'LUVA DE CORRER PVC DN 150');
   assert.equal(d.insumos.find(i => i.codigo === 'PAV007').data_preco, '2026-03-15');
   // código com zero à esquerda vai como texto para o Planilhas não trocar "008" por 8

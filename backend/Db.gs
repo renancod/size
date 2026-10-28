@@ -23,7 +23,7 @@ const SCHEMA_CENTRAL = {
   // orçamentos de clientes (antes de existir a obra): cada revisão é uma linha; os custos dos itens ficam congelados no orçamento
   Propostas: ['id', 'numero', 'revisao', 'status', 'cliente', 'cliente_doc', 'contato', 'telefone', 'email', 'empreendimento', 'local', 'data_base', 'validade_dias',
     'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs', 'motivo', 'obra_id', 'historico_json',
-    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em'],
+    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em', 'cronograma_json'],
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
   // sem_bdi / sem_gestao: item fora do BDI ou da gestão (ex. AVA: mobilização e canteiro sem BDI)
   PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs', 'sem_bdi', 'sem_gestao']
@@ -37,8 +37,8 @@ const SCHEMA_OBRA = {
   Orcamentos: ['id', 'pedido', 'fornecedor_cod', 'fornecedor', 'valor', 'prazo_entrega', 'condicao', 'arquivo_id', 'arquivo_url', 'origem', 'recebido_em', 'registrado_por'],
   Fornecedores: ['codigo', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'materiais', 'condicao', 'obs', 'ativo'],
   Materiais: ['codigo', 'descricao', 'unidade', 'categoria', 'estoque_min', 'ativo'],
-  // frente geral; os valores (preço cobrado do cliente e custos orçados) são do orçamento do empreendimento
-  Frentes: ['codigo', 'nome', 'descricao', 'ativa', 'preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos'],
+  // frente geral; os valores (preço cobrado do cliente e custos orçados) são do orçamento do empreendimento; inicio/fim = cronograma físico-financeiro
+  Frentes: ['codigo', 'nome', 'descricao', 'ativa', 'preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos', 'inicio', 'fim'],
   Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs', 'frente'],
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],

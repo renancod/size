@@ -44,7 +44,7 @@ async function vPropLista(qs) {
   const L = (await api('prop_listar')).propostas, p = new URLSearchParams(qs || ''), F = PP.fl;
   if (p.has('s')) F.s = p.get('s');
   const conta = s => L.filter(x => (s ? x.status === s : x.status !== 'Revisado')).length;
-  bpTela('props', `<div class="cab"><h2>Orçamentos de clientes</h2><span class="contagem" id="ppN"></span>${bpGere() ? `<span class="acoes"><a class="btn sec peq" href="#/orc/orcamento/importar">${ic('upload')} Importar do RDObras</a><a class="btn peq bp-ac" href="#/orc/orcamento/novo">${ic('plus')} Novo orçamento</a></span>` : ''}</div>
+  bpTela('props', `<div class="cab"><h2>Orçamentos de clientes</h2><span class="contagem" id="ppN"></span>${bpGere() ? `<span class="acoes"><a class="btn sec peq" href="#/orc/orcamento/importar">${ic('upload')} Importar orçamento</a><a class="btn peq bp-ac" href="#/orc/orcamento/novo">${ic('plus')} Novo orçamento</a></span>` : ''}</div>
     <div class="busca">${ic('search')}<input type="search" id="ppQ" data-busca placeholder="Buscar por número, cliente, empreendimento ou local  ( / )" value="${esc(F.q)}"></div>
     <div class="chips" id="ppChips"><button class="chip ${!F.s ? 'on' : ''}" data-s="">Todos <b>${conta('')}</b></button>
       ${['Rascunho', 'Enviado', 'Aprovado', 'Perdido', 'Cancelado', 'Revisado'].map(s => conta(s) ? `<button class="chip ${F.s === s ? 'on' : ''}" data-s="${s}">${PP_ST[s][0]} <b>${conta(s)}</b></button>` : '').join('')}</div>
@@ -100,6 +100,7 @@ function ppAcoes(d) {
   return [
     `<a class="btn sec" href="#/orc/orcamento/${enc(p.id)}/proposta?m=c">${ic('file')} Proposta (cliente)</a>`,
     `<a class="btn sec" href="#/orc/orcamento/${enc(p.id)}/proposta?m=i">${ic('chart')} Planilha interna</a>`,
+    `<a class="btn sec" href="#/orc/orcamento/${enc(p.id)}/cronograma">${ic('cal')} Cronograma</a>`,
     g && p.status === 'Rascunho' ? b('enviar', 'send', 'Marcar como enviado', 'bp-ac') : '',
     g && ['Rascunho', 'Enviado'].includes(p.status) ? b('aprovar', 'check', 'Aprovado pelo cliente') : '',
     g && ['Rascunho', 'Enviado'].includes(p.status) ? b('perder', 'x', 'Perdido') : '',
@@ -397,6 +398,7 @@ async function vPropDoc(id, qs) {
       ${ppTabela(d.itens, d.etapas, T, interna)}
       ${interna ? `<section class="pp-doc-res">${[['Custo direto', T.custo], ['Material', T.v_mat], ['Mão de obra e serviços', T.v_serv], ['BDI ' + ppPct(p.bdi_pct) + ' sobre ' + (p.bdi_base === 'total' ? 'o custo total' : 'MO e serviços'), T.bdi], ['Gestão ' + ppPct(p.gestao_pct) + ' sobre ' + (p.gestao_base === 'total' ? 'o custo total' : 'MO e serviços'), T.gestao], ['Preço de venda', T.preco]].map(([t, v]) => `<div><span>${t}</span><b class="bp-mono">${bpM(v)}</b></div>`).join('')}<div><span>BDI + gestão sobre o preço</span><b>${ppPct(T.margem)}</b></div></section>`
         : `<section class="pp-doc-tot"><span>Valor total da proposta</span><b class="bp-mono">${bpM(T.preco)}</b></section>`}
+      ${ppCronoDoc(d.cronograma)}
       <section class="pp-doc-cond"><h4>Condições</h4><ul>
         ${val ? `<li><b>Validade:</b> ${p.validade_dias} dias (até ${fd(val)}).</li>` : ''}<li><b>Data-base dos preços:</b> ${fd(p.data_base)}.</li>
         ${p.prazo_txt ? `<li><b>Prazo de execução:</b> ${esc(p.prazo_txt)}</li>` : ''}${p.pagamento_txt ? `<li><b>Pagamento:</b> ${esc(p.pagamento_txt)}</li>` : ''}</ul>
@@ -406,7 +408,16 @@ async function vPropDoc(id, qs) {
   $('#ppPrint').onclick = () => window.print();
   $('#ppXls').onclick = async () => { const b = $('#ppXls'); b.disabled = true; try { await ppExcel(d); } catch (e) { toast(e.message, 1); } b.disabled = false; };
 }
-/* Excel com a mesma cara da planilha do RDObras (ExcelJS, carregado só quando precisa): aba "Material x Mão de obra"
+/* cronograma físico-financeiro na proposta: barras por etapa e o valor de cada mês (só quando as etapas têm datas) */
+function ppCronoDoc(C) {
+  if (!C || !C.meses.length) return '';
+  const E = { tipo: 'prop', edita: false, linhas: C.linhas.map(l => ({ codigo: l.codigo, nome: l.descricao, valor: l.valor, ini: crData(l.ini), fim: crData(l.fim), dias: l.dias })) };
+  crEscala(E);
+  return `<section class="pp-crono"><h4>Cronograma físico-financeiro <small>· ${fd(C.inicio)} a ${fd(C.fim)} (${crPrazo(C.dias)})</small></h4>
+    <div class="cr-g"><div class="cr-l cr-cab"><div class="cr-n"></div><div class="cr-t">${crGradeMeses(E, true)}</div></div>${E.linhas.map((l, i) => crLinha(E, l, i)).join('')}</div>
+    <div class="cr-tabm">${C.meses.map(m => `<div><b>${crMes(m.mes)}</b><span>${bpM(m.valor)}</span><small>${crPct(m.pct)} · acum. ${crPct(m.pct_acum)}</small></div>`).join('')}</div></section>`;
+}
+/* Excel com a mesma cara da planilha de orçamento (ExcelJS, carregado só quando precisa): aba "Material x Mão de obra"
  * (cabeçalho verde-petróleo, material em verde, mão de obra em âmbar, BDI/gestão/preço final em roxo, etapas em faixa,
  * subtotais em verde-claro, taxas em azul no quadro amarelo, subtotais e total com fórmula) e aba "Composições"
  * (cada item com os insumos; mão de obra em marrom). Dá para importar de volta no sistema. */
@@ -544,6 +555,44 @@ async function ppExcel(d) {
     }
   });
 
+  /* ---- aba do cronograma físico-financeiro (quando as etapas têm datas): valor de cada etapa por mês, total, acumulado e % ---- */
+  const C = d.cronograma;
+  if (C && C.meses.length) {
+    const ms = C.meses.map(m => m.mes), nm = ms.length, col = n => X.getColumn(n).letter, c0 = 7;
+    const X = wb.addWorksheet('Cronograma', { views: [{ state: 'frozen', xSplit: 6, ySplit: 4, showGridLines: false }], pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    X.columns = [6, 40, 11, 11, 7, 16].concat(ms.map(() => 13)).map(width => ({ width }));
+    X.getCell('A1').value = 'CRONOGRAMA FÍSICO-FINANCEIRO · ' + String(p.empreendimento).toUpperCase();
+    X.getCell('A1').font = fonte({ size: 13, bold: true, color: { argb: COR.escuro } });
+    X.getCell('A2').value = [p.cliente, p.rotulo, fd(C.inicio) + ' a ' + fd(C.fim)].filter(Boolean).join(' · ') + '. Valor de cada etapa distribuído por igual nos dias corridos entre o início e o fim.';
+    X.getCell('A2').font = fonte({ italic: true, color: { argb: COR.nota } });
+    const h = X.getRow(4);
+    h.values = ['ITEM', 'ETAPA', 'INÍCIO', 'FIM', 'DIAS', 'VALOR (R$)'].concat(ms.map(m => crMes(m).toUpperCase()));
+    h.height = 21.75;
+    h.eachCell((c, n) => { c.font = fonte({ bold: true, color: { argb: 'FFFFFFFF' } }); c.fill = fundo(n > 6 ? COR.ambar : COR.petroleo); c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = borda; });
+    const r0 = 5;
+    C.linhas.forEach((l, k) => {
+      const row = X.getRow(r0 + k), dt = s => s ? new Date(s + 'T12:00:00') : '';
+      row.values = [Number(l.codigo) || l.codigo, l.descricao, dt(l.ini), dt(l.fim), l.dias || '', l.valor].concat(ms.map(m => l.meses[m] || ''));
+      row.eachCell({ includeEmpty: true }, (c, n) => {
+        c.font = fonte(); c.border = borda;
+        if (n === 3 || n === 4) c.numFmt = 'dd/mm/yyyy';
+        if (n >= 6) c.numFmt = MOEDA;
+        if ([1, 3, 4, 5].includes(n)) c.alignment = { horizontal: 'center' };
+        if (n >= c0 && l.meses[ms[n - c0]]) c.fill = fundo(COR.amarelo);
+      });
+    });
+    const rT = r0 + C.linhas.length, ult = rT - 1, fx = (r, t, f, fmt, cor) => {
+      const row = X.getRow(r);
+      row.getCell(2).value = t;
+      for (let n = 6; n < c0 + nm; n++) { const v = f(n); if (v !== null) row.getCell(n).value = v; row.getCell(n).numFmt = fmt; }
+      for (let n = 1; n < c0 + nm; n++) { const c = row.getCell(n); c.font = fonte({ bold: true, color: cor ? { argb: 'FFFFFFFF' } : undefined }); c.fill = fundo(cor || COR.subtotal); c.border = borda; }
+    };
+    fx(rT, 'TOTAL DO MÊS', n => ({ formula: `SUM(${col(n)}${r0}:${col(n)}${ult})`, result: n === 6 ? C.total : C.meses[n - c0].valor }), MOEDA, COR.petroleo);
+    fx(rT + 1, 'ACUMULADO', n => n === 6 ? null : { formula: n === c0 ? `${col(n)}${rT}` : `${col(n - 1)}${rT + 1}+${col(n)}${rT}`, result: C.meses[n - c0].acum }, MOEDA);
+    fx(rT + 2, '% DO MÊS', n => n === 6 ? null : { formula: `IFERROR(${col(n)}${rT}/$F$${rT},0)`, result: C.meses[n - c0].pct / 100 }, '0.0%');
+    fx(rT + 3, '% ACUMULADO', n => n === 6 ? null : { formula: `IFERROR(${col(n)}${rT + 1}/$F$${rT},0)`, result: C.meses[n - c0].pct_acum / 100 }, '0.0%');
+  }
+
   const buf = await wb.xlsx.writeBuffer(), nome = (p.rotulo + ' - ' + p.empreendimento).replace(/[\\/:*?"<>|]/g, '-').slice(0, 100) + '.xlsx';
   if (PP.excelBase64) return PP.excelBase64(buf, nome);   // só para teste: devolve o arquivo em vez de baixar
   const a = document.createElement('a');
@@ -553,20 +602,20 @@ async function ppExcel(d) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 
-/* ---------- importar um orçamento do RDObras (vira orçamento em rascunho + composições na base) ---------- */
+/* ---------- importar um orçamento em planilha (vira orçamento em rascunho + composições na base) ---------- */
 async function vPropImportar() {
-  titulo('Importar orçamento do RDObras');
+  titulo('Importar orçamento');
   if (!bpGere()) return bpSem('Gerir');
   await bpCarregar();
   const M = PP.imp = { abas: null, nome: '', pre: null };
   bpTela('props', `<a href="#/orc/orcamentos" class="linkbtn">${ic('back')} Orçamentos de clientes</a>
-    <div class="bp-hero bp-hero-imp"><div class="bp-hero-t"><span class="bp-selo">${ic('upload')} Importação</span><h2>Orçamento do RDObras</h2>
+    <div class="bp-hero bp-hero-imp"><div class="bp-hero-t"><span class="bp-selo">${ic('upload')} Importação</span><h2>Orçamento em planilha</h2>
       <p>Use a planilha com a <b>aba do orçamento</b> (Material x Mão de obra) e a <b>aba Composições</b>. As composições entram (ou são atualizadas) na base de preços e o orçamento é criado em rascunho, com as etapas, as quantidades, o BDI, a gestão e os itens sem BDI da planilha. Nada é gravado antes de você conferir.</p></div>
       <ol class="bp-passos" id="bpPassos"><li class="on"><b>1</b>Arquivo</li><li><b>2</b>Conferir</li><li><b>3</b>Pronto</li></ol></div>
     <div id="ppImp"></div>`);
   const arquivo = () => {
     bpPasso(0);
-    $('#ppImp').innerHTML = `<label class="bp-drop" id="ppDrop"><input type="file" id="ppArq" accept=".xlsx,.xlsm,.xls" hidden>${ic('upload')}<b>Arraste a planilha do orçamento aqui ou toque para escolher</b><small>.xlsx exportado do RDObras (ou baixado deste sistema)</small></label>`;
+    $('#ppImp').innerHTML = `<label class="bp-drop" id="ppDrop"><input type="file" id="ppArq" accept=".xlsx,.xlsm,.xls" hidden>${ic('upload')}<b>Arraste a planilha do orçamento aqui ou toque para escolher</b><small>planilha .xlsx do orçamento (inclusive a baixada deste sistema)</small></label>`;
     const dr = $('#ppDrop');
     ['dragenter', 'dragover'].forEach(ev => dr.addEventListener(ev, e => { e.preventDefault(); dr.classList.add('sobre'); }));
     ['dragleave', 'drop'].forEach(ev => dr.addEventListener(ev, e => { e.preventDefault(); dr.classList.remove('sobre'); }));
@@ -597,7 +646,7 @@ async function vPropImportar() {
       e.preventDefault();
       const f = e.target, b = $('#ppGo'); b.disabled = true; b.textContent = 'Importando…';
       try {
-        const r = await api('prop_importar', { abas: M.abas, aplicar: true, atualizar: f.atu.checked, data_preco: f.data.value, fonte: ('RDObras · ' + M.nome).slice(0, 80),
+        const r = await api('prop_importar', { abas: M.abas, aplicar: true, atualizar: f.atu.checked, data_preco: f.data.value, fonte: ('Planilha · ' + M.nome).slice(0, 80),
           proposta: { cliente: f.cliente.value, empreendimento: f.empreendimento.value, local: f.local.value, bdi_pct: bpPn(f.bdi_pct.value), bdi_base: f.bdi_base.value, gestao_pct: bpPn(f.gestao_pct.value), gestao_base: f.gestao_base.value } });
         toast(r.msg);
         await bpCarregar(true);

@@ -143,12 +143,13 @@ console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diari
   com('pedido_liberar', { numero: pt, previsao: d(2) });
   est('pedido_receber', { numero: pt, itens: { 1: 600, 2: 200 } });
   est('estoque_movimentar', { tipo: 'Saída', material_cod: tubo, qtd: 80, frente: 'Rede de Esgoto' });
+  o('crono_salvar', { frentes: [{ codigo: esg, ini: d(-40), fim: d(80) }, { codigo: agua, ini: d(20), fim: d(110) }] });
   console.log('Orçamento da obra: frentes', esg, agua, '· frente de execução', ex, '· pedido', pt);
 }
 // obra AVA Residence importada das planilhas (orçamento R02, proposta e quantitativos)
 console.log(G.rodar('criarObraAvaResidence()'));
 
-// ---- Orçamentos · base de preços: planilha de composições no formato do RDObras + uma composição com auxiliar ----
+// ---- Orçamentos · base de preços: planilha de composições no formato da planilha de orçamento + uma composição com auxiliar ----
 {
   const MO = 'Mão de obra / serviço', L = [['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT. TOTAL', 'COEF.', 'CUSTO UNIT. (R$)']];
   const comp = (item, cod, desc, un, q, unit, itens) => { L.push([item, '', cod, desc, un, q, '', unit]); itens.forEach(([t, c, d, u, k, p]) => L.push([item, t, c, d, u, q * k, '', p])); };
@@ -160,7 +161,7 @@ console.log(G.rodar('criarObraAvaResidence()'));
   comp('3.1', '10023', 'TUBO PEAD CORRUGADO DN400, PONTA E BOLSA, ASSENTADO', 'M', 800, 169.84, [['Material', 'TPEAD400', 'TUBO PEAD CORRUGADO DN400 (BARRA 6 M)', 'M', 1, 128.34], ['Material', 'CI003', 'AREIA FINA', 'M3', 0.12, 125], [MO, '1121', 'ASSENTAMENTO DE TUBO PEAD DN400', 'M', 1, 26.5]]);
   comp('3.2', '10006', 'BOCA DE LOBO 1,00X1,00X1,50 EM BLOCO ESTRUTURAL, COM GRELHA', 'UN', 20, 1564.23, [['Material', 'BLE14', 'BLOCO ESTRUTURAL DE CONCRETO 14X19X39', 'UN', 90, 4.9], ['Material', 'GRFF', 'GRELHA DE FERRO FUNDIDO 100X40', 'UN', 1, 520], ['Material', 'C05', 'CONCRETO USINADO FCK 30', 'M3', 0.35, 650], [MO, '1099', 'EXECUÇÃO DE BOCA DE LOBO', 'UN', 1, 360.73]]);
   const orc = [['ITEM', 'CÓD.', 'DESCRIÇÃO', 'UN'], ['1', '', 'MOVIMENTAÇÃO DE SOLO (TERRAPLENAGEM)'], ['2', '', 'PAVIMENTAÇÃO'], ['3', '', 'REDE DE DRENAGEM PLUVIAL']];
-  const r = adm('base_importar', { abas: [{ nome: 'Orçamento', linhas: orc }, { nome: 'Composições', linhas: L }], aplicar: true, data_preco: d(-200), fonte: 'RDObras · exemplo' });
+  const r = adm('base_importar', { abas: [{ nome: 'Orçamento', linhas: orc }, { nome: 'Composições', linhas: L }], aplicar: true, data_preco: d(-200), fonte: 'Planilha · exemplo' });
   adm('base_insumo_salvar', { insumo: { codigo: 'RETRO', descricao: 'RETROESCAVADEIRA COM OPERADOR', unidade: 'H', tipo: 'Equipamento', preco: 185, data_preco: d(-20), fonte: 'Cotação Locadora Sul' } });
   adm('base_composicao_salvar', { composicao: { descricao: 'MEIO-FIO COM ABERTURA DE VALA E REATERRO', unidade: 'M', grupo: 'Pavimentação' }, itens: [{ ref_tipo: 'C', ref: '10014', coef: 1 }, { ref: 'RETRO', coef: 0.015 }, { ref: 'EML', coef: 0.06, preco: 21 }] });
   adm('base_precos', { itens: [{ codigo: 'PAV007', preco: 28.9 }, { codigo: 'BL1202', preco: 59.1 }], data_preco: d(-10), origem: 'Cotação Pré-Moldados Sul' });
@@ -171,6 +172,7 @@ console.log(G.rodar('criarObraAvaResidence()'));
   const p1 = prop('Construtora Mar Azul Ltda', 'Loteamento Dunas · infraestrutura', 'Xangri-lá/RS', [{ tipo: 'E', descricao: 'Terraplenagem' }, { comp_cod: 'LCMV', qtd: 12000, unidade: 'M2' }, { comp_cod: 'EML', qtd: 6500, unidade: 'M3' },
     { tipo: 'E', descricao: 'Pavimentação' }, { comp_cod: '10034', qtd: 900, unidade: 'M3' }, { comp_cod: '10011', qtd: 6000, unidade: 'M2' }, { comp_cod: '10014', qtd: 2400, unidade: 'M' },
     { tipo: 'E', descricao: 'Drenagem pluvial' }, { comp_cod: '10023', qtd: 1100, unidade: 'M' }, { comp_cod: '10006', qtd: 24, unidade: 'UN' }, { tipo: 'E', descricao: 'Canteiro' }, { descricao: 'Mobilização e canteiro de obras', unidade: 'VB', qtd: 1, unit_mat: 18000, unit_mo: 22000 }]);
+  adm('prop_cronograma', { id: p1, etapas: [{ codigo: '1', ini: d(30), fim: d(75) }, { codigo: '2', ini: d(70), fim: d(190) }, { codigo: '3', ini: d(60), fim: d(150) }, { codigo: '4', ini: d(25), fim: d(200) }] });
   adm('prop_status', { id: p1, op: 'enviar' });
   const p2 = prop('Incorporadora Litoral', 'Condomínio Brisa · pavimentação', 'Capão da Canoa/RS', [{ tipo: 'E', descricao: 'Pavimentação' }, { comp_cod: '10011', qtd: 3200, unidade: 'M2' }, { comp_cod: 'CMP-0001', qtd: 1400, unidade: 'M' }]);
   adm('prop_status', { id: p2, op: 'aprovar' });

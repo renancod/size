@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
- * INÍCIO DA EMPRESA (fora de obra), no estilo da tela inicial do RDObras: saudação, ações rápidas,
+ * INÍCIO DA EMPRESA (fora de obra): saudação, ações rápidas,
  * as obras (mapa + cartões; tocar = entrar na obra) e, para quem tem o módulo Orçamentos,
  * os orçamentos de clientes e a base de preços. Dentro da obra, o menu lateral mostra só o que é da obra.
  * Usa app.js (api, view, trocarObra, NOTIF…) e o visual do módulo Orçamentos (base.js / style.css).
@@ -30,7 +30,7 @@ async function vEmpresa() {
     D.nivel && ['#/orc/orcamentos', 'file', 'Orçamentos'],
     gere && ['#/orc/composicao/nova', 'layers', 'Nova composição'],
     gere && ['ins', 'box', 'Novo insumo'],
-    gere && ['#/orc/importar', 'upload', 'Importar do RDObras'],
+    gere && ['#/orc/importar', 'upload', 'Importar orçamento'],
     D.admin && ['#/admin/obras', 'building', 'Nova obra'],
     D.admin && ['#/admin/usuarios', 'users', 'Usuários e acessos']
   ].filter(Boolean);
@@ -80,7 +80,7 @@ async function empEntrar(id) {
   if (id === S.obraId && S.dados) { location.hash = '#/painel'; return; }
   await trocarObra(id);
 }
-/* mapa das obras (Leaflet + OpenStreetMap, como o do RDObras); carregado só quando precisa */
+/* mapa das obras (Leaflet + OpenStreetMap); carregado só quando precisa */
 async function empLeaflet() {
   if (window.L) return;
   await new Promise((ok, no) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = EMP_LEAFLET[0]; l.onload = ok; l.onerror = no; document.head.appendChild(l); });

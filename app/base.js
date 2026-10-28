@@ -1,10 +1,10 @@
 'use strict';
 /* =====================================================================
- * ORÇAMENTOS · base de preços da Size: insumos e composições de serviço (estilo RDObras / OrçaFácil).
+ * ORÇAMENTOS · base de preços da Size: insumos e composições de serviço.
  * Não depende de obra: o acesso vem do cadastro do usuário (Ver | Gerir).
  * Telas: painel da base, composições (fichas, ficha analítica com curva ABC e simulação de quantidade,
  * bancada de edição com custo ao vivo), insumos (preço, data-base, histórico, reajuste e preços colados)
- * e a importação da planilha de composições do RDObras (lida no navegador com o SheetJS).
+ * e a importação da planilha de composições (lida no navegador com o SheetJS).
  * Usa app.js (api, modal, view, comEtapas, ligarEtapas…).
  * ===================================================================== */
 Object.assign(IC, {
@@ -175,7 +175,7 @@ function bpGrupos(aqui) {
     { k: 'comp', t: 'Composições', i: 'layers', n: D.composicoes.length, on: aqui === 'comp' },
     { k: 'ins', t: 'Insumos', i: 'box', n: D.insumos.length, on: aqui === 'ins' }] }];
   if (bpGere()) g.push({ t: 'Ações', itens: [{ k: 'a:prop', t: 'Novo orçamento', i: 'plus', cl: 'acao' }, { k: 'a:comp', t: 'Nova composição', i: 'plus', cl: 'acao' }, { k: 'a:ins', t: 'Novo insumo', i: 'plus', cl: 'acao' },
-    { k: 'a:imp', t: 'Importar do RDObras', i: 'upload', cl: 'acao', on: aqui === 'imp' }] });
+    { k: 'a:imp', t: 'Importar orçamento', i: 'upload', cl: 'acao', on: aqui === 'imp' }] });
   return g;
 }
 function bpTela(aqui, html) {
@@ -208,8 +208,8 @@ async function vBase() {
   if (!baseNivel()) return bpSem();
   const D = await bpCarregar(), I = D.insumos, C = D.composicoes, g = bpGere();
   if (!I.length && !C.length) {
-    return bpTela('painel', `${bpHero('Base de preços', 'Insumos e composições que alimentam os orçamentos dos novos clientes. Comece trazendo o que você já tem no RDObras.', '', '')}
-      <div class="bp-comeco">${[['upload', 'Importe do RDObras', 'A planilha de composições exportada vira insumos e composições aqui, com os mesmos custos.', '#/orc/importar'],
+    return bpTela('painel', `${bpHero('Base de preços', 'Insumos e composições que alimentam os orçamentos dos novos clientes. Comece importando as planilhas de orçamento que você já tem.', '', '')}
+      <div class="bp-comeco">${[['upload', 'Importe sua planilha', 'A planilha de composições exportada vira insumos e composições aqui, com os mesmos custos.', '#/orc/importar'],
         ['box', 'Cadastre insumos', 'Materiais, mão de obra, equipamentos e serviços de terceiro, com preço e data-base.', 'ins'],
         ['layers', 'Monte composições', 'Cada serviço com seus insumos e coeficientes. O custo é recalculado sozinho quando um preço muda.', '#/orc/composicao/nova']]
         .map(([i, t, s, h], n) => `<div class="bp-passo"><span class="bp-num">${n + 1}</span>${ic(i)}<b>${t}</b><small>${s}</small>${g ? (h === 'ins' ? '<button class="btn sec peq" id="bpNovoIns">Novo insumo</button>' : `<a class="btn ${n ? 'sec' : ''} peq" href="${h}">${n ? 'Nova composição' : 'Importar planilha'}</a>`) : ''}</div>`).join('')}</div>`), bpLigaNovoIns();
@@ -224,7 +224,7 @@ async function vBase() {
   const recentes = C.slice().sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em))).slice(0, 5);
   bpTela('painel', `${bpHero('Base de preços', 'Insumos e composições que alimentam os orçamentos dos novos clientes. Os custos são recalculados na hora a partir dos preços dos insumos.',
     `<div class="bp-hero-n"><div><b>${C.length}</b><small>composições</small></div><div><b>${I.length}</b><small>insumos</small></div><div><b>${maisAntiga ? fd(maisAntiga).slice(3) : '—'}</b><small>preço mais antigo em uso</small></div></div>`,
-    g ? `<a class="btn bp-ac" href="#/orc/composicao/nova">${ic('plus')} Nova composição</a><a class="btn sec" href="#/orc/importar">${ic('upload')} Importar do RDObras</a>` : '')}
+    g ? `<a class="btn bp-ac" href="#/orc/composicao/nova">${ic('plus')} Nova composição</a><a class="btn sec" href="#/orc/importar">${ic('upload')} Importar orçamento</a>` : '')}
     <div class="bp-kpis">
       <div class="card"><small>Insumos por tipo</small><div class="bp-barra grossa">${porTipo.filter(t => t.q).map(t => `<i class="k-${t.k}" style="width:${t.q / totI * 100}%"></i>`).join('')}</div>
         <div class="bp-leg">${porTipo.filter(t => t.q).map(t => `<span><i class="bp-dot k-${t.k}"></i>${t.n} <b>${t.q}</b></span>`).join('')}</div></div>
@@ -285,7 +285,7 @@ async function vBaseComps(qs) {
   const desenhar = () => {
     const l = filtrar();
     $('#bpN').textContent = plural(l.length, 'composição', 'composições');
-    $('#bpLista').innerHTML = l.slice(0, F.lim).map(bpFicha).join('') || `<div class="card vazio" style="grid-column:1/-1"><p>Nenhuma composição ${F.q ? 'com “' + esc(F.q) + '”' : 'aqui'}.</p>${bpGere() && !D.composicoes.length ? `<a class="btn" href="#/orc/importar">${ic('upload')} Importar do RDObras</a>` : ''}</div>`;
+    $('#bpLista').innerHTML = l.slice(0, F.lim).map(bpFicha).join('') || `<div class="card vazio" style="grid-column:1/-1"><p>Nenhuma composição ${F.q ? 'com “' + esc(F.q) + '”' : 'aqui'}.</p>${bpGere() && !D.composicoes.length ? `<a class="btn" href="#/orc/importar">${ic('upload')} Importar orçamento</a>` : ''}</div>`;
     $('#bpMais').hidden = l.length <= F.lim;
   };
   let tm;
@@ -736,18 +736,18 @@ function bpColarPrecos() {
   };
 }
 
-/* ---------- importação do RDObras ---------- */
+/* ---------- importação de planilha ---------- */
 const BP_XLSX = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 function bpScript(u) {
   return new Promise((ok, no) => { const s = document.createElement('script'); s.src = u; s.onload = ok; s.onerror = () => no(new Error('Não consegui carregar o leitor de planilhas. Confira a internet e tente de novo.')); document.head.appendChild(s); });
 }
 async function vBaseImportar() {
-  titulo('Importar do RDObras');
+  titulo('Importar orçamento');
   if (!bpGere()) return bpSem('Gerir');
   await bpCarregar();
   BP.imp = { abas: null, nome: '', plano: null, data: hoje(), atualizar: true };
-  bpTela('imp', `<div class="bp-hero bp-hero-imp"><div class="bp-hero-t"><span class="bp-selo">${ic('upload')} Importação</span><h2>Trazer composições do RDObras</h2>
-      <p>Use a planilha exportada do RDObras: a aba <b>Composições</b> (Item, Tipo, Código, Descrição, Un, Quant. e Custo unitário). Se a aba do orçamento vier junto, cada composição já entra com o nome da etapa. Nada é gravado antes de você conferir.</p></div>
+  bpTela('imp', `<div class="bp-hero bp-hero-imp"><div class="bp-hero-t"><span class="bp-selo">${ic('upload')} Importação</span><h2>Trazer composições de uma planilha</h2>
+      <p>Use a planilha de composições: a aba <b>Composições</b> (Item, Tipo, Código, Descrição, Un, Quant. e Custo unitário). Se a aba do orçamento vier junto, cada composição já entra com o nome da etapa. Nada é gravado antes de você conferir.</p></div>
       <ol class="bp-passos" id="bpPassos"><li class="on"><b>1</b>Arquivo</li><li><b>2</b>Conferir</li><li><b>3</b>Pronto</li></ol></div>
     <div id="bpImp"></div>`);
   bpImpArquivo();
@@ -824,7 +824,7 @@ async function bpImpConferir() {
   $('#bpGo').onclick = async () => {
     const b = $('#bpGo'); b.disabled = true; b.textContent = 'Importando…';
     try {
-      const r = await api('base_importar', { abas: M.abas, atualizar: M.atualizar, aplicar: true, data_preco: M.data, fonte: ('RDObras · ' + M.nome).slice(0, 80) });
+      const r = await api('base_importar', { abas: M.abas, atualizar: M.atualizar, aplicar: true, data_preco: M.data, fonte: ('Planilha · ' + M.nome).slice(0, 80) });
       await bpCarregar(true);
       bpImpPronto(r);
     } catch (e) { toast(e.message, 1); b.disabled = false; b.textContent = 'Tentar de novo'; }

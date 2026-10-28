@@ -132,6 +132,8 @@ const ROTAS = {
   obra_relatorio: { obra: true, perm: ['orc_ver', 'orc_gerir', 'exec_planejar'], fn: obraRelatorio_ },
   obra_relatorio_email: { obra: true, perm: ['orc_ver', 'orc_gerir', 'exec_planejar'], fn: execRelatorioEmail_ },
   orc_frente_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcFrenteSalvar_ },
+  crono_obra: { obra: true, perm: ['orc_ver', 'orc_gerir'], fn: cronoObra_ },
+  crono_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: cronoObraSalvar_ },
   orc_itens_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcItensSalvar_ },
   orc_item_remover: { obra: true, perm: 'orc_gerir', lock: true, fn: orcItemRemover_ },
   orc_material_salvar: { obra: true, perm: 'orc_gerir', lock: true, fn: orcMaterialSalvar_ },
@@ -159,6 +161,7 @@ const ROTAS = {
   prop_excluir: { base: 'Gerir', lock: true, fn: propExcluir_ },
   prop_gerar_obra: { admin: true, base: 'Gerir', lock: true, fn: propGerarObra_ },
   prop_importar: { base: 'Gerir', lock: true, fn: propImportar_ },
+  prop_cronograma: { base: 'Gerir', lock: true, fn: propCronoSalvar_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },

@@ -106,7 +106,7 @@ test('acesso: "Ver" consulta; sem acesso não vê; gerar obra só administrador'
   assert.deepEqual(e.obras, []);
 });
 
-/* planilha do RDObras: aba do orçamento (com BDI e gestão no topo e a mobilização sem BDI) + aba Composições */
+/* planilha de orçamento: aba do orçamento (com BDI e gestão no topo e a mobilização sem BDI) + aba Composições */
 const ORC = [
   ['', '', 'PLANILHA ORÇAMENTÁRIA · MATERIAL x MÃO DE OBRA', '', '', '', '', '', '', '', '', '', '', 'BDI s/ serviços (%)', 0.18],
   ['', '', 'Residencial Dunas · Xangri-lá/RS · Orçamento nº 7', '', '', '', '', '', '', '', '', '', '', 'Gestão de obra (%)', 0.06],
@@ -127,7 +127,7 @@ const COMP = [
   ['2.1', '', '', 'MOBILIZAÇÃO', 'VB', 1, '', 5000],
   ['2.1', 'Mão de obra / serviço', 'MOB1', 'MOBILIZAÇÃO DE EQUIPE', 'VB', 1, '', 5000]
 ];
-test('importar orçamento do RDObras: etapas, quantidades, BDI e gestão do arquivo, item sem BDI e composições na base', () => {
+test('importar orçamento em planilha: etapas, quantidades, BDI e gestão do arquivo, item sem BDI e composições na base', () => {
   const t = preparar();
   const abas = [{ nome: 'Material x Mão de obra', linhas: ORC }, { nome: 'Composições', linhas: COMP }];
   const pre = t.adm('prop_importar', { abas });

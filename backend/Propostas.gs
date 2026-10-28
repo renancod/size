@@ -63,7 +63,7 @@ function propCalc_(p, itens) {
 }
 function propPub_(p, comTotal) {
   const o = pub_(p);
-  delete o.historico_json;
+  delete o.historico_json; delete o.cronograma_json;
   o.rotulo = propRotulo_(p);
   o.revisao = num_(p.revisao);
   ['bdi_pct', 'gestao_pct', 'validade_dias'].forEach(k => { o[k] = num_(p[k]); });
@@ -90,7 +90,7 @@ function propDetalhe_(q, ctx) {
     .sort((a, b) => a.revisao - b.revisao);
   const obra = p.obra_id ? central_('Obras').all().find(o => String(o.id) === String(p.obra_id)) : null;
   return {
-    proposta: propPub_(p), itens: calc.linhas, etapas: calc.etapas, total: calc.total, historico: hist.reverse(), revisoes: revisoes,
+    proposta: propPub_(p), itens: calc.linhas, etapas: calc.etapas, total: calc.total, historico: hist.reverse(), revisoes: revisoes, cronograma: propCrono_(p, calc),
     obra: obra ? { id: String(obra.id), nome: obra.nome, sigla: obra.sigla } : null,
     editavel: p.status === 'Rascunho' && ctx.base === 'Gerir', nivel: ctx.base, admin: ctx.admin,
     empresa: String(config_().EMPRESA || 'Size Engenharia')
@@ -242,11 +242,11 @@ function propExcluir_(q, ctx) {
   return { msg: 'Orçamento ' + propRotulo_(p) + ' excluído.' };
 }
 
-/* ---------- importar um orçamento do RDObras (a mesma planilha da base: aba do orçamento + aba Composições) ----------
+/* ---------- importar um orçamento em planilha (a mesma planilha da base: aba do orçamento + aba Composições) ----------
  * conferir (sem gravar) ou aplicar: atualiza a base de preços com as composições do arquivo e cria o orçamento em rascunho,
- * com uma etapa por grupo do RDObras, cada item ligado à composição e na quantidade da planilha; BDI e gestão vêm do arquivo */
+ * com uma etapa por grupo da planilha, cada item ligado à composição e na quantidade da planilha; BDI e gestão vêm do arquivo */
 function propImportar_(q, ctx) {
-  const P = baseLerRdo_(q.abas), plano = basePlanoImport_(P, q.atualizar !== false && q.atualizar !== 'false');
+  const P = baseLerPlanilha_(q.abas), plano = basePlanoImport_(P, q.atualizar !== false && q.atualizar !== 'false');
   const itens = [];
   let et = null, precoPlan = 0;
   P.blocos.forEach(b => {
@@ -294,7 +294,8 @@ function propGerarObra_(q, ctx) {
   const o = criarObra_(String(q.nome || p.empreendimento).trim(), q.sigla, String(q.endereco || p.local || '').trim(), nomes);
   if (q.lat !== undefined && String(q.lat || '').trim()) { obraLocal_(o, q); central_('Obras').update(o); }
   const octx = { u: ctx.u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
-  const ix = baseIndice_(), Mt = obraTab_(octx, 'Materiais'), Fr = obraTab_(octx, 'Frentes');
+  const ix = baseIndice_(), Mt = obraTab_(octx, 'Materiais'), Fr = obraTab_(octx, 'Frentes'), crono = {};
+  propCrono_(p, calc).linhas.forEach(l => { crono[l.codigo] = l; });
   let nServ = 0, nMat = 0;
   etapas.forEach(e => {
     const f = orcFrente_(octx, e.descricao);
@@ -302,7 +303,8 @@ function propGerarObra_(q, ctx) {
     const r = orcItensSalvar_({ frente: f.codigo, itens: its.map(i => ({ codigo: i.codigo, grupo: e.descricao, servico: i.descricao, unidade: i.unidade, qtd: i.qtd,
       unit_material: baseR4_(i.unit_mat), unit_mo: baseR4_(i.unit_mo + i.unit_eq + i.unit_sv), unit_venda: i.preco_unit, obs: i.comp_cod ? 'Composição ' + i.comp_cod + ' · ' + propRotulo_(p) : propRotulo_(p) })) }, octx);
     nServ += its.length;
-    Object.assign(f, { preco: e.preco, custo_direto: e.custo, adm_local: 0, indiretas: 0, tributos: 0, descricao: 'Do orçamento ' + propRotulo_(p) });
+    Object.assign(f, { preco: e.preco, custo_direto: e.custo, adm_local: 0, indiretas: 0, tributos: 0, descricao: 'Do orçamento ' + propRotulo_(p),
+      inicio: (crono[e.codigo] || {}).ini || '', fim: (crono[e.codigo] || {}).fim || '' });
     Fr.update(f);
     // materiais de cada serviço: o que a composição gasta por unidade (já com a perda que estiver no coeficiente)
     its.forEach((i, n) => {

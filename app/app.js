@@ -46,7 +46,7 @@ const IC = {
   book: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z', chevron: 'M9 18l6-6-6-6',
   alert: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z', check: 'M20 6L9 17l-5-5',
   clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2', bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
-  minus: 'M5 12h14', sliders2: 'M12 20V10M18 20V4M6 20v-4', send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z', eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'
+  minus: 'M5 12h14', cal: 'M4 5h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM16 3v4M8 3v4M3 10h18M8 14h3M8 17h6', sliders2: 'M12 20V10M18 20V4M6 20v-4', send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z', eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'
 };
 const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${IC[n]}"/></svg>`;
 
@@ -251,19 +251,20 @@ const MODULOS = [
       { h: '#/obra', t: 'Painel da obra', i: 'chart', ok: () => can(['orc_ver', 'orc_gerir']) },
       { h: '#/obra/orcamento', t: 'Orçamento (quantidades)', i: 'list', ok: () => can(['orc_ver', 'orc_gerir']) },
       { h: '#/obra/financeiro', t: 'Valores (financeiro)', i: 'money', ok: () => can(['orc_ver', 'orc_gerir']) },
+      { h: '#/obra/cronograma', t: 'Cronograma físico-financeiro', i: 'cal', ok: () => can(['orc_ver', 'orc_gerir']) },
       { h: '#/obra/relatorio', t: 'Relatório da obra', i: 'file', ok: () => can(['orc_ver', 'orc_gerir', 'exec_planejar']) }
     ]
   },
   {
     id: 'orcamentos', t: 'Orçamentos', i: 'calc', home: '#/orc/orcamentos', global: true,   // global: fica na parte "Empresa", sem depender de obra
-    desc: 'Orçamentos de novos clientes a partir da base de preços da Size (insumos e composições, como no RDObras e no OrçaFácil); o orçamento aprovado vira obra',
+    desc: 'Orçamentos de novos clientes a partir da base de preços da Size (insumos e composições); o orçamento aprovado vira obra',
     rotas: /^#\/orc/,
     itens: [
       { h: '#/orc/orcamentos', t: 'Orçamentos de clientes', i: 'file', ok: () => !!baseNivel() },
       { h: '#/orc', t: 'Base de preços', i: 'chart', ok: () => !!baseNivel() },
       { h: '#/orc/composicoes', t: 'Composições', i: 'layers', ok: () => !!baseNivel() },
       { h: '#/orc/insumos', t: 'Insumos', i: 'box', ok: () => !!baseNivel() },
-      { h: '#/orc/importar', t: 'Importar do RDObras', i: 'upload', ok: () => baseNivel() === 'Gerir' }
+      { h: '#/orc/importar', t: 'Importar orçamento', i: 'upload', ok: () => baseNivel() === 'Gerir' }
     ]
   }
 ];

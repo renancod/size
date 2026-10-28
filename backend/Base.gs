@@ -1,11 +1,11 @@
 /**
- * ORÇAMENTOS · base de preços da empresa (planilha central), no estilo RDObras / OrçaFácil.
+ * ORÇAMENTOS · base de preços da empresa (planilha central).
  *  - Insumo: material, mão de obra, equipamento ou serviço de terceiro, com preço e data-base; cada mudança de preço fica em InsumoPrecos.
  *  - Composição: serviço formado por insumos e/ou outras composições (auxiliares) × coeficiente por unidade do serviço.
  *    O item pode ter preço próprio na composição (ex: o assentamento do DN 125 sai mais caro que o do DN 75); vazio = preço do cadastro.
  *  - O custo unitário é calculado na hora, separado em material, mão de obra, equipamento e serviço de terceiro,
  *    com a data-base mais antiga dos preços usados.
- *  - Importação da planilha de composições exportada do RDObras (Item · Tipo · Código · Descrição · Un · Quant. · Custo unit.).
+ *  - Importação da planilha de composições (Item · Tipo · Código · Descrição · Un · Quant. · Custo unit.).
  * Acesso pelo cadastro do usuário (Usuarios.orcamentos = Ver | Gerir), sem depender de obra; o administrador gere.
  */
 const BASE_NIVEIS = ['Ver', 'Gerir'];
@@ -34,7 +34,7 @@ function baseData_(v) { if (!v) return ''; return v instanceof Date ? Utilities.
 function baseDataIso_(v) { const s = baseData_(v); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; }
 const baseAtivo_ = o => o.ativo === '' || o.ativo == null || sim_(o.ativo);
 const basePrecoProprio_ = x => x.preco !== '' && x.preco != null;
-/* tipo como vem do RDObras ("Mão de obra / serviço") ou digitado ("mao de obra", "equip.") */
+/* tipo como vem da planilha ("Mão de obra / serviço") ou digitado ("mao de obra", "equip.") */
 function baseTipo_(t) {
   const s = norm_(t);
   if (!s) return '';
@@ -327,27 +327,27 @@ function baseComposicaoDuplicar_(q, ctx) {
   return { msg: 'Cópia criada: ' + novo + '. Ajuste a descrição e os itens.', codigo: novo };
 }
 
-/* ---------- importação do RDObras ---------- */
-const RDO_COLS_ = { item: /^item$/, tipo: /^tipo$/, cod: /^(cod|codigo)\b/, desc: /^descri/, un: /^(un|und|unid|unidade)\.?$/, qtd: /^quant/, unit: /^(custo|preco|valor) unit/,
+/* ---------- importação de planilha ---------- */
+const PLAN_COLS_ = { item: /^item$/, tipo: /^tipo$/, cod: /^(cod|codigo)\b/, desc: /^descri/, un: /^(un|und|unid|unidade)\.?$/, qtd: /^quant/, unit: /^(custo|preco|valor) unit/,
   bdi: /^bdi/, gest: /^gestao/, mot: /^mao de obra.*total/, ptot: /^preco total/ };   // as 4 últimas só na aba do orçamento (item sem BDI / sem gestão)
-function rdoCabecalho_(linhas, obrig) {
+function planCabecalho_(linhas, obrig) {
   for (let r = 0; r < Math.min(linhas.length, 40); r++) {
     const row = (linhas[r] || []).map(x => norm_(x)), c = {};
-    Object.keys(RDO_COLS_).forEach(k => { c[k] = row.findIndex(x => RDO_COLS_[k].test(x)); });
+    Object.keys(PLAN_COLS_).forEach(k => { c[k] = row.findIndex(x => PLAN_COLS_[k].test(x)); });
     if (obrig.every(k => c[k] >= 0)) return { r: r, c: c };
   }
   return null;
 }
-const rdoNum_ = v => (typeof v === 'number' ? v : /^\s*=/.test(String(v == null ? '' : v)) || String(v == null ? '' : v).trim() === '' ? null : num_(v));
+const planNum_ = v => (typeof v === 'number' ? v : /^\s*=/.test(String(v == null ? '' : v)) || String(v == null ? '' : v).trim() === '' ? null : num_(v));
 /* lê as abas (linhas × colunas, como o Excel mostra): a de composições (com a coluna Tipo) e, se vier, a do orçamento (para o nome das etapas) */
-function baseLerRdo_(abas) {
+function baseLerPlanilha_(abas) {
   let comp = null, orc = null;
   [].concat(abas || []).forEach(a => {
     const L = (a && a.linhas) || [];
-    if (!comp) { const h = rdoCabecalho_(L, ['tipo', 'desc', 'qtd', 'unit']); if (h) { comp = { nome: a.nome, L: L, h: h }; return; } }
-    if (!orc) { const h = rdoCabecalho_(L, ['item', 'desc', 'un']); if (h) orc = { L: L, h: h }; }
+    if (!comp) { const h = planCabecalho_(L, ['tipo', 'desc', 'qtd', 'unit']); if (h) { comp = { nome: a.nome, L: L, h: h }; return; } }
+    if (!orc) { const h = planCabecalho_(L, ['item', 'desc', 'un']); if (h) orc = { L: L, h: h }; }
   });
-  if (!comp) throw new Error('Não encontrei a planilha de composições. Ela precisa das colunas Tipo, Código, Descrição, Un, Quant. e Custo unitário (como a aba "Composições" exportada do RDObras).');
+  if (!comp) throw new Error('Não encontrei a planilha de composições. Ela precisa das colunas Tipo, Código, Descrição, Un, Quant. e Custo unitário (como a aba "Composições" da planilha de orçamento).');
   const etapas = {}, taxas = {}, semTaxa = {};
   let titulo = '';
   if (orc) {
@@ -388,7 +388,7 @@ function baseLerRdo_(abas) {
     const row = comp.L[r] || [], desc = String(cel(row, 'desc')).trim();
     if (!desc) continue;
     const tipoTxt = String(cel(row, 'tipo')).trim();
-    const l = { item: String(cel(row, 'item')).trim(), codigo: baseCodigo_(cel(row, 'cod')), descricao: desc.slice(0, 300), unidade: String(cel(row, 'un')).trim(), qtd: rdoNum_(cel(row, 'qtd')), unit: rdoNum_(cel(row, 'unit')) };
+    const l = { item: String(cel(row, 'item')).trim(), codigo: baseCodigo_(cel(row, 'cod')), descricao: desc.slice(0, 300), unidade: String(cel(row, 'un')).trim(), qtd: planNum_(cel(row, 'qtd')), unit: planNum_(cel(row, 'unit')) };
     if (!tipoTxt) {
       cur = { item: l.item, codigo: l.codigo, descricao: l.descricao, unidade: l.unidade, qtd: l.qtd || 0, unit: l.unit, grupo: etapas[l.item.split('.')[0]] || '', itens: [] };
       blocos.push(cur);
@@ -467,11 +467,11 @@ function basePlanoImport_(P, atualizar) {
 }
 function baseImportar_(q, ctx) {
   const atualizar = q.atualizar !== false && q.atualizar !== 'false';
-  const plano = basePlanoImport_(baseLerRdo_(q.abas), atualizar);
+  const plano = basePlanoImport_(baseLerPlanilha_(q.abas), atualizar);
   const saida = () => ({ resumo: plano.resumo, avisos: plano.avisos, insumos: plano.insumos, composicoes: plano.composicoes.map(c => { const o = Object.assign({}, c); delete o.assin; delete o.itens; return o; }) });
   if (!q.aplicar) return saida();
   const T = central_('Insumos'), C = central_('Composicoes'), IT = central_('ComposicaoItens'), ix = baseIndice_();
-  const agora = new Date(), data = baseDataIso_(q.data_preco) || baseHoje_(), fonte = String(q.fonte || 'Importação RDObras').slice(0, 80), quem = ctx.u.nome;
+  const agora = new Date(), data = baseDataIso_(q.data_preco) || baseHoje_(), fonte = String(q.fonte || 'Importação de planilha').slice(0, 80), quem = ctx.u.nome;
   const novosI = [], hist = [];
   let mudouI = false;
   plano.insumos.forEach(p => {
