@@ -1048,10 +1048,10 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 @media (max-width:759px){.bp-fotolado{order:-1}.bp-fotobox{max-width:220px;justify-self:center;width:100%}}
 /* contrato: serviço escolhido na base de preços, no catálogo ou novo */
 .ct-sv{position:relative}
-.ct-res{display:block;top:100%;margin-top:4px;min-width:min(560px,88vw);font-weight:400;color:var(--txt)}
-.ct-res .bp-op{display:flex;width:100%}.ct-res .bp-op>span:nth-child(2){flex:1;min-width:0;display:grid}.ct-res .bp-op .bp-mono{flex:none}
+.bp-res.ct-res{display:block;top:100%;margin-top:4px;min-width:min(560px,88vw);font-weight:400;color:var(--txt)}
+.bp-res.ct-res .bp-op{display:flex;width:100%}.bp-res.ct-res .bp-op>span:nth-child(2){flex:1;min-width:0;display:grid}.bp-res.ct-res .bp-op .bp-mono{flex:none}
 .ct-res-t{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);padding:8px 10px 2px}
-.ct-res .bp-op>.ic{color:var(--bp-ac);width:18px;height:18px}
+.bp-res.ct-res .bp-op>.ic{color:var(--bp-ac);width:18px;height:18px}
 .ct-li .ct-bref{grid-column:1/-1;margin-top:-2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#8A5A00}
 .ct-li .ct-bref .ic{width:15px;height:15px;color:var(--bp-ac)}
 .ct-li .ct-bref code{font-family:var(--bp-mono);font-size:.8rem}
@@ -1351,3 +1351,8 @@ p.cr-vazio{position:static;transform:none;padding:20px}
 /* cronograma da proposta: página própria, deitada (A4 paisagem), para caber a linha do tempo inteira */
 @page crono{size:A4 landscape;margin:10mm}
 @media print{.pp-crono{page:crono;break-before:page}.pp-crono .cr-tabm{grid-template-columns:repeat(9,minmax(0,1fr))}.pp-doc .cr-l{grid-template-columns:minmax(230px,28%) minmax(0,1fr)}}
+/* computador: as telas usam toda a largura útil (antes ficavam presas em 1080 px no meio); a folha A4 e a proposta continuam no tamanho do papel */
+@media (min-width:960px){.view{max-width:2400px}.comlado{grid-template-columns:minmax(0,1fr) 260px;gap:22px}}@container (min-width:1100px){.bp-bancada{grid-template-columns:minmax(0,1fr) 340px}}
+.bp-res-top div{min-width:0}.bp-res-top b{overflow-wrap:anywhere}
+.bp-res-cats div{grid-template-columns:auto minmax(0,1fr) auto 38px}.bp-res-cats b{white-space:nowrap}
+@container (min-width:860px) and (max-width:1099px){.bp-res-top .bp-donut{width:56px;height:56px}.bp-res-top b{font-size:1.25rem}}@media (min-width:1500px){.rel-grid{grid-template-columns:minmax(440px,560px) minmax(0,1fr)}}.ct-res:not(.bp-res),.or-res{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
