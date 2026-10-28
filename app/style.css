@@ -1146,7 +1146,7 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .pp-doc-n{margin-left:auto;text-align:right}.pp-doc-n b{font-family:var(--bp-mono);font-size:1.1rem}
 .pp-doc-c{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0}
 .pp-doc-c>div{display:grid;gap:2px;padding:12px 14px;border-radius:8px;background:#F4F6FA}.pp-doc-c small{text-transform:uppercase;font-size:.66rem;letter-spacing:.06em;color:var(--mute);font-weight:700}.pp-doc-c b{color:var(--bp-ink)}.pp-doc-c span{font-size:.85rem}
-.pp-doc .rolar{overflow:visible}
+.pp-doc .rolar{overflow-x:auto}@media print{.pp-doc .rolar{overflow:visible}}
 .pp-doc .pp-tab{font-size:.8rem}
 .pp-doc-tot{display:flex;justify-content:space-between;align-items:center;margin:16px 0;padding:14px 18px;border-radius:8px;background:var(--bp-ink);color:#fff}
 .pp-doc-tot b{font-size:1.4rem}
@@ -1200,3 +1200,34 @@ details.pp-sec>summary::after{content:"Editar";font-size:.76rem;font-weight:700;
 details.pp-sec[open]>summary{margin-bottom:12px}details.pp-sec[open]>summary::after{content:"Recolher"}.pp-ins-cab{display:grid;gap:2px;margin-bottom:10px}.pp-ins-cab b{color:var(--bp-ink);font-size:1rem}
 .pp-ver{font-weight:600;font-size:.9rem;line-height:1.25;text-decoration:underline dotted #B8C2D2;text-underline-offset:3px}.pp-ver:hover{text-decoration-color:var(--teal)}
 @media print{.pp-ver{text-decoration:none;font-weight:400}}
+
+/* celular: nada estica a tela para os lados (itens de grade e de linha podem encolher; textos longos cortam com "…") */
+.bp-2>*,.bp-kpis>*,.bp-grupos>*,.bp-fichas>*,.pp-lista>*,.emp-obras>*,.bp-cats>*,.bp-tiles>*,.bp-bancada>*,.bp-ed-main>*,.bp-insmod>*,.emp>*{min-width:0}
+.bp-linha>span:not(.bp-mono):not(.bp-foto){flex:1;min-width:0}
+.bp-hero-t,.bp-hero-custo>div{min-width:0}
+.bp-hero h2{overflow-wrap:anywhere}
+@media (max-width:520px){
+  .bp-hero{padding:16px}.bp-hero h2{font-size:1.2rem}
+  .bp-hero-custo{width:100%}.bp-hero-custo b{font-size:1.5rem}
+  .bp-hero-n div{min-width:0;flex:1 1 90px}
+  .bp-hero .acoes .btn{flex:1 1 auto}
+  .pp-doc{padding:16px 12px}.pp-doc-c{grid-template-columns:1fr}.pp-doc-h{flex-wrap:wrap}
+  .pp-doc-bar .acoes .btn{flex:1 1 auto}
+}.mcorpo{grid-template-columns:minmax(0,1fr)}.mcorpo>*{min-width:0}
+.bp-linha>span:not(.bp-mono):not(.bp-foto){display:grid;grid-template-columns:minmax(0,1fr)}.bp-linha>span>*{min-width:0}
+.pp-l.it>*,.pp-l.it input,.bp-it>*,.bp-it input,.ct-li>*,.ct-li input{min-width:0}
+@container (max-width:900px){.pp-l.it{grid-template-columns:36px minmax(0,1fr) minmax(0,1fr) auto}}
+@container (max-width:720px){.bp-it{grid-template-columns:40px minmax(0,1fr) auto}}@container (max-width:520px){.bp-resumo{grid-template-columns:minmax(0,1fr);gap:8px;padding:10px 12px}.bp-resumo .btn{width:100%!important;min-height:40px}.bp-res-top{min-width:0}.bp-res-top b{font-size:1.15rem}}
+.bp-tipos label{position:relative;overflow:hidden}
+/* a linha da etapa do orçamento usa a classe "et" (igual aos botões do menu de etapas): desfaz o visual de menu */
+.pp-l.et{flex-direction:row;align-items:center;min-width:0;width:auto;font-size:inherit;line-height:inherit;color:var(--txt);text-align:left;cursor:default;padding:8px 10px;background:linear-gradient(90deg,#F2F5FB,#fff)}
+.pp-l.et.fechada{background:#fff}
+.pp-l.et:hover{background:linear-gradient(90deg,#EEF2FA,#fff)}
+.pp-l.et>span{flex:none}.pp-l.et b{position:static;background:none;padding:0}
+.pp-l.et::before{display:none}
+@container (max-width:520px){
+  .pp-l.it{grid-template-columns:30px minmax(0,1fr) minmax(0,1fr);grid-template-areas:"c d d" "c u q" "c v w" ". a a"}
+  .pp-l.it>.bp-it-a{justify-self:end}
+  .pp-l.it>.pp-v:nth-of-type(1){text-align:left}.pp-v b{font-size:.8rem}
+  .pp-l.et{padding:6px 8px;gap:4px}.pp-l.et .pp-cod{width:22px}.pp-l.et input{font-size:15px;padding:6px 8px}
+}@container (max-width:520px){.pp-l.et{flex-wrap:wrap}.pp-l.et input{flex:1 1 calc(100% - 64px)}.pp-l.et .pp-sub{margin-left:56px;flex:1 1 auto}}
