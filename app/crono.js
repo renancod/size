@@ -71,7 +71,7 @@ function crGradeMeses(E, rotulos) {
   const n = E.colMeses.length, k = n > 36 ? 6 : n > 24 ? 3 : n > 14 ? 2 : 1;
   return E.colMeses.map((m, i) => {
     const x = crX(E, m + '-01'), w = crW(E, m + '-01', crFimMes(m));
-    return `<span class="cr-gm ${+m.slice(5, 7) === 1 ? 'ano' : ''}" style="left:${x}%;width:${w}%">${rotulos && i % k === 0 ? `<em>${+m.slice(5, 7) === 1 || i === 0 ? crMes(m) : CR_MES[+m.slice(5, 7) - 1]}</em>` : ''}</span>`;
+    return `<span class="cr-gm ${+m.slice(5, 7) === 1 ? 'ano' : ''}" style="left:${x}%;width:${w}%">${rotulos && i % k === 0 ? `<em>${k > 1 || +m.slice(5, 7) === 1 || i === 0 ? crMes(m) : CR_MES[+m.slice(5, 7) - 1]}</em>` : ''}</span>`;
   }).join('');
 }
 function crBarra(E, l, i) {
@@ -79,7 +79,7 @@ function crBarra(E, l, i) {
   const R = l.real, x = crX(E, l.ini), w = crW(E, l.ini, l.fim);
   return `<div class="cr-bar ${R ? 'sit-' + R.situacao : ''} ${E.edita ? 'mexe' : ''}" data-i="${i}" style="left:${x}%;width:${w}%" title="${fd(l.ini)} a ${fd(l.fim)} · ${plural(l.dias, 'dia', 'dias')}">
     ${R ? `<i class="cr-fx" style="width:${Math.min(100, R.pct_exec)}%"></i><i class="cr-fm" style="width:${Math.min(100, R.pct_med)}%"></i>` : ''}
-    ${E.edita ? '<b class="cr-h" data-h="a"></b><b class="cr-h" data-h="b"></b>' : ''}<span>${R ? crPct(R.pct_exec) : plural(l.dias, 'dia', 'dias')}</span></div>`;
+    ${E.edita ? '<b class="cr-h" data-h="a"></b><b class="cr-h" data-h="b"></b>' : ''}${w >= 7 ? `<span>${R ? crPct(R.pct_exec) : plural(l.dias, 'dia', 'dias')}</span>` : '<span></span>'}</div>`;
 }
 function crLinha(E, l, i) {
   const R = l.real, ed = E.edita;

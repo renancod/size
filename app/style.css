@@ -1343,3 +1343,11 @@ p.cr-vazio{position:static;transform:none;padding:20px}
 .cr-tg i{width:30px;height:18px;border-radius:99px;background:#C9D3DC;position:relative;transition:background .15s}
 .cr-tg i::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
 .cr-tg.on{background:#FFF4E0;border-color:#F5C26B;color:var(--bp-ink)}.cr-tg.on i{background:#F08C00}.cr-tg.on i::after{left:14px}
+/* nome da etapa: quebra só entre palavras; o valor desce para a linha de baixo quando não cabe */
+.cr-nome{flex-wrap:wrap;row-gap:2px}.cr-nome b{overflow-wrap:break-word;flex:1 1 120px}.cr-nome span{margin-left:auto}
+.pp-doc .cr-nome b{font-size:.86rem}.pp-doc .cr-nome span{font-size:.8rem}.pp-doc .cr-datas.ro{font-size:.74rem}
+.pp-doc .cr-l{grid-template-columns:minmax(210px,36%) minmax(0,1fr)}
+@media print{.pp-doc .cr-n{padding:4px 6px}.pp-doc .cr-t{min-height:26px}.pp-crono .cr-tabm{grid-template-columns:repeat(6,minmax(0,1fr))}.pp-crono .cr-tabm div{padding:3px 6px;font-size:7.5pt}}
+/* cronograma da proposta: página própria, deitada (A4 paisagem), para caber a linha do tempo inteira */
+@page crono{size:A4 landscape;margin:10mm}
+@media print{.pp-crono{page:crono;break-before:page}.pp-crono .cr-tabm{grid-template-columns:repeat(9,minmax(0,1fr))}.pp-doc .cr-l{grid-template-columns:minmax(230px,28%) minmax(0,1fr)}}
