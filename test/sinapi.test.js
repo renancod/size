@@ -36,6 +36,9 @@ test('importação em lotes: planilha separada, índice, composição aberta e h
   assert.deepEqual(ix.insumos.map(i => i[0]), ['88316', '370']);
   const c = t.adm('sinapi_composicao', { codigo: '94962' });
   assert.deepEqual(c.itens.map(i => [i.codigo, i.coef, i.preco_sd, i.preco_cd]), [['370', 2, 100, 100], ['88316', 4, 25, 22]]);
+  // várias de uma vez (Excel do orçamento): a que não está no mês fica de fora, sem erro
+  const v = t.adm('sinapi_composicao', { codigos: ['94962', '99999'] });
+  assert.deepEqual(v.composicoes.map(x => [x.composicao.codigo, x.itens.length]), [['94962', 2]]);
   // mês seguinte: areia sobe 10%; o histórico guarda o que mudou
   assert.match(importar(t, '2026-08', 110).msg, /1 insumo mudou de preço desde 07\/2026 \(média \+10%\)/);
   assert.equal(t.adm('sinapi_info').mes, '2026-08');

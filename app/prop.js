@@ -144,17 +144,19 @@ function ppLeitura(d) {
     <div class="card"><h3>${ic('clock')} Histórico</h3><div class="pp-hist">${d.historico.map(h => `<div><small>${esc(h.em)}</small><b>${esc(h.acao)}</b><span>${esc(h.det || '')}</span><small>${esc(h.por || '')}</small></div>`).join('')}</div></div>`;
 }
 /* tabela da planilha (leitura ou proposta): etapas com subtotal, itens com preço de venda; interna mostra o custo */
-function ppTabela(itens, etapas, T, interna) {
+function ppTabela(itens, etapas, T, interna, doc) {
   const et = {};
   etapas.forEach(e => { et[e.codigo] = e; });
-  // interna: 11 colunas; sem "R$" em cada célula (fica no cabeçalho) para caber num notebook a 100%
-  const vm = interna ? v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : bpM;
-  return `${interna ? '<p class="pp-moeda">Valores em R$</p>' : ''}<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
+  // documento (proposta/interna): sem "R$" em cada célula (fica no cabeçalho), para a descrição caber numa linha
+  // e a interna (11 colunas) caber num notebook a 100%
+  const vm = doc ? v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : bpM;
+  return `${doc ? '<p class="pp-moeda">Valores em R$</p>' : ''}<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
     ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${vm((et[i.codigo] || {}).preco)}</b></td></tr>`
       : `<tr><td>${esc(i.codigo)}</td><td>${i.comp_cod && i.fonte !== 'SINAPI-INSUMO' ? `<button type="button" class="bp-lnk pp-ver" data-ver-cod="${esc(i.codigo)}" title="Ver os insumos deste serviço">${esc(i.descricao)}</button>` : esc(i.descricao)}${interna && i.comp_cod ? ` <small>${i.fonte ? 'SINAPI ' : ''}<code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
         ${interna ? `<td class="n bp-mono">${vm(i.custo_unit)}</td><td class="n bp-mono">${vm(i.v_mat)}</td><td class="n bp-mono">${vm(i.v_serv)}</td><td class="n bp-mono">${vm(i.bdi)}</td><td class="n bp-mono">${vm(i.gestao)}</td>` : ''}
         <td class="n bp-mono">${vm(i.preco_unit)}</td><td class="n bp-mono"><b>${vm(i.preco)}</b></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot></table></div>`;
+    ${doc && !interna ? '' /* na proposta o total vem logo abaixo, na faixa "Valor total da proposta" */
+      : `<tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot>`}</table></div>`;
 }
 
 /* ---------- editor ---------- */
@@ -536,15 +538,15 @@ async function vPropDoc(id, qs) {
       <header class="pp-doc-h"><img src="logo.png" alt=""><div><b>${esc(d.empresa)}</b><small>${interna ? 'Planilha orçamentária · uso interno' : 'Proposta comercial'}</small></div><div class="pp-doc-n"><b>${esc(p.rotulo)}</b><small>${fd(p.data_base)}</small></div></header>
       <section class="pp-doc-c"><div><small>Cliente</small><b>${esc(p.cliente)}</b>${p.cliente_doc ? `<span>${esc(p.cliente_doc)}</span>` : ''}${p.contato ? `<span>A/C ${esc(p.contato)}</span>` : ''}${p.email || p.telefone ? `<span>${esc([p.email, p.telefone].filter(Boolean).join(' · '))}</span>` : ''}</div>
         <div><small>Empreendimento</small><b>${esc(p.empreendimento)}</b>${p.local ? `<span>${esc(p.local)}</span>` : ''}</div></section>
-      ${ppTabela(d.itens, d.etapas, T, interna)}
+      ${ppTabela(d.itens, d.etapas, T, interna, true)}
       ${interna ? `<section class="pp-doc-res">${[['Custo direto', T.custo], ['Material', T.v_mat], ['Mão de obra e serviços', T.v_serv], ['BDI ' + ppPct(p.bdi_pct) + ' sobre ' + (p.bdi_base === 'total' ? 'o custo total' : 'MO e serviços'), T.bdi], ['Gestão ' + ppPct(p.gestao_pct) + ' sobre ' + (p.gestao_base === 'total' ? 'o custo total' : 'MO e serviços'), T.gestao], ['Preço de venda', T.preco]].map(([t, v]) => `<div><span>${t}</span><b class="bp-mono">${bpM(v)}</b></div>`).join('')}<div><span>BDI + gestão sobre o preço</span><b>${ppPct(T.margem)}</b></div></section>`
         : `<section class="pp-doc-tot"><span>Valor total da proposta</span><b class="bp-mono">${bpM(T.preco)}</b></section>`}
-      ${ppCronoDoc(d.cronograma)}
-      <section class="pp-doc-cond"><h4>Condições</h4><ul>
+      <div class="pp-doc-fim"><section class="pp-doc-cond"><h4>Condições</h4><ul>
         ${val ? `<li><b>Validade:</b> ${p.validade_dias} dias (até ${fd(val)}).</li>` : ''}<li><b>Data-base dos preços:</b> ${fd(p.data_base)}.</li>
         ${p.prazo_txt ? `<li><b>Prazo de execução:</b> ${esc(p.prazo_txt)}</li>` : ''}${p.pagamento_txt ? `<li><b>Pagamento:</b> ${esc(p.pagamento_txt)}</li>` : ''}</ul>
         ${p.texto_cliente ? `<p style="white-space:pre-wrap">${esc(p.texto_cliente)}</p>` : ''}</section>
-      ${interna ? '' : `<footer class="pp-doc-ass"><div><span></span>${esc(d.empresa)}</div><div><span></span>De acordo: ${esc(p.cliente)}</div></footer>`}
+      ${interna ? '' : `<footer class="pp-doc-ass"><div><span></span>${esc(d.empresa)}</div><div><span></span>De acordo: ${esc(p.cliente)}</div></footer>`}</div>
+      ${ppCronoDoc(d.cronograma) /* anexo: na impressão começa em página própria, deitada */}
     </article>`);
   $('#ppPrint').onclick = () => window.print();
   $('#ppXls').onclick = async () => { const b = $('#ppXls'); b.disabled = true; try { await ppExcel(d); } catch (e) { toast(e.message, 1); } b.disabled = false; };
@@ -570,6 +572,9 @@ async function ppExcel(d) {
   if (!window.ExcelJS) await bpScript(PP_EXCELJS);
   const p = d.proposta, T = d.total, et = {};
   d.etapas.forEach(e => { et[e.codigo] = e; });
+  // insumos das composições SINAPI do orçamento (uma chamada só); sem o SINAPI importado, sai só o custo do item
+  const sinCods = [...new Set(d.itens.filter(i => i.tipo === 'I' && i.fonte === 'SINAPI').map(i => String(i.comp_cod)))], SC = {};
+  if (sinCods.length) (await api('sinapi_composicao', { codigos: sinCods }).catch(() => ({ composicoes: [] }))).composicoes.forEach(x => { SC[x.composicao.codigo] = x; });
   const COR = { petroleo: 'FF027F79', escuro: 'FF035F5E', verde: 'FF1F6E43', ambar: 'FFB07A00', roxo: 'FF7A2E8C', lilas: 'FFF6EFF8', subtotal: 'FFCFE8E1', amarelo: 'FFFFF2CC', borda: 'FFC9D3DC', nota: 'FF5A6475', azul: 'FF0000FF', marrom: 'FF7A4A00' };
   const fonte = (o = {}) => Object.assign({ name: 'Arial', size: 9 }, o);
   const fundo = c => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } });
@@ -689,9 +694,12 @@ async function ppExcel(d) {
     });
   };
   d.itens.filter(i => i.tipo === 'I').forEach(i => {
-    linhaB([i.codigo, '', i.comp_cod || '', i.descricao, i.unidade, i.qtd, '', ppR2(i.custo_unit), i.custo], true);
-    const c = i.comp_cod && !i.fonte && BP.C[i.comp_cod];
-    if (c) Object.values(bpExplodir(c.itens, 1, {}, [c.codigo])).forEach(a => linhaB([i.codigo, TIPO[a.i.tipo] || 'Material', a.i.codigo, a.i.descricao, a.i.unidade, Math.round(i.qtd * a.coef * 1e4) / 1e4, Math.round(a.coef * 1e6) / 1e6, a.preco, ppR2(i.qtd * a.coef * a.preco)], false, a.i.tipo === 'Material' ? '' : COR.marrom));
+    linhaB([i.codigo, '', i.comp_cod ? (i.fonte ? 'SINAPI ' : '') + i.comp_cod : '', i.descricao, i.unidade, i.qtd, '', ppR2(i.custo_unit), i.custo], true);
+    const c = i.comp_cod && !i.fonte && BP.C[i.comp_cod], s = i.fonte === 'SINAPI' && SC[String(i.comp_cod)];
+    const reg = p.sinapi_regime === 'cd' ? 'preco_cd' : 'preco_sd';
+    const sinTipo = x => x.tipo === 'C' ? 'Composição auxiliar' : /M[AÃ]O DE OBRA|ENCARGO/i.test(x.classe) ? 'Mão de obra / serviço' : /EQUIPAMENTO/i.test(x.classe) ? 'Equipamento' : /SERVI[CÇ]O/i.test(x.classe) ? 'Serviço' : 'Material';
+    if (s) s.itens.forEach(x => { const t = sinTipo(x); linhaB([i.codigo, t, x.codigo, x.descricao, x.unidade, Math.round(i.qtd * x.coef * 1e4) / 1e4, Math.round(x.coef * 1e6) / 1e6, x[reg], ppR2(i.qtd * x.coef * x[reg])], false, t === 'Material' ? '' : COR.marrom); });
+    else if (c) Object.values(bpExplodir(c.itens, 1, {}, [c.codigo])).forEach(a => linhaB([i.codigo, TIPO[a.i.tipo] || 'Material', a.i.codigo, a.i.descricao, a.i.unidade, Math.round(i.qtd * a.coef * 1e4) / 1e4, Math.round(a.coef * 1e6) / 1e6, a.preco, ppR2(i.qtd * a.coef * a.preco)], false, a.i.tipo === 'Material' ? '' : COR.marrom));
     else {
       if (i.unit_mat) linhaB([i.codigo, 'Material', '', i.descricao + ' – material', i.unidade, i.qtd, 1, i.unit_mat, i.v_mat], false);
       if (i.unit_mo + i.unit_eq + i.unit_sv) linhaB([i.codigo, 'Mão de obra / serviço', '', i.descricao + ' – mão de obra', i.unidade, i.qtd, 1, i.unit_mo + i.unit_eq + i.unit_sv, i.v_serv], false, COR.marrom);

@@ -84,17 +84,23 @@ function sinapiIndice_(q, ctx) {
 function sinapiComposicao_(q, ctx) {
   const ss = sinSS_(false);
   if (!ss) throw new Error('O SINAPI ainda não foi importado.');
-  const cod = String(q.codigo), C = {}, I = {};
+  // q.codigos (lista): várias de uma vez, lendo as abas uma vez só (Excel do orçamento); as que não estão no mês ficam de fora
+  const lista = Array.isArray(q.codigos) ? q.codigos.map(String) : [String(q.codigo)], C = {}, I = {}, por = {};
   sinTab_('SinapiComposicoes', ss).all().forEach(c => { C[String(c.codigo)] = c; });
-  const c = C[cod];
-  if (!c) throw new Error('Composição ' + cod + ' não está no SINAPI deste mês.');
+  if (!Array.isArray(q.codigos) && !C[lista[0]]) throw new Error('Composição ' + lista[0] + ' não está no SINAPI deste mês.');
   sinTab_('SinapiInsumos', ss).all().forEach(i => { I[String(i.codigo)] = i; });
-  const itens = sinTab_('SinapiItens', ss).all().filter(x => String(x.composicao) === cod).map(x => {
+  lista.forEach(k => { por[k] = []; });
+  sinTab_('SinapiItens', ss).all().forEach(x => {
+    const dono = por[String(x.composicao)];
+    if (!dono) return;
     const k = String(x.codigo), aux = x.tipo === 'C', r = aux ? C[k] : I[k];
-    return { tipo: aux ? 'C' : 'I', codigo: k, descricao: r ? r.descricao : '(não encontrado)', unidade: r ? r.unidade : '', classe: aux ? 'COMPOSIÇÃO' : r ? r.classe : '', coef: num_(x.coef),
-      preco_sd: r ? num_(aux ? r.custo_sd : r.preco_sd) : 0, preco_cd: r ? num_(aux ? r.custo_cd : r.preco_cd) : 0 };
+    dono.push({ tipo: aux ? 'C' : 'I', codigo: k, descricao: r ? r.descricao : '(não encontrado)', unidade: r ? r.unidade : '', classe: aux ? 'COMPOSIÇÃO' : r ? r.classe : '', coef: num_(x.coef),
+      preco_sd: r ? num_(aux ? r.custo_sd : r.preco_sd) : 0, preco_cd: r ? num_(aux ? r.custo_cd : r.preco_cd) : 0 });
   });
-  return { mes: String(sinInfo_(ss).mes || ''), composicao: { codigo: cod, descricao: c.descricao, unidade: c.unidade, grupo: c.grupo, situacao: c.situacao, custo_sd: num_(c.custo_sd), custo_cd: num_(c.custo_cd) }, itens: itens };
+  const comp = k => { const c = C[k]; return { codigo: k, descricao: c.descricao, unidade: c.unidade, grupo: c.grupo, situacao: c.situacao, custo_sd: num_(c.custo_sd), custo_cd: num_(c.custo_cd) }; };
+  const mes = String(sinInfo_(ss).mes || '');
+  if (Array.isArray(q.codigos)) return { mes: mes, composicoes: lista.filter(k => C[k]).map(k => ({ composicao: comp(k), itens: por[k] })) };
+  return { mes: mes, composicao: comp(lista[0]), itens: por[lista[0]] };
 }
 /* custo por categoria de um item do SINAPI (composição ou insumo) no regime pedido — usado no orçamento */
 function sinCustoItem_(ix, fonte, codigo, regime) {

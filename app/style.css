@@ -1172,6 +1172,19 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .pp-doc.interna .pp-tab tbody tr:not(.pp-et) td:nth-child(2){min-width:220px}
 .pp-moeda{margin:0 0 4px;text-align:right;font-size:.72rem;color:var(--mute)}
 .pp-doc.interna .pp-tab th{white-space:nowrap}
+/* impressão da proposta: linhas compactas, cabeçalho baixo, total uma vez, condições e assinaturas juntas */
+@media print{
+  .pp-doc .pp-tab{font-size:8.5pt}
+  .pp-doc .pp-tab th{padding:4px 6px}.pp-doc .pp-tab td{padding:3px 6px;vertical-align:middle}
+  .pp-doc .pp-tab tfoot{display:table-row-group}
+  .pp-doc .pp-ver{font-size:inherit;line-height:1.2}
+  .pp-doc-h{padding-bottom:8px;border-bottom-width:2px}.pp-doc-h img{height:34px}
+  .pp-doc-c{gap:10px;margin:10px 0}.pp-doc-c>div{padding:6px 10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pp-doc-tot{margin:10px 0;padding:8px 14px}.pp-doc-tot b{font-size:1.15rem}
+  .pp-doc-fim{break-inside:avoid}
+  .pp-doc-cond h4{margin:10px 0 4px}.pp-doc-cond ul,.pp-doc-cond p{font-size:8.5pt}
+  .pp-doc-ass{margin-top:36px}
+}
 @media print{.pp-doc.interna .pp-tab{font-size:7.5pt}.pp-doc.interna .pp-tab tbody tr:not(.pp-et) td:nth-child(2){min-width:0}}.view:has(.pp-doc.interna){max-width:1560px}
 
 /* localização da obra no mapa */
