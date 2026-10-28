@@ -1335,3 +1335,11 @@ p.cr-vazio{position:static;transform:none;padding:20px}
 .pp-crono .cr-tabm div{border:1px solid var(--line);border-radius:6px;padding:5px 8px;display:grid;font-size:.78rem}
 .pp-crono .cr-tabm b{text-transform:capitalize}.pp-crono .cr-tabm span{font-family:var(--bp-mono);font-weight:700}.pp-crono .cr-tabm small{color:var(--mute)}
 @media print{.cr-bar,.cr-l.cr-cab,.cr-nome code,.cr-gm{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pp-crono{break-inside:avoid}.cr-l{break-inside:avoid}}
+/* cronograma: BDI e gestão ligados/desligados (só no cronograma) */
+.cr-base{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.cr-base>span{font-weight:800;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+.cr-base small{flex:1 1 220px;color:var(--mute)}
+.cr-tg{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--gray-l);color:var(--mute);border-radius:99px;padding:5px 12px 5px 6px;font-weight:800;font-size:.85rem;cursor:pointer;min-height:34px}
+.cr-tg i{width:30px;height:18px;border-radius:99px;background:#C9D3DC;position:relative;transition:background .15s}
+.cr-tg i::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.cr-tg.on{background:#FFF4E0;border-color:#F5C26B;color:var(--bp-ink)}.cr-tg.on i{background:#F08C00}.cr-tg.on i::after{left:14px}

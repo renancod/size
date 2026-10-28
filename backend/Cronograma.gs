@@ -70,16 +70,19 @@ function cronoMontar_(linhas) {
 function propCronoLer_(p) {
   try { const c = JSON.parse(p.cronograma_json || '{}'); return c && Array.isArray(c.etapas) ? c : { etapas: [] }; } catch (e) { return { etapas: [] }; }
 }
-/* datas de cada etapa do orçamento: pelo nome (as etapas podem mudar de ordem); se o nome mudou, pelo número */
+/* datas de cada etapa do orçamento: pelo nome (as etapas podem mudar de ordem); se o nome mudou, pelo número.
+ * Valores: preço de venda, com ou sem o BDI e a gestão (escolha só do cronograma; o orçamento não muda) */
 function propCrono_(p, calc) {
   const C = propCronoLer_(p), usado = {}, nomes = calc.etapas.map(e => norm_(e.descricao));
+  const bdi = C.bdi !== false, ges = C.gestao !== false;
   const acha = fn => { const n = C.etapas.findIndex((c, k) => !usado[k] && fn(c)); if (n >= 0) usado[n] = 1; return n >= 0 ? C.etapas[n] : null; };
   const pares = calc.etapas.map(e => acha(c => norm_(c.nome) === norm_(e.descricao)));
   const linhas = calc.etapas.map((e, k) => {
     const x = pares[k] || acha(c => String(c.codigo) === String(e.codigo) && nomes.indexOf(norm_(c.nome)) < 0);
-    return { codigo: e.codigo, descricao: e.descricao, itens: e.itens, valor: e.preco, ini: x ? cronoData_(x.ini) : '', fim: x ? cronoData_(x.fim) : '' };
+    return { codigo: e.codigo, descricao: e.descricao, itens: e.itens, preco: e.preco, bdi: e.bdi, gestao: e.gestao,
+      valor: r2_(e.preco - (bdi ? 0 : e.bdi) - (ges ? 0 : e.gestao)), ini: x ? cronoData_(x.ini) : '', fim: x ? cronoData_(x.fim) : '' };
   });
-  return cronoMontar_(linhas);
+  return Object.assign(cronoMontar_(linhas), { com_bdi: bdi, com_gestao: ges });
 }
 function propCronoSalvar_(q, ctx) {
   const T = central_('Propostas'), p = propAchar_(q.id);
@@ -92,13 +95,49 @@ function propCronoSalvar_(q, ctx) {
     const d = cronoValida_(x.ini, x.fim, 'Etapa ' + e.codigo + ' ' + e.descricao);
     if (d.ini) ets.push({ codigo: e.codigo, nome: e.descricao, ini: d.ini, fim: d.fim });
   });
-  p.cronograma_json = ets.length ? JSON.stringify({ etapas: ets }) : '';
+  const ant = propCronoLer_(p), bdi = q.bdi === undefined ? ant.bdi !== false : sim_(q.bdi), ges = q.gestao === undefined ? ant.gestao !== false : sim_(q.gestao);
+  p.cronograma_json = ets.length || !bdi || !ges ? JSON.stringify(Object.assign({ etapas: ets }, bdi ? {} : { bdi: false }, ges ? {} : { gestao: false })) : '';
   p.atualizado_em = new Date(); p.atualizado_por = ctx.u.nome;
   const C = propCrono_(p, calc);
-  propHist_(p, ctx, 'Cronograma', ets.length ? cronoBr_(C.inicio) + ' a ' + cronoBr_(C.fim) + ' · ' + plural_(ets.length, 'etapa', 'etapas') : 'sem datas');
+  propHist_(p, ctx, 'Cronograma', (ets.length ? cronoBr_(C.inicio) + ' a ' + cronoBr_(C.fim) + ' · ' + plural_(ets.length, 'etapa', 'etapas') : 'sem datas') + ' · ' + cronoBase_(C));
   T.update(p);
   log_(ctx, 'proposta_cronograma', propRotulo_(p) + ' · ' + ets.length + ' etapas');
   return { msg: ets.length ? 'Cronograma salvo: ' + cronoBr_(C.inicio) + ' a ' + cronoBr_(C.fim) + ' (' + plural_(C.meses.length, 'mês', 'meses') + ').' : 'Cronograma sem datas.', cronograma: C };
+}
+
+const cronoBase_ = C => C.com_bdi && C.com_gestao ? 'valores com BDI e gestão' : C.com_bdi ? 'valores sem gestão' : C.com_gestao ? 'valores sem BDI' : 'valores sem BDI e gestão (custo direto)';
+
+/* ---------- lançamentos únicos na planilha (rodam uma vez, no primeiro acesso depois da publicação) ---------- */
+/* cronograma geral do AVA (planilha 2026_CRONOGRAMA-FISICO-FINANCEIRO-24M_AVA-RESIDENCES_SIZE_PROPOSTA14): primeiro início e último fim
+ * de cada etapa entre os setores; mobilização e canteiro no 1º mês. Só grava se o orçamento ainda não tem cronograma. */
+const CRONO_AVA_ = [['1', 'terraplen', '2026-12-07', '2028-04-04'], ['2', 'paviment', '2027-10-05', '2028-12-15'], ['3', 'pluvial', '2027-08-05', '2028-07-04'],
+  ['4', 'coletora', '2027-07-05', '2028-06-02'], ['5', 'bombeamento', '2027-09-06', '2028-07-04'], ['6', 'recalque', '2027-09-06', '2028-08-04'],
+  ['7', 'agua', '2027-09-06', '2028-08-04'], ['8', 'muro', '2027-06-07', '2028-12-15'], ['9', 'gabiao', '2027-01-05', '2028-04-04'], ['10', 'mobiliza', '2026-12-07', '2027-01-04']];
+function migCronoAva_() {
+  const T = central_('Propostas'), p = T.all().find(x => String(x.id) === 'PR-17ff9676' && /AVA/i.test(String(x.empreendimento)));
+  if (!p || String(p.cronograma_json || '').trim()) return 'sem alteração';
+  const calc = propCalc_(p, propItens_(p.id)), ets = [];
+  CRONO_AVA_.forEach(([cod, chave, ini, fim]) => {
+    const e = calc.etapas.find(y => String(y.codigo) === cod);
+    if (e && norm_(e.descricao).indexOf(chave) >= 0) ets.push({ codigo: e.codigo, nome: e.descricao, ini: ini, fim: fim });
+  });
+  if (!ets.length) return 'etapas não conferem';
+  p.cronograma_json = JSON.stringify({ etapas: ets });
+  propHist_(p, { u: { nome: 'Sistema' } }, 'Cronograma', 'datas da planilha do cronograma (proposta 14) · ' + plural_(ets.length, 'etapa', 'etapas'));
+  T.update(p);
+  return plural_(ets.length, 'etapa', 'etapas');
+}
+const MIGRACOES_ = [['crono_ava_2026_10', migCronoAva_]];
+function migrar_() {
+  const P = PropertiesService.getScriptProperties();
+  MIGRACOES_.forEach(([k, fn]) => {
+    if (P.getProperty('MIG_' + k)) return;
+    const L = LockService.getScriptLock();
+    if (!L.tryLock(10000)) return;
+    try { if (!P.getProperty('MIG_' + k)) P.setProperty('MIG_' + k, agora_() + ' · ' + fn()); }
+    catch (e) { P.setProperty('MIG_' + k, 'erro: ' + e.message); }
+    finally { L.releaseLock(); }
+  });
 }
 
 /* ---------- obra: previsto × executado (RDO) × medido ---------- */

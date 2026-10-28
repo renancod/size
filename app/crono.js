@@ -117,8 +117,14 @@ function crColunas(M) {
   return `<div class="cr-cols">${M.meses.map(m => `<div class="cr-col"><div class="cr-colb"><i style="height:${Math.max(2, m.valor / mx * 100)}%"></i></div><b>${crMes(m.mes)}</b><span class="bp-mono">${crK(m.valor)}</span><small>${crPct(m.pct)} · acum. ${crPct(m.pct_acum)}</small></div>`).join('')}</div>`;
 }
 
+/* orçamento: valor da etapa com ou sem BDI e gestão (só no cronograma) */
+const crBase = (bdi, ges) => bdi && ges ? 'com BDI e gestão' : bdi ? 'sem gestão' : ges ? 'sem BDI' : 'sem BDI e gestão (custo direto)';
+function crValores(E) { E.linhas.forEach(l => { l.valor = crR2(l.preco - (E.bdi ? 0 : l.v_bdi) - (E.gestao ? 0 : l.v_ges)); }); }
+
 function crDesenhar() {
-  const E = CR.ed, M = E.M = crMontar(E.linhas), obra = E.tipo === 'obra';
+  const E = CR.ed, obra = E.tipo === 'obra';
+  if (!obra) crValores(E);
+  const M = E.M = crMontar(E.linhas);
   crEscala(E);
   const tool = E.edita ? `<div class="cr-tool"><label>Início<input type="date" id="crIni" value="${M.inicio || E.inicioSug || hoje()}"></label>
       <button type="button" class="btn sec peq" id="crSeq" title="Uma etapa depois da outra, a partir da data de início (etapa sem datas fica com 30 dias)">${ic('chevron')} Encadear todas</button>
@@ -134,8 +140,13 @@ function crDesenhar() {
       ${kpi('Executado (RDO)', crPct(G.pct_exec), crK(G.v_exec), 'x')}
       ${kpi('Medido (FVS aprovada)', crPct(G.pct_med), crK(G.v_med), 'm')}
       ${kpi('Feito, esperando FVS / medição', crK(G.aguardando), G.valor ? crPct(G.aguardando / G.valor * 100) + ' da obra' : '', 'a')}</div>`;
-  } else topo = `<div class="cr-kpis">${kpi('Início', M.inicio ? fd(M.inicio) : '—')}${kpi('Fim', M.fim ? fd(M.fim) : '—')}${kpi('Prazo', crPrazo(M.dias), M.meses.length ? plural(M.meses.length, 'mês', 'meses') + ' no cronograma' : '')}
-      ${kpi('Valor', crK(M.total), M.sem_datas ? crK(M.sem_datas) + ' sem datas' : 'tudo distribuído', M.sem_datas ? 'a' : 'p')}${kpi('Maior mês', M.meses.length ? crK(Math.max(...M.meses.map(m => m.valor))) : '—', M.meses.length ? crMes(M.meses.reduce((a, b) => b.valor > a.valor ? b : a).mes) : '')}</div>`;
+  } else {
+    const preco = crR2(E.linhas.reduce((t, l) => t + l.preco, 0)), tg = (k, t) => `<button type="button" class="cr-tg ${E[k] ? 'on' : ''}" data-tg="${k}" aria-pressed="${E[k]}"><i></i>${t}</button>`;
+    topo = `<div class="cr-base"><span>Valores do cronograma</span>${tg('bdi', 'BDI')}${tg('gestao', 'Gestão')}<small>${crBase(E.bdi, E.gestao)} · só muda o cronograma, o orçamento continua igual</small></div>
+      ${!(E.bdi && E.gestao) ? `<div class="aviso warn">Cronograma ${crBase(E.bdi, E.gestao)}: o total (${brl(M.total)}) não bate com o preço de venda da proposta (${brl(preco)}). Para mandar ao cliente, ligue BDI e gestão.</div>` : ''}
+      <div class="cr-kpis">${kpi('Início', M.inicio ? fd(M.inicio) : '—')}${kpi('Fim', M.fim ? fd(M.fim) : '—')}${kpi('Prazo', crPrazo(M.dias), M.meses.length ? plural(M.meses.length, 'mês', 'meses') + ' no cronograma' : '')}
+      ${kpi('Valor ' + (E.bdi && E.gestao ? 'de venda' : E.bdi || E.gestao ? crBase(E.bdi, E.gestao) : 'de custo'), crK(M.total), M.sem_datas ? crK(M.sem_datas) + ' sem datas' : 'tudo distribuído', M.sem_datas ? 'a' : 'p')}${kpi('Maior mês', M.meses.length ? crK(Math.max(...M.meses.map(m => m.valor))) : '—', M.meses.length ? crMes(M.meses.reduce((a, b) => b.valor > a.valor ? b : a).mes) : '')}</div>`;
+  }
   // série mensal da obra: previsto (datas da tela) + executado e medido (servidor)
   let curva, mensal = '';
   if (obra) {
@@ -166,6 +177,8 @@ function crDesenhar() {
 function crMudou() { CR.ed.sujo = true; crDesenhar(); }
 function crLigar() {
   const E = CR.ed;
+  // BDI e gestão: quem só consulta também liga e desliga para ver (sem gravar)
+  $$('#cr [data-tg]').forEach(b => { b.onclick = () => { E[b.dataset.tg] = !E[b.dataset.tg]; if (E.edita) E.sujo = true; crDesenhar(); }; });
   if (!E.edita) return;
   const L = E.linhas;
   $$('#cr [data-k]').forEach(inp => {
@@ -240,7 +253,7 @@ async function crSalvar() {
   b.disabled = true;
   try {
     const r = E.tipo === 'obra' ? await api('crono_salvar', { frentes: E.linhas.map(l => ({ codigo: l.codigo, ini: l.ini, fim: l.fim })) })
-      : await api('prop_cronograma', { id: E.id, etapas: E.linhas.map(l => ({ codigo: l.codigo, ini: l.ini, fim: l.fim })) });
+      : await api('prop_cronograma', { id: E.id, bdi: E.bdi, gestao: E.gestao, etapas: E.linhas.map(l => ({ codigo: l.codigo, ini: l.ini, fim: l.fim })) });
     toast(r.msg);
     E.sujo = false;
     if (E.tipo === 'obra') return vObraCrono();
@@ -257,7 +270,8 @@ async function vPropCrono(id) {
   const d = PP.d = await api('prop_detalhe', { id }), p = d.proposta, C = d.cronograma;
   titulo('Cronograma · ' + p.rotulo);
   const edita = d.nivel === 'Gerir' && !p.obra_id && !['Revisado', 'Cancelado'].includes(p.status);
-  CR.ed = { tipo: 'prop', id, edita, sujo: false, linhas: C.linhas.map(l => ({ codigo: l.codigo, nome: l.descricao, valor: l.valor, ini: crData(l.ini), fim: crData(l.fim), info: plural(l.itens, 'item', 'itens') })) };
+  CR.ed = { tipo: 'prop', id, edita, sujo: false, bdi: C.com_bdi !== false, gestao: C.com_gestao !== false,
+    linhas: C.linhas.map(l => ({ codigo: l.codigo, nome: l.descricao, preco: l.preco, v_bdi: l.bdi, v_ges: l.gestao, valor: l.valor, ini: crData(l.ini), fim: crData(l.fim), info: plural(l.itens, 'item', 'itens') })) };
   bpTela('props', `<a href="#/orc/orcamento/${enc(id)}" class="linkbtn">${ic('back')} Voltar ao orçamento</a>
     <div class="bp-hero cr-hero"><div class="bp-hero-t"><span class="bp-selo">${ic('cal')} Cronograma físico-financeiro · <code>${esc(p.rotulo)}</code></span><h2>${esc(p.empreendimento)}</h2>
       <p>${esc(p.cliente)} · ${ppSt(p.status)}${p.obra_id ? ' · já virou obra: o cronograma agora se ajusta dentro da obra' : ''}</p>

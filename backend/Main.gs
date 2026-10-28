@@ -19,6 +19,7 @@ function doPost(e) {
   let out;
   try {
     const q = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    try { migrar_(); } catch (x) { /* lançamento único nunca derruba a chamada */ }
     out = { ok: true, dados: rota_(q) };
   } catch (err) {
     out = { ok: false, erro: err && err.message ? err.message : String(err) };

@@ -105,3 +105,35 @@ test('obra: previsto até hoje × executado pelo RDO × medido com FVS aprovada;
   assert.equal(t.call('crono_obra', { token: tk, obra }).pode_editar, false);
   assert.throws(() => t.call('crono_salvar', { token: tk, obra, frentes: [] }), /permissão/);
 });
+
+test('orçamento: BDI e gestão ligados ou desligados só no cronograma (o orçamento não muda)', () => {
+  const t = preparar();
+  const id = t.adm('prop_salvar', { proposta: { cliente: 'Mar Azul', empreendimento: 'Dunas', bdi_pct: 10, bdi_base: 'servicos', gestao_pct: 5, gestao_base: 'total' }, itens: [
+    { tipo: 'E', descricao: 'Rede' }, { descricao: 'Rede', unidade: 'm', qtd: 1, unit_mat: 1000, unit_mo: 1000 }] }).id;
+  t.adm('prop_cronograma', { id, etapas: [{ codigo: '1', ini: '2027-01-01', fim: '2027-01-31' }] });
+  let d = t.adm('prop_detalhe', { id });
+  assert.deepEqual([d.cronograma.total, d.cronograma.com_bdi, d.cronograma.com_gestao], [2200, true, true]);   // 2000 + 100 BDI + 100 gestão
+  t.adm('prop_cronograma', { id, bdi: false, gestao: false, etapas: [{ codigo: '1', ini: '2027-01-01', fim: '2027-01-31' }] });
+  d = t.adm('prop_detalhe', { id });
+  assert.deepEqual([d.cronograma.total, d.cronograma.meses[0].valor, d.cronograma.com_bdi], [2000, 2000, false]);
+  assert.equal(d.total.preco, 2200);                                   // orçamento igual
+  t.adm('prop_cronograma', { id, gestao: true, etapas: [{ codigo: '1', ini: '2027-01-01', fim: '2027-01-31' }] });   // só a gestão volta
+  assert.equal(t.adm('prop_detalhe', { id }).cronograma.total, 2100);
+});
+
+test('lançamento único: datas do cronograma geral do AVA entram uma vez só, se o orçamento ainda não tem cronograma', () => {
+  const t = preparar();
+  const nomes = ['Movimentação de solo (terraplenagem)', 'Pavimentação', 'Rede de drenagem pluvial', 'Rede coletora cloacal', 'Rede cloacal (estações de bombeamento interna)',
+    'Rede cloacal (recalque)', 'Rede de abastecimento de água tratada', 'Execução de muro em gradil', 'Execução de contenções em gabião', 'Mobilização e canteiro de obras'];
+  const id = t.adm('prop_salvar', { proposta: { cliente: 'AVA RESIDENCE', empreendimento: 'AVA Residences · Dorata' }, itens: nomes.flatMap(n => [{ tipo: 'E', descricao: n }, { descricao: n, unidade: 'vb', qtd: 1, unit_mo: 1000 }]) }).id;
+  t.G.rodar(`(() => { const T = central_('Propostas'), p = T.all().find(x => x.id === '${id}'); p.id = 'PR-17ff9676'; T.update(p);
+    const I = central_('PropostaItens'); I.all().forEach(x => { if (x.proposta === '${id}') x.proposta = 'PR-17ff9676'; }); I.substituir(I.all()); })()`);
+  t.G.rodar(`PropertiesService.getScriptProperties().setProperty('MIG_crono_ava_2026_10', '')`);
+  const C = t.adm('prop_detalhe', { id: 'PR-17ff9676' }).cronograma;   // qualquer chamada roda o lançamento antes
+  assert.deepEqual([C.inicio, C.fim, C.linhas.filter(l => l.ini).length], ['2026-12-07', '2028-12-15', 10]);
+  assert.deepEqual([C.linhas[9].ini, C.linhas[9].fim], ['2026-12-07', '2027-01-04']);
+  assert.match(t.G.rodar(`PropertiesService.getScriptProperties().getProperty('MIG_crono_ava_2026_10')`), /10 etapas/);
+  // já rodou: mudar as datas depois não é desfeito
+  t.adm('prop_cronograma', { id: 'PR-17ff9676', etapas: [{ codigo: '1', ini: '2027-01-01', fim: '2027-02-01' }] });
+  assert.equal(t.adm('prop_detalhe', { id: 'PR-17ff9676' }).cronograma.inicio, '2027-01-01');
+});

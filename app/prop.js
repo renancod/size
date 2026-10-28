@@ -413,7 +413,9 @@ function ppCronoDoc(C) {
   if (!C || !C.meses.length) return '';
   const E = { tipo: 'prop', edita: false, linhas: C.linhas.map(l => ({ codigo: l.codigo, nome: l.descricao, valor: l.valor, ini: crData(l.ini), fim: crData(l.fim), dias: l.dias })) };
   crEscala(E);
-  return `<section class="pp-crono"><h4>Cronograma físico-financeiro <small>· ${fd(C.inicio)} a ${fd(C.fim)} (${crPrazo(C.dias)})</small></h4>
+  const base = C.com_bdi !== false && C.com_gestao !== false;
+  return `${base ? '' : `<div class="aviso warn no-print">O cronograma está ${crBase(C.com_bdi !== false, C.com_gestao !== false)}: o total dele (${bpM(C.total)}) não bate com o valor da proposta. Ligue BDI e gestão na tela do cronograma antes de mandar ao cliente.</div>`}
+    <section class="pp-crono"><h4>Cronograma físico-financeiro <small>· ${fd(C.inicio)} a ${fd(C.fim)} (${crPrazo(C.dias)})${base ? '' : ' · valores ' + crBase(C.com_bdi !== false, C.com_gestao !== false)}</small></h4>
     <div class="cr-g"><div class="cr-l cr-cab"><div class="cr-n"></div><div class="cr-t">${crGradeMeses(E, true)}</div></div>${E.linhas.map((l, i) => crLinha(E, l, i)).join('')}</div>
     <div class="cr-tabm">${C.meses.map(m => `<div><b>${crMes(m.mes)}</b><span>${bpM(m.valor)}</span><small>${crPct(m.pct)} · acum. ${crPct(m.pct_acum)}</small></div>`).join('')}</div></section>`;
 }
@@ -563,7 +565,7 @@ async function ppExcel(d) {
     X.columns = [6, 40, 11, 11, 7, 16].concat(ms.map(() => 13)).map(width => ({ width }));
     X.getCell('A1').value = 'CRONOGRAMA FÍSICO-FINANCEIRO · ' + String(p.empreendimento).toUpperCase();
     X.getCell('A1').font = fonte({ size: 13, bold: true, color: { argb: COR.escuro } });
-    X.getCell('A2').value = [p.cliente, p.rotulo, fd(C.inicio) + ' a ' + fd(C.fim)].filter(Boolean).join(' · ') + '. Valor de cada etapa distribuído por igual nos dias corridos entre o início e o fim.';
+    X.getCell('A2').value = [p.cliente, p.rotulo, fd(C.inicio) + ' a ' + fd(C.fim), 'valores ' + crBase(C.com_bdi !== false, C.com_gestao !== false)].filter(Boolean).join(' · ') + '. Valor de cada etapa distribuído por igual nos dias corridos entre o início e o fim.';
     X.getCell('A2').font = fonte({ italic: true, color: { argb: COR.nota } });
     const h = X.getRow(4);
     h.values = ['ITEM', 'ETAPA', 'INÍCIO', 'FIM', 'DIAS', 'VALOR (R$)'].concat(ms.map(m => crMes(m).toUpperCase()));
