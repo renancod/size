@@ -441,7 +441,7 @@ function ppBusca() {
     carregarSin();
     const reg = ($('#ppF') && $('#ppF').elements.sinapi_regime ? $('#ppF').elements.sinapi_regime.value : PP.ed.p.sinapi_regime) === 'cd' ? 'cd' : 'sd';
     const base = BP.d.composicoes.filter(c => c.ativo && t.every(w => norm(c.codigo + ' ' + c.descricao + ' ' + c.grupo).includes(w))).slice(0, 20);
-    const sc = sin && sin.mes ? sinBuscar(sin.C, inp.value, 15).filter(x => x[reg] !== '') : [], si = sin && sin.mes ? sinBuscar(sin.I, inp.value, 8).filter(x => x[reg] !== '') : [];
+    const sc = sin && sin.mes ? sinBuscar(sin.C, inp.value, 15).filter(x => x[reg] > 0) : [], si = sin && sin.mes ? sinBuscar(sin.I, inp.value, 8).filter(x => x[reg] > 0) : [];
     lista = base.map(c => ({ k: 'b', c })).concat(sc.map(c => ({ k: 's', c })), si.map(c => ({ k: 'si', c })));
     sel = 0;
     const tag = `<span class="sin-tag">SINAPI</span>`;

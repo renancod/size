@@ -107,3 +107,16 @@ test('conferência diária: acha o mês novo na Caixa, avisa no sino de quem ger
   assert.equal(t.adm('sinapi_info').novo, null);
   assert.ok(!t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi'));
 });
+
+test('Caixa recusa o servidor: o motivo aparece no erro e o aviso do mês novo segue o calendário', () => {
+  const t = preparar();
+  importar(t, '2025-01', 100);
+  t.G.UrlFetchApp.fetch = () => ({ getResponseCode: () => 403, getHeaders: () => ({ 'Content-Type': 'text/html; charset=utf-8' }), getContentText: () => '<html>bloqueado</html>' });
+  assert.equal(t.G.rodar('sinapiVerificar()'), 'bloqueado');
+  assert.throws(() => t.adm('sinapi_baixar', { mes: '2025-02', parte: 0 }), /recusou o servidor \(403 text\/html/);
+  const d = new Date(), ant = m => { let y = +m.slice(0, 4), n = +m.slice(5, 7) - 1; if (n < 1) { n = 12; y--; } return y + '-' + String(n).padStart(2, '0'); };
+  const m = d.toLocaleDateString('sv-SE').slice(0, 7), esperado = d.getDate() >= 12 ? ant(m) : ant(ant(m));
+  const n = t.adm('sinapi_info').novo;
+  assert.deepEqual([n.mes, n.confirmado], [esperado, false]);
+  assert.ok(t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi' && /deve ter saído/.test(i.texto)));
+});

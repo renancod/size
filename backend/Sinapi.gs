@@ -47,13 +47,23 @@ function sinInfoGravar_(ss, d) {
 const sinMesTxt_ = m => m ? String(m).slice(5, 7) + '/' + String(m).slice(0, 4) : '';
 /* mês seguinte (aaaa-mm) */
 function sinProxMes_(m) { let y = +m.slice(0, 4), n = +m.slice(5, 7) + 1; if (n > 12) { n = 1; y++; } return y + '-' + ('0' + n).slice(-2); }
+function sinAntMes_(m) { let y = +m.slice(0, 4), n = +m.slice(5, 7) - 1; if (n < 1) { n = 12; y--; } return y + '-' + ('0' + n).slice(-2); }
+/* mês novo: o que a conferência achou na Caixa ou, se o servidor não consegue consultar a Caixa (o site recusa servidores
+ * fora do Brasil), o que o calendário indica — a Caixa publica o mês M por volta do dia 10 do mês M+1 */
+function sinNovo_(I) {
+  let n = null;
+  try { n = JSON.parse(PropertiesService.getScriptProperties().getProperty('SINAPI_NOVO') || 'null'); } catch (e) { n = null; }
+  if (n && (!I.mes || n.mes > String(I.mes))) return Object.assign({ confirmado: true }, n);
+  if (!I.mes) return null;
+  const hoje = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'), m = hoje.slice(0, 7);
+  const esperado = +hoje.slice(8, 10) >= 12 ? sinAntMes_(m) : sinAntMes_(sinAntMes_(m));
+  return esperado > String(I.mes) ? { mes: esperado, url: sinUrls_(esperado)[2], confirmado: false } : null;
+}
 
 /* ---------- consulta ---------- */
 function sinapiInfo_(q, ctx) {
   const ss = sinSS_(false), I = sinInfo_(ss), P = PropertiesService.getScriptProperties();
-  let novo = null;
-  try { novo = JSON.parse(P.getProperty('SINAPI_NOVO') || 'null'); } catch (e) { novo = null; }
-  if (novo && I.mes && novo.mes <= String(I.mes)) novo = null;
+  const novo = sinNovo_(I);
   if (ctx.base === 'Gerir') sinGatilho_();
   return { mes: String(I.mes || ''), mes_txt: sinMesTxt_(I.mes), uf: String(I.uf || 'RS'), importado_em: String(I.importado_em || ''), importado_por: String(I.importado_por || ''),
     insumos: num_(I.insumos), composicoes: num_(I.composicoes), itens: num_(I.itens), resumo: String(I.resumo || ''), novo: novo, verificado_em: P.getProperty('SINAPI_VERIFICADO') || '', nivel: ctx.base };
@@ -187,16 +197,19 @@ function sinapiImportar_(q, ctx) {
 /* ---------- arquivo da Caixa: o servidor baixa e entrega ao app em partes ---------- */
 const SIN_PARTE_ = 4 * 1024 * 1024;
 function sinUrls_(mes) { const b = SIN_URL_ + mes + '-formato-xlsx'; return [b + '_Retificacao02.zip', b + '_Retificacao01.zip', b + '.zip']; }
-/* procura o arquivo do mês na Caixa (pede só o 1º byte para não baixar à toa) */
+/* procura o arquivo do mês na Caixa (pede só o 1º byte para não baixar à toa); devolve o endereço ou o motivo de não ter achado */
 function sinAchar_(mes) {
+  const motivos = [];
   for (const u of sinUrls_(mes)) {
     try {
       const r = UrlFetchApp.fetch(u, { method: 'get', headers: { Range: 'bytes=0-0' }, muteHttpExceptions: true, followRedirects: true });
-      const c = r.getResponseCode();
-      if ((c === 200 || c === 206) && !/html/i.test(String((r.getHeaders() || {})['Content-Type'] || ''))) return u;
-    } catch (e) { /* tenta o próximo nome */ }
+      const c = r.getResponseCode(), tipo = String((r.getHeaders() || {})['Content-Type'] || '');
+      if ((c === 200 || c === 206) && !/html/i.test(tipo)) return { url: u };
+      motivos.push(c === 404 ? 404 : c + (tipo ? ' ' + tipo.split(';')[0] : ''));
+    } catch (e) { motivos.push('erro: ' + String(e.message || e).slice(0, 80)); }
   }
-  return '';
+  const bloqueio = motivos.some(m => m !== 404);
+  return { url: '', bloqueio: bloqueio, motivo: bloqueio ? 'o site da Caixa recusou o servidor (' + motivos.filter(m => m !== 404).join(', ') + ')' : 'o arquivo ainda não está no site da Caixa' };
 }
 function sinapiBaixar_(q, ctx) {
   const mes = String(q.mes || ''), parte = Math.max(0, Math.round(num_(q.parte)));
@@ -207,8 +220,9 @@ function sinapiBaixar_(q, ctx) {
   let arq = null;
   if (guardado && guardado.mes === mes) { try { arq = DriveApp.getFileById(guardado.id); } catch (e) { arq = null; } }
   if (!arq) {
-    const url = sinAchar_(mes);
-    if (!url) throw new Error('A Caixa ainda não publicou o SINAPI de ' + sinMesTxt_(mes) + ' (ou o endereço do arquivo mudou). Dá para importar o arquivo baixado à mão.');
+    const ach = sinAchar_(mes), url = ach.url;
+    if (!url) throw new Error(ach.bloqueio ? 'Não deu para baixar pelo servidor: ' + ach.motivo + '. Use "Baixar da Caixa" (o arquivo baixa pelo seu navegador) e depois "Escolher arquivo".'
+      : 'O SINAPI de ' + sinMesTxt_(mes) + ' ainda não está no site da Caixa. Escolha um mês anterior ou importe um arquivo baixado.');
     const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
     if (r.getResponseCode() !== 200) throw new Error('Não consegui baixar o arquivo da Caixa (código ' + r.getResponseCode() + ').');
     const blob = r.getBlob().setName('SINAPI-' + mes + '.zip');
@@ -230,8 +244,9 @@ function sinapiVerificar() {
   const ant = m => { let y = +m.slice(0, 4), n = +m.slice(5, 7) - 1; if (n < 1) { n = 12; y--; } return y + '-' + ('0' + n).slice(-2); };
   const ultimo = I.mes ? String(I.mes) : ant(ant(ant(hoje)));
   for (let m = ant(hoje), k = 0; m > ultimo && k < 3; m = ant(m), k++) {
-    const url = sinAchar_(m);
-    if (url) { P.setProperty('SINAPI_NOVO', JSON.stringify({ mes: m, url: url, achado_em: agora_() })); return 'novo ' + m; }
+    const ach = sinAchar_(m);
+    if (ach.url) { P.setProperty('SINAPI_NOVO', JSON.stringify({ mes: m, url: ach.url, achado_em: agora_() })); return 'novo ' + m; }
+    if (ach.bloqueio) { P.setProperty('SINAPI_VERIFICADO', agora_() + ' (a Caixa recusa o servidor: o aviso segue o calendário)'); return 'bloqueado'; }
   }
   return I.mes && ant(hoje) <= String(I.mes) ? 'em dia' : 'ainda não saiu';
 }
@@ -243,12 +258,9 @@ function sinGatilho_() {
 /* aviso no sino para quem gerencia a base de preços */
 function sinNotif_(ctx) {
   if (ctx.base !== 'Gerir' && !ctx.admin) return [];
-  let novo = null;
-  try { novo = JSON.parse(PropertiesService.getScriptProperties().getProperty('SINAPI_NOVO') || 'null'); } catch (e) { novo = null; }
+  const novo = sinNovo_(sinInfo_(sinSS_(false)));
   if (!novo) return [];
-  const I = sinInfo_(sinSS_(false));
-  if (I.mes && novo.mes <= String(I.mes)) return [];
-  return [{ id: 'sinapi|' + novo.mes, obra: '', obra_nome: 'Orçamentos', numero: 'SINAPI ' + sinMesTxt_(novo.mes), rota: '#/orc/sinapi', etapa: 'sinapi', texto: 'SINAPI ' + sinMesTxt_(novo.mes) + ' publicado pela Caixa — atualizar a referência', resumo: '', situacao: '', prioridade: '', quando: novo.achado_em || '' }];
+  return [{ id: 'sinapi|' + novo.mes, obra: '', obra_nome: 'Orçamentos', numero: 'SINAPI ' + sinMesTxt_(novo.mes), rota: '#/orc/sinapi', etapa: 'sinapi', texto: 'SINAPI ' + sinMesTxt_(novo.mes) + (novo.confirmado ? ' publicado pela Caixa' : ' deve ter saído na Caixa') + ' — baixar e importar', resumo: '', situacao: '', prioridade: '', quando: novo.achado_em || '' }];
 }
 
 /* ---------- copiar uma composição do SINAPI para a base da Size (vira composição de insumos, com a origem anotada) ---------- */

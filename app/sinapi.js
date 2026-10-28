@@ -51,14 +51,17 @@ async function sinIndice(forcar) {
   await sinGuarda('put', r);
   return (SIN.ix = sinMontarIx(r));
 }
-/* busca: todas as palavras, código exato primeiro */
+/* busca: todas as palavras; primeiro o código exato, depois quem tem as palavras no começo de uma palavra
+ * ("locação" não fica atrás de "colocação") */
 function sinBuscar(lista, q, lim) {
-  const t = norm(q).split(/\s+/).filter(Boolean);
+  const t = norm(q).split(/\s+/).filter(Boolean), cod = q.trim();
   if (!t.length) return [];
-  const out = lista.filter(x => t.every(w => x.busca.includes(w)));
-  out.sort((a, b) => (b.codigo === q.trim()) - (a.codigo === q.trim()));
-  return out.slice(0, lim);
+  const pts = x => (x.codigo === cod ? 100 : 0) + t.reduce((s, w) => s + (x.busca.startsWith(w) || x.busca.includes(' ' + w) ? 2 : 0), 0);
+  return lista.filter(x => t.every(w => x.busca.includes(w))).map(x => [pts(x), x]).sort((a, b) => b[0] - a[0]).slice(0, lim).map(a => a[1]);
 }
+/* endereço do arquivo do mês no site da Caixa (baixa pelo navegador: a Caixa recusa servidores fora do Brasil) */
+const sinUrl = m => 'https://www.caixa.gov.br/Downloads/sinapi-relatorios-mensais/SINAPI-' + m + '-formato-xlsx.zip';
+const SIN_PAG = 'https://www.caixa.gov.br/site/Paginas/downloads.aspx#categoria_888';
 /* custo por categoria de um item do SINAPI no regime do orçamento (o mesmo do servidor) */
 function sinCustos(x, tipo, reg) {
   if (tipo === 'I') { const o = { unit_mat: 0, unit_mo: 0, unit_eq: 0, unit_sv: 0 }; o['unit_' + sinCat(x.classe)] = x[reg]; return o; }
@@ -227,18 +230,22 @@ async function vSinapi() {
   bpTela('sinapi', `<div class="bp-hero sin-hero"><div class="bp-hero-t"><span class="bp-selo">${ic('grid2')} Referência oficial · Caixa / IBGE</span><h2>SINAPI ${esc(I.uf)}${I.mes ? ' · ' + esc(I.mes_txt) : ''}</h2>
       <p>${I.mes ? `<b>${nf(I.composicoes)}</b> composições · <b>${nf(I.insumos)}</b> insumos · importado em ${esc(I.importado_em)}${I.importado_por ? ' por ' + esc(I.importado_por) : ''}${I.resumo ? '<br>' + esc(I.resumo) : ''}` : 'Ainda não importado. Importe o mês para usar composições e insumos do SINAPI nos orçamentos.'}</p></div>
       <div class="sin-reg"><small>Preços</small><div class="chips">${reg('sd')}${reg('cd')}</div><small>${I.verificado_em ? 'Caixa conferida em ' + esc(I.verificado_em) : ''}</small></div></div>
-    ${I.novo ? `<div class="aviso info sin-novo">${ic('bell')}<span>A Caixa publicou o SINAPI de <b>${sinMesTxt(I.novo.mes)}</b>.</span>${g ? `<button type="button" class="btn bp-ac peq" id="sinAtualizar">${ic('refresh')} Atualizar agora</button>` : '<span>Peça a quem gerencia a base de preços para atualizar.</span>'}</div>` : ''}
-    ${g ? `<details class="card pp-sec" ${I.mes ? '' : 'open'}><summary><h3>${ic('upload')} Importar ou atualizar</h3><small>${I.mes ? 'o servidor confere a Caixa todo dia e avisa quando sair o mês novo' : 'comece pelo mês mais recente'}</small></summary>
-      <div class="sin-imp"><div><b>Buscar na Caixa</b><small>O servidor baixa o arquivo do mês (todas as UFs) e o app separa o ${SIN_UF}.</small>
-          <div class="sin-lin"><label>Mês<input type="month" id="sinMes" value="${esc((I.novo && I.novo.mes) || sinMesAnt())}"></label><button type="button" class="btn bp-ac" id="sinBuscar">${ic('download')} Buscar e importar</button></div></div>
-        <div><b>Ou escolher o arquivo</b><small>O .zip baixado do site da Caixa (SINAPI-aaaa-mm-formato-xlsx.zip) ou a planilha SINAPI_Referência de dentro dele.</small>
-          <label class="btn sec" id="sinArqBt"><input type="file" id="sinArq" accept=".zip,.xlsx" hidden>${ic('upload')} Escolher arquivo</label></div></div>
-      <div id="sinProg"></div><small class="sin-dica">Faça no computador: o arquivo da Caixa é grande (cerca de 110 MB aberto) e leva alguns minutos. Orçamentos já feitos não mudam.</small></details>` : ''}
+    ${I.novo ? `<div class="aviso info sin-novo">${ic('bell')}<span>${I.novo.confirmado ? 'A Caixa publicou' : 'Pelo calendário da Caixa já deve ter saído'} o SINAPI de <b>${sinMesTxt(I.novo.mes)}</b>.</span>
+      ${g ? `<a class="btn sec peq" href="${esc(sinUrl(I.novo.mes))}" target="_blank" rel="noopener">${ic('download')} 1. Baixar da Caixa</a><button type="button" class="btn bp-ac peq" data-arq>${ic('upload')} 2. Escolher o arquivo</button>` : '<span>Peça a quem gerencia a base de preços para atualizar.</span>'}</div>` : ''}
+    ${g ? `<details class="card pp-sec" ${I.mes ? '' : 'open'}><summary><h3>${ic('upload')} Importar ou atualizar</h3><small>${I.mes ? 'o sistema avisa no sino quando sair o mês novo' : 'comece pelo mês mais recente'}</small></summary>
+      <div class="sin-imp"><div><b>1. Baixar o arquivo da Caixa</b><small>Baixa pelo seu navegador (o site da Caixa não aceita servidores de fora do Brasil). Todas as UFs; o app usa só o ${SIN_UF}.</small>
+          <div class="sin-lin"><label>Mês<input type="month" id="sinMes" value="${esc((I.novo && I.novo.mes) || sinMesAnt())}"></label><a class="btn sec" id="sinLink" href="${esc(sinUrl((I.novo && I.novo.mes) || sinMesAnt()))}" target="_blank" rel="noopener">${ic('download')} Baixar da Caixa</a></div>
+          <small>Não baixou? Alguns meses têm correção ("Retificação") com outro nome: <a href="${SIN_PAG}" target="_blank" rel="noopener">abra a página de downloads do SINAPI</a> e baixe o "formato xlsx" do mês.</small></div>
+        <div><b>2. Escolher o arquivo baixado</b><small>O .zip (SINAPI-aaaa-mm-formato-xlsx.zip) ou a planilha SINAPI_Referência de dentro dele.</small>
+          <label class="btn bp-ac" id="sinArqBt"><input type="file" id="sinArq" accept=".zip,.xlsx" hidden>${ic('upload')} Escolher arquivo e importar</label>
+          <button type="button" class="linkbtn" id="sinBuscar">ou tentar baixar pelo servidor</button></div></div>
+      <div id="sinProg"></div><small class="sin-dica">Faça no computador: o arquivo da Caixa é grande (cerca de 110 MB aberto) e leva cerca de um minuto. Orçamentos já feitos não mudam.</small></details>` : ''}
     ${I.mes ? `<div class="card"><div class="busca">${ic('search')}<input type="search" id="sinQ" data-busca placeholder="Buscar no SINAPI: código ou descrição  ( / )" value="${esc(SIN.q)}"></div>
       <div class="chips" id="sinTipo"><button type="button" class="chip ${SIN.tipo === 'C' ? 'on' : ''}" data-t="C">Composições</button><button type="button" class="chip ${SIN.tipo === 'I' ? 'on' : ''}" data-t="I">Insumos</button></div>
       <div id="sinLista" class="sin-lista"><div class="bp-lendo"><span class="spin"></span> Carregando o índice do SINAPI…</div></div></div>` : ''}`);
   $$('[data-reg]').forEach(b => { b.onclick = () => { SIN.reg = b.dataset.reg; $$('[data-reg]').forEach(x => x.classList.toggle('on', x === b)); desenhar(); }; });
-  if ($('#sinAtualizar')) $('#sinAtualizar').onclick = () => sinImportar(p => sinBaixar(I.novo.mes, p), 'Caixa · SINAPI-' + I.novo.mes);
+  $$('[data-arq]').forEach(b => { b.onclick = () => { const d = $('details.pp-sec'); if (d) d.open = true; $('#sinArq').click(); }; });
+  if ($('#sinMes')) $('#sinMes').oninput = e => { if (/^\d{4}-\d{2}$/.test(e.target.value)) $('#sinLink').href = sinUrl(e.target.value); };
   if ($('#sinBuscar')) $('#sinBuscar').onclick = () => { const m = $('#sinMes').value; if (!/^\d{4}-\d{2}$/.test(m)) return toast('Escolha o mês.', 1); sinImportar(p => sinBaixar(m, p), 'Caixa · SINAPI-' + m); };
   if ($('#sinArq')) $('#sinArq').onchange = e => { const f = e.target.files[0]; if (f) sinImportar(async p => { p('Lendo ' + f.name + '…'); return f.arrayBuffer(); }, 'Arquivo · ' + f.name); };
   if (!I.mes) return;
