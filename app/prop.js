@@ -77,7 +77,7 @@ async function vProp(id) {
   const p = d ? d.proposta : { cliente: '', empreendimento: '', status: 'Rascunho', bdi_pct: 0, bdi_base: 'servicos', gestao_pct: 0, gestao_base: 'total', validade_dias: 30, data_base: hoje(), rotulo: 'novo' };
   titulo(id ? p.rotulo + ' · ' + p.empreendimento : 'Novo orçamento');
   const edita = !d || d.editavel;
-  PP.ed = { id: id || '', p: Object.assign({}, p), linhas: d ? d.itens.map(i => i.tipo === 'E' ? { tipo: 'E', descricao: i.descricao } : { tipo: 'I', comp_cod: i.comp_cod, descricao: i.descricao, unidade: i.unidade, qtd: bpV(i.qtd), unit_mat: i.unit_mat, unit_mo: i.unit_mo, unit_eq: i.unit_eq, unit_sv: i.unit_sv, obs: i.obs, sem_bdi: !!i.sem_bdi, sem_gestao: !!i.sem_gestao }) : [{ tipo: 'E', descricao: 'Serviços preliminares' }], sujo: false };
+  PP.ed = { id: id || '', p: Object.assign({}, p), linhas: d ? d.itens.map(i => i.tipo === 'E' ? { tipo: 'E', descricao: i.descricao } : { tipo: 'I', comp_cod: i.comp_cod, fonte: i.fonte || '', descricao: i.descricao, unidade: i.unidade, qtd: bpV(i.qtd), unit_mat: i.unit_mat, unit_mo: i.unit_mo, unit_eq: i.unit_eq, unit_sv: i.unit_sv, obs: i.obs, sem_bdi: !!i.sem_bdi, sem_gestao: !!i.sem_gestao }) : [{ tipo: 'E', descricao: 'Serviços preliminares' }], sujo: false };
   // orçamento grande abre com as etapas recolhidas (só nome, quantidade de itens e subtotal)
   if (PP.ed.linhas.filter(l => l.tipo === 'I').length > 10) PP.ed.linhas.forEach(l => { if (l.tipo === 'E') l._fechada = true; });
   const cab = `<a href="#/orc/orcamentos" class="linkbtn">${ic('back')} Orçamentos de clientes</a>
@@ -90,7 +90,7 @@ async function vProp(id) {
   if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d));
   else {
     bpTela('props', cab + ppLeitura(d));
-    $$('[data-ver-cod]').forEach(b => { b.onclick = () => { const i = d.itens.find(x => x.codigo === b.dataset.verCod); if (i) ppInsumos(i, i); }; });
+    $$('[data-ver-cod]').forEach(b => { b.onclick = () => { const i = d.itens.find(x => x.codigo === b.dataset.verCod); if (i) i.fonte ? sinVerComposicao(i.comp_cod, d.proposta.sinapi_regime, i.qtd) : ppInsumos(i, i); }; });
   }
   ppLigarAcoes(d);
   if (edita) ppEditorLigar();
@@ -149,7 +149,7 @@ function ppTabela(itens, etapas, T, interna) {
   etapas.forEach(e => { et[e.codigo] = e; });
   return `<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
     ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${bpM((et[i.codigo] || {}).preco)}</b></td></tr>`
-      : `<tr><td>${esc(i.codigo)}</td><td>${i.comp_cod ? `<button type="button" class="bp-lnk pp-ver" data-ver-cod="${esc(i.codigo)}" title="Ver os insumos deste serviço">${esc(i.descricao)}</button>` : esc(i.descricao)}${interna && i.comp_cod ? ` <small><code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
+      : `<tr><td>${esc(i.codigo)}</td><td>${i.comp_cod && i.fonte !== 'SINAPI-INSUMO' ? `<button type="button" class="bp-lnk pp-ver" data-ver-cod="${esc(i.codigo)}" title="Ver os insumos deste serviço">${esc(i.descricao)}</button>` : esc(i.descricao)}${interna && i.comp_cod ? ` <small>${i.fonte ? 'SINAPI ' : ''}<code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
         ${interna ? `<td class="n bp-mono">${bpM(i.custo_unit)}</td><td class="n bp-mono">${bpM(i.v_mat)}</td><td class="n bp-mono">${bpM(i.v_serv)}</td><td class="n bp-mono">${bpM(i.bdi)}</td><td class="n bp-mono">${bpM(i.gestao)}</td>` : ''}
         <td class="n bp-mono">${bpM(i.preco_unit)}</td><td class="n bp-mono"><b>${bpM(i.preco)}</b></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot></table></div>`;
@@ -171,7 +171,9 @@ function ppEditorHtml(p, novo) {
     <details class="card pp-sec" ${novo ? 'open' : ''}><summary><h3>${ic('percent')} BDI e gestão</h3><small>BDI ${esc(bpV(p.bdi_pct))}% ${p.bdi_base === 'total' ? 'sobre o total' : 's/ serviços'} · gestão ${esc(bpV(p.gestao_pct))}% ${p.gestao_base === 'total' ? 'sobre o total' : 's/ serviços'}</small></summary>
       <div class="pp-taxas"><label>BDI (%)<input name="bdi_pct" inputmode="decimal" value="${esc(bpV(p.bdi_pct))}"></label><label>sobre ${sel('bdi_base', p.bdi_base)}</label>
         <label>Gestão de obra (%)<input name="gestao_pct" inputmode="decimal" value="${esc(bpV(p.gestao_pct))}"></label><label>sobre ${sel('gestao_base', p.gestao_base)}</label></div>
-      <small>Ex. da AVA: BDI 18% só sobre mão de obra e serviços e gestão 6% sobre o custo total. O preço de venda de cada item = custo + BDI + gestão.</small></details>
+      <small>Ex. da AVA: BDI 18% só sobre mão de obra e serviços e gestão 6% sobre o custo total. O preço de venda de cada item = custo + BDI + gestão.</small>
+      <div class="pp-sinreg"><label>Itens do SINAPI <select name="sinapi_regime"><option value="sd" ${p.sinapi_regime !== 'cd' ? 'selected' : ''}>Não desonerado</option><option value="cd" ${p.sinapi_regime === 'cd' ? 'selected' : ''}>Desonerado</option></select></label>
+        <small>vale para os itens do SINAPI incluídos daqui em diante; os que já estão mantêm o custo (para trocar todos, use "Atualizar preços pela base").</small></div></details>
     <details class="card pp-sec" ${novo ? 'open' : ''}><summary><h3>${ic('file')} Texto da proposta</h3><small>${esc(p.prazo_txt || p.pagamento_txt ? [p.prazo_txt, p.pagamento_txt].filter(Boolean).join(' · ') : 'prazo, pagamento e observações')}</small></summary>
       <div class="g2"><label>Prazo de execução<input name="prazo_txt" value="${esc(p.prazo_txt || '')}" placeholder="ex: 8 meses a partir da ordem de serviço"></label><label>Condições de pagamento<input name="pagamento_txt" value="${esc(p.pagamento_txt || '')}" placeholder="ex: medições mensais, pagamento em 15 dias"></label></div>
       <label>Observações para o cliente<textarea name="texto_cliente" rows="3" placeholder="ex: não inclui licenças, projetos e ligações definitivas">${esc(p.texto_cliente || '')}</textarea></label>
@@ -207,7 +209,7 @@ function ppMostraAlvo() {
 function ppColher() {
   const f = $('#ppF');
   if (!f) return;
-  ['cliente', 'cliente_doc', 'contato', 'telefone', 'email', 'empreendimento', 'local', 'data_base', 'validade_dias', 'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs'].forEach(k => { PP.ed.p[k] = f.elements[k].value; });
+  ['cliente', 'cliente_doc', 'contato', 'telefone', 'email', 'empreendimento', 'local', 'data_base', 'validade_dias', 'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'sinapi_regime', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs'].forEach(k => { if (f.elements[k]) PP.ed.p[k] = f.elements[k].value; });
 }
 function ppIncluir(l, foco) {
   ppColher();
@@ -247,7 +249,7 @@ function ppDesenhar(estrutura) {
       if (fechada) return '';
       const comp = l.comp_cod ? BP.C[l.comp_cod] : null, fl = [l.sem_bdi && 'sem BDI', l.sem_gestao && 'sem gestão'].filter(Boolean);
       return `<div class="pp-r pi ${l.comp_cod ? 'base' : 'dir'}" data-n="${n}"><span class="pp-cod">${esc(c.codigo)}</span>
-        <div class="pp-rd"><b>${esc(l.descricao) || '<i>sem descrição</i>'}</b><small>${l.comp_cod ? `<code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'}` : 'preço direto'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}${fl.map(f => ` <span class="bp-flag">${f}</span>`).join('')}</small></div>
+        <div class="pp-rd"><b>${esc(l.descricao) || '<i>sem descrição</i>'}</b><small>${l.fonte ? `<span class="sin-tag">SINAPI</span> <code>${esc(l.comp_cod)}</code>${l.fonte === 'SINAPI-INSUMO' ? ' · insumo' : ''}` : l.comp_cod ? `<code>${esc(l.comp_cod)}</code> · da base${comp ? '' : ' (não está mais na base)'}` : 'preço direto'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}${l.obs ? ' · ' + esc(l.obs) : ''}${fl.map(f => ` <span class="bp-flag">${f}</span>`).join('')}</small></div>
         <div class="pp-rq"><small>Quant.</small><span><input class="pp-qin" data-c="qtd" inputmode="decimal" value="${esc(l.qtd)}" placeholder="0" aria-label="Quantidade"><b class="pp-qtx bp-mono">${l.qtd === '' ? '—' : nf(bpPn(l.qtd))}</b> <em>${esc(l.unidade)}</em></span></div>
         <div class="pp-rv un"><small>Preço unit.</small><b class="bp-mono" data-pu></b></div><div class="pp-rv"><small>Total</small><b class="bp-mono" data-pt></b></div>${ed('o item')}</div>`;
     }).join('') : `<div class="bp-itens-vazio">${ic('list')}<b>Planilha vazia</b><small>Crie uma etapa e busque acima os serviços da base de preços (ou inclua um item de preço direto).</small></div>`;
@@ -325,7 +327,7 @@ function ppEditarItem(n) {
   const f = modal(`${ic('edit')} Item ${esc(c.codigo)}`, `
     ${dir ? `<label>Descrição<input name="descricao" required value="${esc(l.descricao)}" placeholder="Descrição do item (preço direto)"></label>
       <div class="bp-g3"><label>Unidade<input name="unidade" required value="${esc(l.unidade)}"></label><label>Material / un (R$)<input name="unit_mat" inputmode="decimal" value="${esc(bpV(l.unit_mat))}" placeholder="0,00"></label><label>Mão de obra / un (R$)<input name="unit_mo" inputmode="decimal" value="${esc(bpV(l.unit_mo))}" placeholder="0,00"></label></div>`
-      : `<div class="pp-ed-cab"><div><b>${esc(l.descricao)}</b><small><code>${esc(l.comp_cod)}</code> · da base · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}</small></div><button type="button" class="btn sec peq" id="ppEdIns">${ic('layers')} Ver insumos</button></div>`}
+      : `<div class="pp-ed-cab"><div><b>${esc(l.descricao)}</b><small>${l.fonte ? '<span class="sin-tag">SINAPI</span> ' : ''}<code>${esc(l.comp_cod)}</code> · ${l.fonte ? 'SINAPI' : 'da base'} · custo ${bpM(c.custo_unit)}/${esc(l.unidade)}</small></div>${l.fonte === 'SINAPI-INSUMO' ? '' : `<button type="button" class="btn sec peq" id="ppEdIns">${ic('layers')} Ver insumos</button>`}</div>`}
     <div class="bp-g3"><label>Quantidade (${esc(l.unidade)})<input name="qtd" inputmode="decimal" required value="${esc(l.qtd)}" placeholder="0"></label><label class="bp-span2">Observação<input name="obs" value="${esc(l.obs || '')}" placeholder="opcional"></label></div>
     <div class="pp-ed-tx"><label class="ck"><input type="checkbox" name="bdi" ${l.sem_bdi ? '' : 'checked'}> Entra no BDI</label><label class="ck"><input type="checkbox" name="ges" ${l.sem_gestao ? '' : 'checked'}> Entra na gestão</label></div>
     <div class="pp-ed-pv" id="ppEdPv"></div>
@@ -356,7 +358,7 @@ function ppEditarItem(n) {
     $('#ppEdPv').innerHTML = `<span>Preço unit. <b class="bp-mono">${bpM(x.preco_unit)}</b></span><span>Total <b class="bp-mono">${bpM(x.preco)}</b></span><small>custo ${bpM(x.custo)} · BDI ${bpM(x.bdi)} · gestão ${bpM(x.gestao)}</small>`;
   };
   f.addEventListener('input', previa); f.addEventListener('change', previa); previa();
-  if ($('#ppEdIns')) $('#ppEdIns').onclick = () => { aplicar(f); ppInsumos(l, ppCalc(E.p, L).linhas[n]); };
+  if ($('#ppEdIns')) $('#ppEdIns').onclick = () => { aplicar(f); if (l.fonte) return sinVerComposicao(l.comp_cod, E.p.sinapi_regime, bpPn(l.qtd)); ppInsumos(l, ppCalc(E.p, L).linhas[n]); };
   $$('[data-mv]', f).forEach(b => { b.onclick = () => {
     aplicar(f);
     const m = n + +b.dataset.mv;
@@ -414,7 +416,7 @@ async function ppSalvar(silencioso) {
   if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
   try {
     const r = await api('prop_salvar', { proposta: Object.assign({}, E.p, { id: E.id || undefined }), itens: E.linhas.map(l => l.tipo === 'E' ? { tipo: 'E', descricao: l.descricao }
-      : { tipo: 'I', comp_cod: l.comp_cod, descricao: l.descricao, unidade: l.unidade, qtd: bpPn(l.qtd), unit_mat: bpPn(l.unit_mat), unit_mo: bpPn(l.unit_mo), unit_eq: bpPn(l.unit_eq), unit_sv: bpPn(l.unit_sv), obs: l.obs || '', sem_bdi: !!l.sem_bdi, sem_gestao: !!l.sem_gestao }) });
+      : { tipo: 'I', comp_cod: l.comp_cod, fonte: l.fonte || '', descricao: l.descricao, unidade: l.unidade, qtd: bpPn(l.qtd), unit_mat: bpPn(l.unit_mat), unit_mo: bpPn(l.unit_mo), unit_eq: bpPn(l.unit_eq), unit_sv: bpPn(l.unit_sv), obs: l.obs || '', sem_bdi: !!l.sem_bdi, sem_gestao: !!l.sem_gestao }) });
     E.sujo = false;
     if (!silencioso) toast(r.msg);
     if (!E.id) { location.hash = '#/orc/orcamento/' + enc(r.id); return r; }
@@ -426,12 +428,27 @@ async function ppSalvar(silencioso) {
 function ppBusca() {
   const inp = $('#ppBusca'), res = $('#ppRes');
   let sel = 0, lista = [], tF;
+  // SINAPI: o índice (guardado no aparelho) é carregado na primeira busca; enquanto carrega, só a base da Size
+  let sin = null, sinPedido = false;
+  const carregarSin = () => {
+    if (sinPedido || !window.sinIndice) return;
+    sinPedido = true;
+    sinIndice().then(ix => { sin = ix; if (document.activeElement === inp) desenhar(); }).catch(() => { sin = null; });
+  };
   const desenhar = () => {
     const t = norm(inp.value).split(/\s+/).filter(Boolean);
     if (!t.length) { res.hidden = true; return; }
-    lista = BP.d.composicoes.filter(c => c.ativo && t.every(w => norm(c.codigo + ' ' + c.descricao + ' ' + c.grupo).includes(w))).slice(0, 25);
+    carregarSin();
+    const reg = ($('#ppF') && $('#ppF').elements.sinapi_regime ? $('#ppF').elements.sinapi_regime.value : PP.ed.p.sinapi_regime) === 'cd' ? 'cd' : 'sd';
+    const base = BP.d.composicoes.filter(c => c.ativo && t.every(w => norm(c.codigo + ' ' + c.descricao + ' ' + c.grupo).includes(w))).slice(0, 20);
+    const sc = sin && sin.mes ? sinBuscar(sin.C, inp.value, 15).filter(x => x[reg] !== '') : [], si = sin && sin.mes ? sinBuscar(sin.I, inp.value, 8).filter(x => x[reg] !== '') : [];
+    lista = base.map(c => ({ k: 'b', c })).concat(sc.map(c => ({ k: 's', c })), si.map(c => ({ k: 'si', c })));
     sel = 0;
-    res.innerHTML = lista.map((c, n) => `<button type="button" class="bp-op ${n ? '' : 'on'}" data-n="${n}">${bpDonut(c.custo, 'mini')}<span><b>${esc(c.descricao)}</b><small><code>${esc(c.codigo)}</code> · ${esc(c.unidade)}${c.grupo ? ' · ' + esc(c.grupo) : ''}</small></span><span class="bp-mono">${bpM(c.custo.total)}</span></button>`).join('')
+    const tag = `<span class="sin-tag">SINAPI</span>`;
+    res.innerHTML = lista.map(({ k, c }, n) => k === 'b'
+      ? `<button type="button" class="bp-op ${n ? '' : 'on'}" data-n="${n}">${bpDonut(c.custo, 'mini')}<span><b>${esc(c.descricao)}</b><small><code>${esc(c.codigo)}</code> · ${esc(c.unidade)}${c.grupo ? ' · ' + esc(c.grupo) : ''}</small></span><span class="bp-mono">${bpM(c.custo.total)}</span></button>`
+      : `<button type="button" class="bp-op ${n ? '' : 'on'}" data-n="${n}">${tag}<span><b>${esc(c.descricao)}</b><small><code>${esc(c.codigo)}</code> · ${esc(c.unidade)} · ${k === 's' ? esc(c.grupo) : 'insumo · ' + esc(c.classe.toLowerCase())} · ${SIN_REG[reg].toLowerCase()} ${sinMesTxt(sin.mes)}</small></span><span class="bp-mono">${bpM(c[reg])}</span></button>`).join('')
+      + (sinPedido && !sin ? '<div class="bp-res-n"><span class="spin"></span> buscando também no SINAPI…</div>' : '')
       + `<button type="button" class="bp-op bp-op-novo" data-n="dir">${ic('plus')}<span><b>Item de preço direto: “${esc(inp.value.trim())}”</b><small>sem composição: você digita material e mão de obra por unidade</small></span></button>`;
     res.hidden = false;
     $$('.bp-op', res).forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => escolher(b.dataset.n); });
@@ -441,8 +458,13 @@ function ppBusca() {
     const txt = inp.value.trim();
     inp.value = '';
     if (n === 'dir') return ppIncluir({ tipo: 'I', comp_cod: '', descricao: txt, unidade: 'vb', qtd: '1', unit_mat: '', unit_mo: '', unit_eq: 0, unit_sv: 0 }, true);
-    const c = lista[+n];
-    if (!c) return;
+    const e = lista[+n];
+    if (!e) return;
+    if (e.k !== 'b') {
+      const reg = ($('#ppF') && $('#ppF').elements.sinapi_regime ? $('#ppF').elements.sinapi_regime.value : PP.ed.p.sinapi_regime) === 'cd' ? 'cd' : 'sd';
+      return ppIncluir(Object.assign({ tipo: 'I', comp_cod: e.c.codigo, fonte: e.k === 's' ? 'SINAPI' : 'SINAPI-INSUMO', descricao: e.c.descricao, unidade: e.c.unidade, qtd: '' }, sinCustos(e.c, e.k === 's' ? 'C' : 'I', reg)));
+    }
+    const c = e.c;
     if (PP.ed.linhas.some(l => l.comp_cod === c.codigo)) toast('Este serviço já está no orçamento (pode repetir em outra etapa).');
     ppIncluir({ tipo: 'I', comp_cod: c.codigo, descricao: c.descricao, unidade: c.unidade, qtd: '', unit_mat: c.custo.mat, unit_mo: c.custo.mo, unit_eq: c.custo.eq, unit_sv: c.custo.sv });
   };
@@ -666,7 +688,7 @@ async function ppExcel(d) {
   };
   d.itens.filter(i => i.tipo === 'I').forEach(i => {
     linhaB([i.codigo, '', i.comp_cod || '', i.descricao, i.unidade, i.qtd, '', ppR2(i.custo_unit), i.custo], true);
-    const c = i.comp_cod && BP.C[i.comp_cod];
+    const c = i.comp_cod && !i.fonte && BP.C[i.comp_cod];
     if (c) Object.values(bpExplodir(c.itens, 1, {}, [c.codigo])).forEach(a => linhaB([i.codigo, TIPO[a.i.tipo] || 'Material', a.i.codigo, a.i.descricao, a.i.unidade, Math.round(i.qtd * a.coef * 1e4) / 1e4, Math.round(a.coef * 1e6) / 1e6, a.preco, ppR2(i.qtd * a.coef * a.preco)], false, a.i.tipo === 'Material' ? '' : COR.marrom));
     else {
       if (i.unit_mat) linhaB([i.codigo, 'Material', '', i.descricao + ' – material', i.unidade, i.qtd, 1, i.unit_mat, i.v_mat], false);

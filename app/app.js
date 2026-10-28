@@ -264,6 +264,7 @@ const MODULOS = [
       { h: '#/orc', t: 'Base de preços', i: 'chart', ok: () => !!baseNivel() },
       { h: '#/orc/composicoes', t: 'Composições', i: 'layers', ok: () => !!baseNivel() },
       { h: '#/orc/insumos', t: 'Insumos', i: 'box', ok: () => !!baseNivel() },
+      { h: '#/orc/sinapi', t: 'SINAPI (Caixa)', i: 'grid2', ok: () => !!baseNivel() },
       { h: '#/orc/importar', t: 'Importar orçamento', i: 'upload', ok: () => baseNivel() === 'Gerir' }
     ]
   }
@@ -546,7 +547,7 @@ const ETAPA_NOTIF = {
   pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'],
   exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file'],
   fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip'],
-  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert']
+  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {
@@ -621,7 +622,7 @@ function tocarAviso(urgente) {
 }
 async function abrirNotif(i) {
   fecharModal();
-  if (i.obra !== S.obraId) await trocarObra(i.obra);
+  if (i.obra && i.obra !== S.obraId) await trocarObra(i.obra);
   location.hash = i.rota || '#/pedido/' + enc(i.numero);
 }
 function painelNotif() {

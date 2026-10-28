@@ -163,6 +163,12 @@ const ROTAS = {
   prop_gerar_obra: { admin: true, base: 'Gerir', lock: true, fn: propGerarObra_ },
   prop_importar: { base: 'Gerir', lock: true, fn: propImportar_ },
   prop_cronograma: { base: 'Gerir', lock: true, fn: propCronoSalvar_ },
+  sinapi_info: { base: 'Ver', fn: sinapiInfo_ },
+  sinapi_indice: { base: 'Ver', fn: sinapiIndice_ },
+  sinapi_composicao: { base: 'Ver', fn: sinapiComposicao_ },
+  sinapi_baixar: { base: 'Gerir', fn: sinapiBaixar_ },
+  sinapi_importar: { base: 'Gerir', lock: true, fn: sinapiImportar_ },
+  sinapi_para_base: { base: 'Gerir', lock: true, fn: sinapiParaBase_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },

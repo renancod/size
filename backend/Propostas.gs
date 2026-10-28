@@ -45,7 +45,7 @@ function propCalc_(p, itens) {
     }
     const q = num_(x.qtd), u = { mat: num_(x.unit_mat), mo: num_(x.unit_mo), eq: num_(x.unit_eq), sv: num_(x.unit_sv) };
     const i = {
-      tipo: 'I', codigo: String(x.codigo), comp_cod: String(x.comp_cod || ''), descricao: x.descricao, unidade: x.unidade, qtd: q, unit_mat: u.mat, unit_mo: u.mo, unit_eq: u.eq, unit_sv: u.sv, obs: x.obs || '',
+      tipo: 'I', codigo: String(x.codigo), comp_cod: String(x.comp_cod || ''), fonte: String(x.fonte || ''), descricao: x.descricao, unidade: x.unidade, qtd: q, unit_mat: u.mat, unit_mo: u.mo, unit_eq: u.eq, unit_sv: u.sv, obs: x.obs || '',
       custo_unit: u.mat + u.mo + u.eq + u.sv, custo: propR2_(q * (u.mat + u.mo + u.eq + u.sv)), v_mat: propR2_(q * u.mat), v_serv: propR2_(q * (u.mo + u.eq + u.sv))
     };
     i.sem_bdi = sim_(x.sem_bdi); i.sem_gestao = sim_(x.sem_gestao);
@@ -68,6 +68,7 @@ function propPub_(p, comTotal) {
   o.revisao = num_(p.revisao);
   ['bdi_pct', 'gestao_pct', 'validade_dias'].forEach(k => { o[k] = num_(p[k]); });
   o.data_base = baseData_(p.data_base);
+  o.sinapi_regime = p.sinapi_regime === 'cd' ? 'cd' : 'sd';
   if (comTotal) o.total = propCalc_(p, propItens_(p.id)).total;
   return o;
 }
@@ -105,8 +106,9 @@ function propCustoBase_(ix, memo, cod) {
   return { unit_mat: baseR4_(r.mat), unit_mo: baseR4_(r.mo), unit_eq: baseR4_(r.eq), unit_sv: baseR4_(r.sv) };
 }
 /* etapas numeradas 1, 2, 3… e itens 1.1, 1.2… na ordem da tela */
-function propItensValidos_(lista, id, ix) {
+function propItensValidos_(lista, id, ix, regime) {
   const memo = {}, out = [];
+  let six = null;   // índice do SINAPI, só se algum item do SINAPI vier sem custo
   let ne = 0, ni = 0, temEtapa = false;
   [].concat(lista || []).forEach(x => {
     if (!x) return;
@@ -123,12 +125,16 @@ function propItensValidos_(lista, id, ix) {
     if (!(qtd > 0)) throw new Error('Informe a quantidade de ' + (desc || comp) + '.');
     const un = String(x.unidade || '').trim();
     if (!un) throw new Error('Informe a unidade de ' + (desc || comp) + '.');
+    const fonte = /^SINAPI(-INSUMO)?$/.test(String(x.fonte || '')) && comp ? String(x.fonte) : '';
     let u = { unit_mat: num_(x.unit_mat), unit_mo: num_(x.unit_mo), unit_eq: num_(x.unit_eq), unit_sv: num_(x.unit_sv) };
-    // composição sem custo vindo da tela (ou a pedido): pega da base agora e congela
-    if (comp && (x.recalcular || ['unit_mat', 'unit_mo', 'unit_eq', 'unit_sv'].every(k => x[k] === '' || x[k] == null))) u = propCustoBase_(ix, memo, comp);
+    // composição sem custo vindo da tela (ou a pedido): pega da base (ou do SINAPI, no regime do orçamento) agora e congela
+    if (comp && (x.recalcular || ['unit_mat', 'unit_mo', 'unit_eq', 'unit_sv'].every(k => x[k] === '' || x[k] == null))) {
+      if (fonte) { six = six || sinIndiceServidor_(); u = sinCustoItem_(six, fonte, comp, regime); }
+      else u = propCustoBase_(ix, memo, comp);
+    }
     Object.keys(u).forEach(k => { if (u[k] < 0) throw new Error('Valor negativo em ' + (desc || comp) + '.'); });
     ni++;
-    out.push(Object.assign({ proposta: id, ordem: out.length + 1, tipo: 'I', codigo: ne + '.' + ni, comp_cod: comp, descricao: (desc || (ix.C[comp] ? ix.C[comp].descricao : comp)).slice(0, 300), unidade: un.slice(0, 20), qtd: qtd, obs: String(x.obs || '').trim().slice(0, 300),
+    out.push(Object.assign({ proposta: id, ordem: out.length + 1, tipo: 'I', codigo: ne + '.' + ni, comp_cod: comp, fonte: fonte, descricao: (desc || (!fonte && ix.C[comp] ? ix.C[comp].descricao : comp)).slice(0, 300), unidade: un.slice(0, 20), qtd: qtd, obs: String(x.obs || '').trim().slice(0, 300),
       sem_bdi: sim_(x.sem_bdi) ? 'Sim' : '', sem_gestao: sim_(x.sem_gestao) ? 'Sim' : '' }, u));
   });
   return out;
@@ -155,13 +161,14 @@ function propSalvar_(q, ctx) {
     p[k] = v;
   });
   ['bdi_base', 'gestao_base'].forEach(k => { if (d[k] !== undefined) p[k] = PROP_BASES[d[k]] ? d[k] : 'total'; });
+  if (d.sinapi_regime !== undefined) p.sinapi_regime = d.sinapi_regime === 'cd' ? 'cd' : 'sd';
   if (nova) { if (p.bdi_base == null) p.bdi_base = 'servicos'; if (p.gestao_base == null) p.gestao_base = 'total'; if (p.validade_dias == null) p.validade_dias = 30; if (!p.data_base) p.data_base = baseHoje_(); }
   p.atualizado_em = new Date();
   p.atualizado_por = ctx.u.nome;
   const I = central_('PropostaItens');
   let itens = null;
   if (q.itens !== undefined) {
-    itens = propItensValidos_(q.itens, p.id, baseIndice_());
+    itens = propItensValidos_(q.itens, p.id, baseIndice_(), p.sinapi_regime);
     I.substituir(I.all().filter(x => String(x.proposta) !== String(p.id)).concat(itens));
   }
   const tot = propCalc_(p, itens || propItens_(p.id)).total;
@@ -176,9 +183,15 @@ function propAtualizarPrecos_(q, ctx) {
   if (p.status !== 'Rascunho') throw new Error('Só o orçamento em rascunho é atualizado pela base.');
   const I = central_('PropostaItens'), ix = baseIndice_(), memo = {}, falta = [];
   const antes = propCalc_(p, propItens_(p.id)).total.preco;
-  let n = 0;
+  let n = 0, six = null;
   propItens_(p.id).forEach(x => {
     if (x.tipo !== 'I' || !x.comp_cod) return;
+    // item do SINAPI: preço do mês importado, no regime do orçamento
+    if (/^SINAPI/.test(String(x.fonte || ''))) {
+      six = six || sinIndiceServidor_();
+      try { Object.assign(x, sinCustoItem_(six, String(x.fonte), x.comp_cod, p.sinapi_regime)); n++; } catch (e) { falta.push('SINAPI ' + x.comp_cod); }
+      return;
+    }
     if (!ix.C[String(x.comp_cod)]) { falta.push(String(x.comp_cod)); return; }
     Object.assign(x, propCustoBase_(ix, memo, x.comp_cod));
     n++;
@@ -301,14 +314,14 @@ function propGerarObra_(q, ctx) {
     const f = orcFrente_(octx, e.descricao);
     const its = calc.linhas.filter(l => l.tipo === 'I' && String(l.codigo).split('.')[0] === e.codigo);
     const r = orcItensSalvar_({ frente: f.codigo, itens: its.map(i => ({ codigo: i.codigo, grupo: e.descricao, servico: i.descricao, unidade: i.unidade, qtd: i.qtd,
-      unit_material: baseR4_(i.unit_mat), unit_mo: baseR4_(i.unit_mo + i.unit_eq + i.unit_sv), unit_venda: i.preco_unit, obs: i.comp_cod ? 'Composição ' + i.comp_cod + ' · ' + propRotulo_(p) : propRotulo_(p) })) }, octx);
+      unit_material: baseR4_(i.unit_mat), unit_mo: baseR4_(i.unit_mo + i.unit_eq + i.unit_sv), unit_venda: i.preco_unit, obs: i.comp_cod ? (i.fonte ? 'SINAPI ' : 'Composição ') + i.comp_cod + ' · ' + propRotulo_(p) : propRotulo_(p) })) }, octx);
     nServ += its.length;
     Object.assign(f, { preco: e.preco, custo_direto: e.custo, adm_local: 0, indiretas: 0, tributos: 0, descricao: 'Do orçamento ' + propRotulo_(p),
       inicio: (crono[e.codigo] || {}).ini || '', fim: (crono[e.codigo] || {}).fim || '' });
     Fr.update(f);
     // materiais de cada serviço: o que a composição gasta por unidade (já com a perda que estiver no coeficiente)
     its.forEach((i, n) => {
-      if (!i.comp_cod || !ix.C[i.comp_cod]) return;
+      if (!i.comp_cod || i.fonte || !ix.C[i.comp_cod]) return;   // SINAPI: materiais ficam para cadastrar na obra
       const mats = propMateriais_(ix, i.comp_cod, 1, {}, [i.comp_cod]);
       Object.keys(mats).forEach(k => {
         const m = mats[k].i;

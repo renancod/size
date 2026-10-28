@@ -23,10 +23,11 @@ const SCHEMA_CENTRAL = {
   // orçamentos de clientes (antes de existir a obra): cada revisão é uma linha; os custos dos itens ficam congelados no orçamento
   Propostas: ['id', 'numero', 'revisao', 'status', 'cliente', 'cliente_doc', 'contato', 'telefone', 'email', 'empreendimento', 'local', 'data_base', 'validade_dias',
     'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs', 'motivo', 'obra_id', 'historico_json',
-    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em', 'cronograma_json'],
+    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em', 'cronograma_json', 'sinapi_regime'],
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
   // sem_bdi / sem_gestao: item fora do BDI ou da gestão (ex. AVA: mobilização e canteiro sem BDI)
-  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs', 'sem_bdi', 'sem_gestao']
+  // fonte: vazio = base da Size; SINAPI = composição do SINAPI; SINAPI-INSUMO = insumo do SINAPI (custo congelado do mês e do regime do orçamento)
+  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs', 'sem_bdi', 'sem_gestao', 'fonte']
 };
 const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',

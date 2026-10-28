@@ -44,6 +44,7 @@ function criarGAS() {
   function Sheet(ss, nome) { this.ss = ss; this.nome = nome; this.d = []; }
   Sheet.prototype.getName = function () { return this.nome; };
   Sheet.prototype.setFrozenRows = function () { return this; };
+Sheet.prototype.setName = function (n) { this.nome = n; return this; };
   Sheet.prototype.getLastRow = function () { for (let i = this.d.length - 1; i >= 0; i--) if (this.d[i] && this.d[i].some(x => x !== '' && x != null)) return i + 1; return 0; };
   Sheet.prototype.getLastColumn = function () { let m = 0; this.d.forEach(r => { if (!r) return; for (let j = r.length - 1; j >= 0; j--) if (r[j] !== '' && r[j] != null) { m = Math.max(m, j + 1); break; } }); return m; };
   Sheet.prototype.getRange = function (r, c, nr, nc) { if (r < 1 || c < 1 || (nr || 1) < 1 || (nc || 1) < 1) throw new Error('getRange inválido ' + [r, c, nr, nc]); return new Range(this, r, c, nr || 1, nc || 1); };
@@ -91,6 +92,7 @@ function criarGAS() {
     DriveApp: {
       Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' },
       createFolder: n => new Folder(n, null),
+      createFile: b => new File(b, null),
       getFolderById: id => { const f = pastas[id]; if (!f) throw new Error('Pasta não encontrada'); return f; },
       getFoldersByName: n => iter(Object.values(pastas).filter(f => f.nome === n)),
       getFileById: id => {
@@ -141,7 +143,7 @@ function criarGAS() {
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Contratos.gs', 'Orcamento.gs', 'ImportAva.gs', 'RelatorioObra.gs', 'Push.gs', 'Base.gs', 'Propostas.gs', 'Cronograma.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Contratos.gs', 'Orcamento.gs', 'ImportAva.gs', 'RelatorioObra.gs', 'Push.gs', 'Base.gs', 'Propostas.gs', 'Cronograma.gs', 'Sinapi.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());

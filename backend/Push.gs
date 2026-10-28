@@ -15,7 +15,7 @@ const PUSH_ETAPAS = {
   entrega: 'Previsão de entrega', pagar: 'Pagamentos', nf: 'Aguardando nota fiscal', pago: 'Pagamento concluído', meu: 'Seu pedido',
   exec_aviso: 'Aviso do engenheiro', exec_diario: 'Diário de obra', exec_alerta: 'Alerta de produção', exec_revisar: 'Diário para revisar',
   fvs_aprovar: 'FVS para aprovar', fvs_devolvida: 'FVS devolvida', fvs_verificar: 'FVS para verificar',
-  medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida'
+  medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida', sinapi: 'SINAPI do mês novo'
 };
 
 function pushConta_() {
