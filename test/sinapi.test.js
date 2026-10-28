@@ -120,3 +120,16 @@ test('Caixa recusa o servidor: o motivo aparece no erro e o aviso do mês novo s
   assert.deepEqual([n.mes, n.confirmado], [esperado, false]);
   assert.ok(t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi' && /deve ter saído/.test(i.texto)));
 });
+test('editor de composição: insumo do SINAPI vem para a base no regime escolhido (sem duplicar)', () => {
+  const t = preparar();
+  importar(t, '2026-07', 100);
+  assert.match(t.adm('sinapi_insumo_para_base', { codigo: '88316', regime: 'cd' }).msg, /Insumo trazido do SINAPI: SINAPI-88316 · R\$ 22,00\/H/);
+  let ins = t.adm('base_dados').insumos.find(i => i.codigo === 'SINAPI-88316');
+  assert.deepEqual([ins.preco, ins.tipo, ins.fonte], [22, 'Mão de obra', 'SINAPI RS 07/2026 · desonerado']);
+  assert.match(t.adm('sinapi_insumo_para_base', { codigo: '88316', regime: 'sd' }).msg, /atualizado na base/);
+  assert.equal(t.adm('base_dados').insumos.filter(i => i.codigo === 'SINAPI-88316').length, 1);
+  assert.equal(t.adm('base_dados').insumos.find(i => i.codigo === 'SINAPI-88316').preco, 25);
+  t.adm('base_composicao_salvar', { composicao: { descricao: 'Ensaio de compactação', unidade: 'un', grupo: 'Controle tecnológico' }, itens: [{ ref: 'SINAPI-88316', coef: 2 }] });
+  assert.equal(t.adm('base_dados').composicoes.find(c => c.descricao === 'Ensaio de compactação').custo.total, 50);
+  assert.throws(() => t.adm('sinapi_insumo_para_base', { codigo: '999' }), /não está no SINAPI/);
+});

@@ -402,7 +402,8 @@ async function vBaseEditor(cod) {
             <label class="ck bp-ck"><input type="checkbox" name="ativo" ${!c || c.ativo ? 'checked' : ''}> Ativa (aparece para orçar)</label></div>
           <details ${c?.obs ? 'open' : ''}><summary>Observações</summary><textarea name="obs" rows="2">${esc(c?.obs || '')}</textarea></details></div>
         <div class="card"><div class="bp-h"><h3>Itens <small>quanto vai em 1 unidade do serviço</small></h3><button type="button" class="btn sec peq" id="bpColar">${ic('paste')} Colar do Excel</button></div>
-          <div class="bp-add"><div class="busca">${ic('search')}<input id="bpBusca" data-busca placeholder="Incluir insumo ou composição auxiliar: código ou descrição  ( / )"></div><div class="bp-res" id="bpRes" hidden></div></div>
+          <div class="bp-add"><div class="busca">${ic('search')}<input id="bpBusca" data-busca placeholder="Incluir insumo ou composição auxiliar (da base ou do SINAPI): código ou descrição  ( / )"></div><div class="bp-res" id="bpRes" hidden></div></div>
+          <div class="bp-sinreg" id="bpSinReg" hidden><span class="sin-tag">SINAPI</span><small>preços do SINAPI trazidos para a base:</small><div class="chips"><button type="button" class="chip" data-sreg="sd">Não desonerado</button><button type="button" class="chip" data-sreg="cd">Desonerado</button></div></div>
           <div id="bpItens" class="bp-itens"></div></div>
       </div>
       <aside class="bp-ed-lado"><div class="bp-resumo" id="bpResumo"></div></aside>
@@ -477,25 +478,53 @@ function bpIncluir(t, ref) {
 function bpBuscaLigar(proprio) {
   const inp = $('#bpBusca'), res = $('#bpRes');
   let sel = 0, lista = [];
+  // SINAPI: índice carregado na primeira busca; o item escolhido é trazido para a base (SINAPI-<código>) no regime marcado
+  let sin = null, sinPedido = false;
+  BP.sinReg = BP.sinReg || 'sd';
+  const regBt = () => $$('#bpSinReg [data-sreg]').forEach(b => b.classList.toggle('on', b.dataset.sreg === BP.sinReg));
+  $$('#bpSinReg [data-sreg]').forEach(b => { b.onclick = () => { BP.sinReg = b.dataset.sreg; regBt(); if (inp.value.trim()) { inp.focus(); desenhar(); } }; });
+  regBt();
+  const carregarSin = () => {
+    if (sinPedido || !window.sinIndice) return;
+    sinPedido = true;
+    sinIndice().then(ix => { sin = ix; if (ix.mes) $('#bpSinReg').hidden = false; if (document.activeElement === inp) desenhar(); }).catch(() => { sin = null; });
+  };
+  const naBase = (t, cod) => (t === 'I' ? BP.d.insumos : BP.d.composicoes).some(x => x.codigo === 'SINAPI-' + cod);
   const desenhar = () => {
     const t = norm(inp.value).split(/\s+/).filter(Boolean);
     if (!t.length) { res.hidden = true; return; }
-    const ok = s => t.every(x => s.includes(x));
+    carregarSin();
+    const ok = s => t.every(x => s.includes(x)), r = BP.sinReg;
     lista = [...BP.d.insumos.filter(i => i.ativo && ok(norm(i.codigo + ' ' + i.descricao + ' ' + i.grupo))).map(i => ({ t: 'I', o: i })),
       ...BP.d.composicoes.filter(c => c.ativo && c.codigo !== proprio && ok(norm(c.codigo + ' ' + c.descricao + ' ' + c.grupo))).map(c => ({ t: 'C', o: c }))]
-      .sort((a, b) => (norm(b.o.codigo) === t.join(' ') ? 1 : 0) - (norm(a.o.codigo) === t.join(' ') ? 1 : 0)).slice(0, 30);
+      .sort((a, b) => (norm(b.o.codigo) === t.join(' ') ? 1 : 0) - (norm(a.o.codigo) === t.join(' ') ? 1 : 0)).slice(0, 25);
+    if (sin && sin.mes) lista = lista.concat(
+      sinBuscar(sin.I, inp.value, 10).filter(x => x[r] > 0 && !naBase('I', x.codigo)).map(x => ({ t: 'I', s: true, o: x })),
+      sinBuscar(sin.C, inp.value, 8).filter(x => x[r] > 0 && !naBase('C', x.codigo)).map(x => ({ t: 'C', s: true, o: x })));
     sel = 0;
-    res.innerHTML = lista.map((x, n) => `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}">${bpFoto(x.t === 'C' ? { tipo: 'Composição' } : x.o, 'mini')}<span><b>${esc(x.o.descricao)}</b><small><code>${esc(x.o.codigo)}</code> · ${esc(x.o.unidade)}${x.t === 'C' ? ' · composição' : ' · ' + esc(x.o.tipo)}</small></span><span class="bp-mono">${bpM(x.t === 'C' ? x.o.custo.total : x.o.preco)}</span></button>`).join('')
+    res.innerHTML = lista.map((x, n) => x.s
+      ? `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}"><span class="sin-tag">SINAPI</span><span><b>${esc(x.o.descricao)}</b><small><code>${esc(x.o.codigo)}</code> · ${esc(x.o.unidade)} · ${x.t === 'C' ? 'composição (entra como auxiliar)' : esc(x.o.classe.toLowerCase())} · ${SIN_REG[r].toLowerCase()} ${sinMesTxt(sin.mes)}</small></span><span class="bp-mono">${bpM(x.o[r])}</span></button>`
+      : `<button type="button" class="bp-op ${n === sel ? 'on' : ''}" data-n="${n}">${bpFoto(x.t === 'C' ? { tipo: 'Composição' } : x.o, 'mini')}<span><b>${esc(x.o.descricao)}</b><small><code>${esc(x.o.codigo)}</code> · ${esc(x.o.unidade)}${x.t === 'C' ? ' · composição' : ' · ' + esc(x.o.tipo)}</small></span><span class="bp-mono">${bpM(x.t === 'C' ? x.o.custo.total : x.o.preco)}</span></button>`).join('')
+      + (sinPedido && !sin ? '<div class="bp-res-n"><span class="spin"></span> buscando também no SINAPI…</div>' : '')
       + `<button type="button" class="bp-op bp-op-novo" data-n="novo">${ic('plus')}<span><b>Cadastrar insumo “${esc(inp.value.trim())}”</b><small>abre o cadastro e já inclui na composição</small></span></button>`;
     res.hidden = false;
     $$('.bp-op', res).forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => escolher(b.dataset.n); });
   };
-  const escolher = n => {
+  const escolher = async n => {
     if (n === 'novo' || (n == null && !lista.length)) { const d = inp.value.trim(); inp.value = ''; res.hidden = true; return bpInsumoModal({ descricao: d }, novo => bpIncluir('I', novo)); }
     const x = lista[+n];
     if (!x) return;
     inp.value = ''; res.hidden = true;
-    bpIncluir(x.t, x.o.codigo);
+    if (!x.s) return bpIncluir(x.t, x.o.codigo);
+    // do SINAPI: traz para a base e inclui
+    inp.disabled = true;
+    try {
+      const r = await api(x.t === 'C' ? 'sinapi_para_base' : 'sinapi_insumo_para_base', { codigo: x.o.codigo, regime: BP.sinReg });
+      toast(r.msg);
+      await bpCarregar(true);
+      bpIncluir(x.t, r.codigo);
+    } catch (e) { toast(e.message, 1); }
+    inp.disabled = false;
   };
   // fechar a lista ao sair do campo, mas sem atropelar quem voltou a digitar logo em seguida
   let tFecha;

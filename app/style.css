@@ -1431,4 +1431,5 @@ button.sin-r{cursor:pointer}button.sin-r:hover{border-color:#B9CCEB;background:#
 .pp-sinreg{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
 .pp-sinreg label{margin:0;display:flex;gap:8px;align-items:center;font-weight:700}.pp-sinreg select{width:auto}.pp-sinreg small{color:var(--mute);flex:1 1 260px}
 .bp-res-n{display:flex;gap:8px;align-items:center;padding:8px 12px;color:var(--mute);font-size:.82rem}
-@media (max-width:560px){.sin-r{grid-template-columns:minmax(0,1fr) auto}.sin-r code{grid-column:1/-1}}
+@media (max-width:560px){.sin-r{grid-template-columns:minmax(0,1fr) auto}.sin-r code{grid-column:1/-1}}.bp-sinreg{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:-2px 0 10px;padding:6px 10px;border-radius:10px;background:#EEF7F4;border:1px solid #CFE8E1}
+.bp-sinreg small{color:var(--mute)}.bp-sinreg .chips{margin:0}

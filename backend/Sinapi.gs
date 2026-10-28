@@ -263,6 +263,33 @@ function sinNotif_(ctx) {
   return [{ id: 'sinapi|' + novo.mes, obra: '', obra_nome: 'Orçamentos', numero: 'SINAPI ' + sinMesTxt_(novo.mes), rota: '#/orc/sinapi', etapa: 'sinapi', texto: 'SINAPI ' + sinMesTxt_(novo.mes) + (novo.confirmado ? ' publicado pela Caixa' : ' deve ter saído na Caixa') + ' — baixar e importar', resumo: '', situacao: '', prioridade: '', quando: novo.achado_em || '' }];
 }
 
+/* ---------- trazer do SINAPI para a base da Size ---------- */
+const sinFonte_ = (mes, regime) => ('SINAPI RS ' + sinMesTxt_(mes) + ' · ' + SIN_REGIMES_[regime]).slice(0, 80);
+/* insumo do SINAPI vira (ou atualiza) o insumo SINAPI-<código> da base; devolve true se foi criado agora */
+function sinInsBase_(i, regime, fonte, ctx) {
+  const Ti = central_('Insumos'), agora = new Date(), ic = 'SINAPI-' + i.codigo, preco = num_(i['preco_' + regime]);
+  const TIPO = { mat: 'Material', mo: 'Mão de obra', eq: 'Equipamento', sv: 'Serviço' };
+  const r = Ti.all().find(x => String(x.codigo) === ic);
+  if (!r) { Ti.insert({ codigo: ic, descricao: String(i.descricao).slice(0, 300), unidade: i.unidade, tipo: TIPO[sinCat_(i.classe)], grupo: 'SINAPI', preco: preco, data_preco: baseHoje_(), fonte: fonte, obs: '', ativo: 'Sim', criado_em: agora, atualizado_em: agora, atualizado_por: ctx.u.nome }); return true; }
+  if (Math.abs(num_(r.preco) - preco) > 0.004 || String(r.fonte) !== fonte) {
+    if (Math.abs(num_(r.preco) - preco) > 0.004) central_('InsumoPrecos').insert({ insumo: ic, data: agora, de: num_(r.preco), para: preco, origem: fonte, usuario: ctx.u.nome });
+    Object.assign(r, { preco: preco, data_preco: baseHoje_(), fonte: fonte, ativo: 'Sim', atualizado_em: agora, atualizado_por: ctx.u.nome });
+    Ti.update(r);
+  }
+  return false;
+}
+/* um insumo do SINAPI para a base (usado no editor de composição) */
+function sinapiInsumoParaBase_(q, ctx) {
+  const ss = sinSS_(false);
+  if (!ss) throw new Error('O SINAPI ainda não foi importado.');
+  const regime = q.regime === 'cd' ? 'cd' : 'sd', cod = String(q.codigo);
+  const i = sinTab_('SinapiInsumos', ss).all().find(x => String(x.codigo) === cod);
+  if (!i) throw new Error('Insumo ' + cod + ' não está no SINAPI deste mês.');
+  if (String(i['preco_' + regime]) === '') throw new Error('O insumo ' + cod + ' está sem preço no SINAPI deste mês.');
+  const novo = sinInsBase_(i, regime, sinFonte_(String(sinInfo_(ss).mes || ''), regime), ctx);
+  return { codigo: 'SINAPI-' + cod, msg: (novo ? 'Insumo trazido do SINAPI: ' : 'Insumo do SINAPI atualizado na base: ') + 'SINAPI-' + cod + ' · ' + brl_(i['preco_' + regime]) + '/' + i.unidade + '.' };
+}
+
 /* ---------- copiar uma composição do SINAPI para a base da Size (vira composição de insumos, com a origem anotada) ---------- */
 function sinapiParaBase_(q, ctx) {
   const ss = sinSS_(false);
@@ -283,17 +310,9 @@ function sinapiParaBase_(q, ctx) {
   });
   abrir(cod, 1, [cod]);
   if (!Object.keys(acc).length) throw new Error('A composição ' + cod + ' não tem insumos no analítico.');
-  const fonte = ('SINAPI RS ' + sinMesTxt_(mes) + ' · ' + SIN_REGIMES_[regime]).slice(0, 80), TIPO = { mat: 'Material', mo: 'Mão de obra', eq: 'Equipamento', sv: 'Serviço' };
-  const Ti = central_('Insumos'), agora = new Date(), novoCod = 'SINAPI-' + cod;
+  const fonte = sinFonte_(mes, regime), novoCod = 'SINAPI-' + cod;
   let nIns = 0;
-  Object.keys(acc).forEach(k => {
-    const i = I[k];
-    if (!i) return;
-    const ic = 'SINAPI-' + k, preco = num_(i['preco_' + regime]);
-    let r = Ti.all().find(x => String(x.codigo) === ic);
-    if (!r) { Ti.insert({ codigo: ic, descricao: String(i.descricao).slice(0, 300), unidade: i.unidade, tipo: TIPO[sinCat_(i.classe)], grupo: 'SINAPI', preco: preco, data_preco: baseHoje_(), fonte: fonte, obs: '', ativo: 'Sim', criado_em: agora, atualizado_em: agora, atualizado_por: ctx.u.nome }); nIns++; }
-    else if (Math.abs(num_(r.preco) - preco) > 0.004) { central_('InsumoPrecos').insert({ insumo: ic, data: agora, de: num_(r.preco), para: preco, origem: fonte, usuario: ctx.u.nome }); Object.assign(r, { preco: preco, data_preco: baseHoje_(), fonte: fonte, atualizado_em: agora, atualizado_por: ctx.u.nome }); Ti.update(r); }
-  });
+  Object.keys(acc).forEach(k => { if (I[k] && sinInsBase_(I[k], regime, fonte, ctx)) nIns++; });
   const itens = Object.keys(acc).filter(k => I[k]).map(k => ({ ref: 'SINAPI-' + k, ref_tipo: 'I', coef: Math.round(acc[k] * 1e6) / 1e6 }));
   const existe = central_('Composicoes').all().some(x => String(x.codigo) === novoCod);
   baseComposicaoSalvar_({ composicao: { codigo: novoCod, original: existe ? novoCod : undefined, descricao: String(c.descricao).slice(0, 300), unidade: c.unidade, grupo: c.grupo || 'SINAPI', obs: 'Copiada do ' + fonte }, itens: itens }, ctx);

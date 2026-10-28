@@ -169,6 +169,7 @@ const ROTAS = {
   sinapi_baixar: { base: 'Gerir', fn: sinapiBaixar_ },
   sinapi_importar: { base: 'Gerir', lock: true, fn: sinapiImportar_ },
   sinapi_para_base: { base: 'Gerir', lock: true, fn: sinapiParaBase_ },
+  sinapi_insumo_para_base: { base: 'Gerir', lock: true, fn: sinapiInsumoParaBase_ },
 
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },
