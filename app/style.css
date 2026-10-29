@@ -1587,3 +1587,9 @@ body.portal{background:var(--bg)}
   .pc-doc-h,.pc-kpis>div,.pc-kpi,.pc-curvas,.pc-doc-fotos img,.pc-bar i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .pc-tab tr{break-inside:avoid}
 }
+/* histórico do orçamento recolhível */
+details.pp-histc>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none;margin:0;color:inherit;font-weight:inherit;font-size:inherit}
+details.pp-histc>summary::-webkit-details-marker{display:none}
+details.pp-histc>summary h3{margin:0}details.pp-histc>summary h3 small{font-weight:400;color:var(--mute);font-size:.78rem;margin-left:6px}
+details.pp-histc>summary>.ic{color:var(--mute);transition:transform .15s}details.pp-histc[open]>summary>.ic{transform:rotate(90deg)}
+details.pp-histc[open]>summary{margin-bottom:10px}

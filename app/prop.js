@@ -94,6 +94,8 @@ async function vProp(id) {
   }
   ppLigarAcoes(d);
   if (d) ppPortalLigar(d);
+  // histórico recolhido por padrão; o aparelho lembra se você deixou aberto
+  if ($('#ppHist')) $('#ppHist').ontoggle = e => { if (e.target.open) LS.set('pp_hist', '1'); else LS.del('pp_hist'); };
   if (edita) ppEditorLigar();
 }
 function ppAcoes(d) {
@@ -171,7 +173,8 @@ function ppLeitura(d) {
     <div class="card"><div class="bp-h"><h3>${ic('list')} Planilha</h3><small>data-base ${fd(p.data_base)} · validade ${p.validade_dias} dias</small></div>${ppTabela(d.itens, d.etapas, T, false)}</div>
     ${p.prazo_txt || p.pagamento_txt || p.texto_cliente ? `<div class="card"><h3>Condições da proposta</h3><dl class="kv">${p.prazo_txt ? `<dt>Prazo</dt><dd>${esc(p.prazo_txt)}</dd>` : ''}${p.pagamento_txt ? `<dt>Pagamento</dt><dd>${esc(p.pagamento_txt)}</dd>` : ''}${p.texto_cliente ? `<dt>Observações</dt><dd style="white-space:pre-wrap">${esc(p.texto_cliente)}</dd>` : ''}</dl></div>` : ''}
     ${p.obs ? `<div class="card"><h3>Observações internas</h3><p style="white-space:pre-wrap;margin:0">${esc(p.obs)}</p></div>` : ''}
-    <div class="card"><h3>${ic('clock')} Histórico</h3><div class="pp-hist">${d.historico.map(h => `<div><small>${esc(h.em)}</small><b>${esc(h.acao)}</b><span>${esc(h.det || '')}</span><small>${esc(h.por || '')}</small></div>`).join('')}</div></div>`;
+    <details class="card pp-histc" id="ppHist" ${LS.get('pp_hist') ? 'open' : ''}><summary><h3>${ic('clock')} Histórico <small>${d.historico.length} ${d.historico.length === 1 ? 'registro' : 'registros'}${d.historico[0] ? ' · último: ' + esc(d.historico[0].acao) + ' em ' + esc(d.historico[0].em) : ''}</small></h3>${ic('chevron')}</summary>
+      <div class="pp-hist">${d.historico.map(h => `<div><small>${esc(h.em)}</small><b>${esc(h.acao)}</b><span>${esc(h.det || '')}</span><small>${esc(h.por || '')}</small></div>`).join('')}</div></details>`;
 }
 /* tabela da planilha (leitura ou proposta): etapas com subtotal, itens com preço de venda; interna mostra o custo */
 function ppTabela(itens, etapas, T, interna, doc) {
