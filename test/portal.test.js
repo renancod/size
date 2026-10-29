@@ -91,3 +91,55 @@ test('administrador: lista, endereço único e publicação exige a chave do Git
   // o administrador pré-visualiza o portal do cliente
   assert.ok(t.adm('cli_inicio', { cliente: t.cli }).andamento);
 });
+
+test('negociação: cliente sem obra vê só o orçamento enviado, comenta, recebe resposta, vê a revisão nova e aceita', () => {
+  const G = criarGAS();
+  G.setup();
+  const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
+  const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
+  const tk = call('login', { login: 'admin', senha }).token, adm = (acao, d = {}) => call(acao, { token: tk, ...d });
+  const cli = adm('cli_salvar', { cliente: { nome: 'Dunas', empresa: 'Mar Azul', obra_id: '', modelo: 'global', cor: '#2B4C7E', slug: 'dunas' } }).id;
+  adm('cli_usuario_salvar', { cliente_id: cli, usuario: { nome: 'Maria Cliente', login: 'maria' }, senha: 'Cliente#2026x' });
+  const sc = call('login', { login: 'maria', senha: 'Cliente#2026x' }), cliente = (acao, d = {}) => call(acao, { token: sc.token, ...d });
+  const bruto = (acao, d = {}) => G.chamar({ acao, token: sc.token, ...d });
+  assert.equal(sc.cliente.obra, false);
+  assert.match(bruto('cli_cronograma').erro, /ainda não foi liberado/);
+  const id = adm('prop_salvar', { proposta: { cliente: 'Mar Azul', empreendimento: 'Dunas', bdi_pct: 20, bdi_base: 'total' }, itens: [
+    { tipo: 'E', descricao: 'Pavimentação' }, { descricao: 'Base de brita', unidade: 'm3', qtd: 10, unit_mat: 100, unit_mo: 50 }, { descricao: 'Meio-fio', unidade: 'm', qtd: 20, unit_mat: 10, unit_mo: 5 }] }).id;
+  adm('prop_portal', { id, cliente_id: cli, modo: 'fechado' });
+  assert.deepEqual(cliente('cli_orcamentos').orcamentos, []);                         // rascunho: o cliente não vê
+  adm('prop_status', { id, op: 'enviar' });
+  let o = cliente('cli_orcamento', { id });
+  assert.equal(o.modo, 'fechado');
+  assert.equal(o.etapas[0].preco, 2160);                                              // (1500 + 300) × 1,2
+  assert.equal(o.etapas[0].itens[0].preco, undefined);                                // fechado: sem preço por item
+  assert.ok(!JSON.stringify(o).match(/unit_mat|custo|bdi/));
+  assert.equal(cliente('cli_inicio').orcamentos.length, 1);
+  cliente('cli_orc_comentar', { id, item: o.etapas[0].itens[1].codigo, tipo: 'quantidade', texto: 'São 30 m de meio-fio' });
+  const n = adm('notificacoes').itens.filter(i => i.etapa === 'prop_cli');
+  assert.equal(n.length, 1);
+  const com = adm('prop_detalhe', { id }).comentarios[0];
+  assert.equal(com.item_desc, 'Meio-fio');
+  adm('prop_responder', { id: com.id, resposta: 'Ajustado na revisão 1.' });
+  // revisão 1 com o meio-fio corrigido e modo aberto
+  const id1 = adm('prop_copiar', { id }).id;
+  adm('prop_salvar', { proposta: { id: id1, cliente: 'Mar Azul', empreendimento: 'Dunas', bdi_pct: 20, bdi_base: 'total' }, itens: [
+    { tipo: 'E', descricao: 'Pavimentação' }, { descricao: 'Base de brita', unidade: 'm3', qtd: 10, unit_mat: 100, unit_mo: 50 }, { descricao: 'Meio-fio', unidade: 'm', qtd: 30, unit_mat: 10, unit_mo: 5 }] });
+  adm('prop_portal', { id: id1, cliente_id: cli, modo: 'aberto' });
+  adm('prop_status', { id: id1, op: 'enviar' });
+  o = cliente('cli_orcamento', { id: id1 });
+  assert.equal(o.etapas[0].itens[1].preco, 540);
+  assert.equal(o.diferencas.alterados.length, 1);
+  assert.equal(o.comentarios[0].resposta, 'Ajustado na revisão 1.');
+  assert.ok(cliente('notificacoes').itens.some(i => i.etapa === 'cli_orc'));
+  assert.match(bruto('cli_orc_comentar', { id, texto: 'velha' }).erro, /não está mais em negociação/);   // a rev. 0 ficou "Revisado"
+  assert.match(bruto('cli_orc_aceitar', { id: id1, nome: 'Ma', concordo: true }).erro, /nome completo/);
+  assert.match(cliente('cli_orc_aceitar', { id: id1, nome: 'Maria da Silva', concordo: true }).msg, /aceito/);
+  const p = adm('prop_detalhe', { id: id1 }).proposta;
+  assert.equal(p.status, 'Aprovado');
+  assert.equal(p.aceite.nome, 'Maria da Silva');
+  assert.ok(adm('notificacoes').itens.some(i => /Aceito pelo cliente/.test(i.texto)));
+  // não fechou: encerra o acesso e ele perde na hora
+  adm('cli_salvar', { cliente: { id: cli, nome: 'Dunas', obra_id: '', modelo: 'global', cor: '#2B4C7E', slug: 'dunas', ativo: false } });
+  assert.match(bruto('cli_orcamentos').erro, /desativado/);
+});

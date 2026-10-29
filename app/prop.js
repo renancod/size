@@ -87,12 +87,13 @@ async function vProp(id) {
       <div class="bp-hero-custo"><div><small>Preço de venda</small><b class="bp-mono" id="ppTopo">${bpM(d ? d.total.preco : 0)}</b><small id="ppTopo2">${d ? 'custo ' + bpM(d.total.custo) + ' · BDI + gestão ' + ppPct(d.total.margem) : ''}</small></div></div></div>
     ${p.status === 'Perdido' && p.motivo ? `<div class="aviso warn">Perdido: ${esc(p.motivo)}</div>` : ''}
     ${d && d.revisoes.length > 1 ? `<div class="pp-revs">${d.revisoes.map(r => `<a class="chip ${r.id === id ? 'on' : ''}" href="#/orc/orcamento/${enc(r.id)}">${esc(r.rotulo)} <small>${esc(r.status)}</small></a>`).join('')}</div>` : ''}`;
-  if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d));
+  if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d) + (d ? ppPortalHtml(d) : ''));
   else {
-    bpTela('props', cab + ppLeitura(d));
+    bpTela('props', cab + ppLeitura(d) + ppPortalHtml(d));
     ppLigarVer(d);
   }
   ppLigarAcoes(d);
+  if (d) ppPortalLigar(d);
   if (edita) ppEditorLigar();
 }
 function ppAcoes(d) {
@@ -134,6 +135,35 @@ function ppLigarAcoes(d) {
   $$('[data-pa]').forEach(b => { b.onclick = async () => { b.disabled = true; try { await A[b.dataset.pa](); } catch (e) { toast(e.message, 1); } b.disabled = false; }; });
 }
 /* leitura: resumo por etapa e itens (enviado, aprovado, perdido… ou acesso só de consulta) */
+/* ---------- portal do cliente: a quem este orçamento é mostrado, modo, contrato, aceite e considerações ---------- */
+function ppPortalHtml(d) {
+  const p = d.proposta, g = d.nivel === 'Gerir', a = p.aceite, C = d.comentarios || [], abertos = C.filter(c => c.status === 'aberto').length;
+  if (!g && !p.cliente_id) return '';
+  return `<div class="card" id="ppPortal"><div class="bp-h"><h3>${ic('eye')} Portal do cliente ${abertos ? `<span class="bp-flag">${abertos} ${abertos > 1 ? 'considerações' : 'consideração'} para responder</span>` : ''}</h3></div>
+    ${a ? `<div class="aviso ok">${ic('check')} <b>Aceito pelo cliente no app</b> em ${esc(a.em)} por <b>${esc(a.nome)}</b>${a.doc ? ' (' + esc(a.doc) + ')' : ''} · ${esc(a.revisao)} · ${bpM(a.total)}${a.arquivo_id ? ` · <button type="button" class="linkbtn" id="ppAceArq">${ic('download')} contrato assinado enviado</button>` : ''}${p.status === 'Aprovado' && !d.obra ? '<br>Próximo passo: <b>Gerar obra</b> e liberar o acompanhamento em Administração → Portal do cliente.' : ''}</div>` : ''}
+    ${g ? `<div class="g2"><label>Cliente que vê este orçamento<select id="ppCli"><option value="">— ninguém (não aparece no portal) —</option>${(d.clientes || []).map(c => `<option value="${esc(c.id)}" ${String(c.id) === String(p.cliente_id) ? 'selected' : ''}>${esc(c.nome)}${c.empresa ? ' · ' + esc(c.empresa) : ''}</option>`).join('')}</select></label>
+      <label>O que ele vê<select id="ppModo"><option value="aberto" ${p.portal_modo !== 'fechado' ? 'selected' : ''}>Aberto: preço de cada item</option><option value="fechado" ${p.portal_modo === 'fechado' ? 'selected' : ''}>Fechado: só o total de cada etapa</option></select></label></div>
+      <small class="mute">${!(d.clientes || []).length ? 'Cadastre o cliente em Administração → Portal do cliente. ' : ''}O cliente só vê as revisões <b>enviadas</b> (nunca rascunho), sem custos, BDI ou gestão.</small>
+      <div class="acoes" style="margin-top:8px"><button type="button" class="btn sec peq" id="ppCliSalvar">${ic('check')} Salvar portal</button>
+        ${p.contrato_id ? `<button type="button" class="btn sec peq" id="ppCtrRem">Remover contrato (${esc(p.contrato_nome)})</button>` : `<label class="btn sec peq" style="cursor:pointer">${ic('download')} Anexar contrato (PDF)<input type="file" id="ppCtr" accept="application/pdf" hidden></label>`}</div>` : ''}
+    ${C.length ? `<div class="pp-coms">${C.map(c => `<div class="pp-com ${c.status}"><div><b>${esc(c.tipo_txt)}</b>${c.item_desc ? ' · ' + esc(c.item_desc) : ''} <small>${esc(c.autor)} · ${esc(c.em)}</small></div><p>${esc(c.texto)}</p>
+      ${c.resposta ? `<div class="pp-resp"><small>Resposta de ${esc(c.respondido_por)} · ${esc(c.respondido_em)}</small><p>${esc(c.resposta)}</p></div>` : g ? `<div class="pp-resp-f"><input placeholder="Responder ao cliente…" data-resp="${esc(c.id)}"><button type="button" class="btn peq" data-respok="${esc(c.id)}">Responder</button></div>` : ''}</div>`).join('')}</div>`
+      : p.cliente_id ? '<p class="mute" style="margin:8px 0 0">Nenhuma consideração do cliente ainda.</p>' : ''}</div>`;
+}
+function ppPortalLigar(d) {
+  const p = d.proposta, re = () => vProp(p.id);
+  const passo = async (fn, b) => { if (b) b.disabled = true; try { await fn(); } catch (e) { toast(e.message, 1); if (b) b.disabled = false; } };
+  if ($('#ppCliSalvar')) $('#ppCliSalvar').onclick = e => passo(async () => { toast((await api('prop_portal', { id: p.id, cliente_id: $('#ppCli').value, modo: $('#ppModo').value })).msg); re(); }, e.target);
+  if ($('#ppCtr')) $('#ppCtr').onchange = e => passo(async () => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 10e6) throw new Error('Arquivo grande demais (máx. 10 MB).');
+    const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = no; r.readAsDataURL(f); });
+    toast((await api('prop_contrato', { id: p.id, arquivo: { b64, nome: f.name, mime: f.type } })).msg); re();
+  });
+  if ($('#ppCtrRem')) $('#ppCtrRem').onclick = e => passo(async () => { if (!confirm('Remover o contrato anexado?')) return; toast((await api('prop_contrato', { id: p.id, remover: true })).msg); re(); }, e.target);
+  $$('[data-respok]').forEach(b => { b.onclick = () => passo(async () => { const i = $(`[data-resp="${b.dataset.respok}"]`); toast((await api('prop_responder', { id: b.dataset.respok, resposta: i.value })).msg); re(); }, b); });
+  if ($('#ppAceArq')) $('#ppAceArq').onclick = () => toast('O contrato assinado está na pasta "Orçamentos de clientes" do Drive.');
+}
 function ppLeitura(d) {
   const T = d.total, p = d.proposta;
   return `<div class="bp-cats pp-tot">${[['Custo direto', T.custo, ''], ['Material', T.v_mat, 'k-mat'], ['Mão de obra e serviços', T.v_serv, 'k-mo'], ['BDI ' + ppPct(p.bdi_pct), T.bdi, 'k-eq'], ['Gestão ' + ppPct(p.gestao_pct), T.gestao, 'k-sv']]

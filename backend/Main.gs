@@ -176,7 +176,15 @@ const ROTAS = {
   sinapi_insumo_para_base: { base: 'Gerir', lock: true, fn: sinapiInsumoParaBase_ },
 
   // portal do cliente (só leitura; cli: abre a obra do cliente e confere o módulo liberado)
-  cli_inicio: { cli: true, fn: cliInicio_ },
+  cli_inicio: { cli: 'orc', fn: cliInicio_ },
+  cli_orcamentos: { cli: 'orc', fn: cliOrcamentos_ },
+  cli_orcamento: { cli: 'orc', fn: cliOrcamento_ },
+  cli_orc_comentar: { cli: 'orc', lock: true, fn: cliOrcComentar_ },
+  cli_orc_aceitar: { cli: 'orc', lock: true, fn: cliOrcAceitar_ },
+  cli_orc_arquivo: { cli: 'orc', fn: cliOrcArquivo_ },
+  prop_portal: { base: 'Gerir', lock: true, fn: propPortal_ },
+  prop_contrato: { base: 'Gerir', lock: true, fn: propContrato_ },
+  prop_responder: { base: 'Gerir', lock: true, fn: propResponder_ },
   cli_cronograma: { cli: 'cronograma', fn: cliCronograma_ },
   cli_diarios: { cli: 'diario', fn: cliDiarios_ },
   cli_diario: { cli: 'diario', fn: cliDiario_ },
@@ -189,7 +197,7 @@ const ROTAS = {
   cli_admin: { admin: true, fn: cliAdmin_ },
   cli_salvar: { admin: true, lock: true, fn: cliSalvar_ },
   cli_usuario_salvar: { admin: true, lock: true, fn: cliUsuarioSalvar_ },
-  cli_publicar: { admin: true, lock: true, fn: cliPublicar_ },
+  cli_publicar: { admin: true, fn: cliPublicar_ },   // trava só no fim (as idas ao GitHub demoram)
   cli_github: { admin: true, lock: true, fn: cliGithub_ },
   exec_cliente: { obra: true, perm: 'exec_planejar', lock: true, fn: execCliente_ },
   admin_dados: { admin: true, fn: adminDados_ },

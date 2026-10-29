@@ -63,7 +63,9 @@ function propCalc_(p, itens) {
 }
 function propPub_(p, comTotal) {
   const o = pub_(p);
-  delete o.historico_json; delete o.cronograma_json;
+  delete o.historico_json; delete o.cronograma_json; delete o.aceite_json;
+  o.aceite = propAceite_(p);
+  o.portal_modo = p.portal_modo === 'fechado' ? 'fechado' : 'aberto';
   o.rotulo = propRotulo_(p);
   o.revisao = num_(p.revisao);
   ['bdi_pct', 'gestao_pct', 'validade_dias'].forEach(k => { o[k] = num_(p[k]); });
@@ -94,7 +96,10 @@ function propDetalhe_(q, ctx) {
     proposta: propPub_(p), itens: calc.linhas, etapas: calc.etapas, total: calc.total, historico: hist.reverse(), revisoes: revisoes, cronograma: propCrono_(p, calc),
     obra: obra ? { id: String(obra.id), nome: obra.nome, sigla: obra.sigla } : null,
     editavel: p.status === 'Rascunho' && ctx.base === 'Gerir', nivel: ctx.base, admin: ctx.admin,
-    empresa: String(config_().EMPRESA || 'Size Engenharia')
+    empresa: String(config_().EMPRESA || 'Size Engenharia'),
+    // portal do cliente: a quem foi enviado, considerações do cliente (todas as revisões deste número) e clientes para escolher
+    comentarios: propComentarios_(p.numero),
+    clientes: central_('Clientes').all().filter(c => sim_(c.ativo) || String(c.id) === String(p.cliente_id)).map(c => ({ id: String(c.id), nome: c.nome, empresa: c.empresa || '' }))
   };
 }
 
@@ -234,10 +239,10 @@ function propCopiar_(q, ctx) {
   T.all().forEach(x => { const n = parseInt(String(x.numero).replace(/\D/g, ''), 10); if (n > max) max = n; });
   const c = Object.assign({}, p, {
     id: 'PR-' + Utilities.getUuid().slice(0, 8), numero: rev ? p.numero : 'ORC-' + ('000' + (max + 1)).slice(-4), revisao: rev ? num_(p.revisao) + 1 : 0, status: 'Rascunho',
-    motivo: '', obra_id: '', historico_json: '', criado_em: new Date(), criado_por: ctx.u.nome, atualizado_em: new Date(), atualizado_por: ctx.u.nome, enviado_em: '', decidido_em: ''
+    motivo: '', obra_id: '', historico_json: '', aceite_json: '', criado_em: new Date(), criado_por: ctx.u.nome, atualizado_em: new Date(), atualizado_por: ctx.u.nome, enviado_em: '', decidido_em: ''
   });
   delete c._l;
-  if (!rev) c.empreendimento = String(p.empreendimento) + ' (cópia)';
+  if (!rev) { c.empreendimento = String(p.empreendimento) + ' (cópia)'; c.cliente_id = ''; c.contrato_id = ''; c.contrato_nome = ''; }
   propHist_(c, ctx, rev ? 'Revisão criada' : 'Copiado', 'a partir de ' + propRotulo_(p));
   T.insert(c);
   I.insertMany(propItens_(p.id).map(x => { const o = Object.assign({}, x, { proposta: c.id }); delete o._l; return o; }));

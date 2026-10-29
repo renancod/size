@@ -595,7 +595,7 @@ const ETAPA_NOTIF = {
   pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'],
   exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file'],
   fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip'],
-  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2']
+  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2'], prop_cli: ['Portal do cliente', 'eye']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {

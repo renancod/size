@@ -41,6 +41,19 @@ const PC_SIT = { concluida: ['Concluída', 'ok'], concluido: ['Concluída', 'ok'
   a_iniciar: ['A iniciar', ''], nao_iniciado: ['A iniciar', ''], adiantada: ['Adiantada', 'ok'], em_dia: ['Em dia', 'ok'], no_prazo: ['Em dia', 'ok'], sem_datas: ['Sem datas', ''] };
 const pcSit = s => { const x = PC_SIT[s] || [s ? String(s).replace(/_/g, ' ') : '', '']; return x[0] ? `<span class="pc-chip ${x[1]}">${esc(x[0])}</span>` : ''; };
 function pcBarra(prev, exec) { return `<div class="pc-bar"><i style="width:${Math.min(100, prev || 0)}%" class="prev"></i><i style="width:${Math.min(100, exec || 0)}%"></i></div>`; }
+/* anel de andamento: executado (cor do cliente) com a marca do previsto */
+function pcAnel(exec, prev, n) {
+  n = n || 132;
+  const r = 52, C = 2 * Math.PI * r, e = Math.min(100, exec || 0), p = Math.min(100, prev || 0), ang = p / 100 * 2 * Math.PI - Math.PI / 2;
+  return `<svg class="pc-anel" viewBox="0 0 132 132" width="${n}" height="${n}" role="img" aria-label="Executado ${pcPct(exec)}, previsto ${pcPct(prev)}">
+    <circle cx="66" cy="66" r="${r}" class="fundo"/><circle cx="66" cy="66" r="${r}" class="feito" stroke-dasharray="${(e / 100 * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 66 66)"/>
+    ${p ? `<circle cx="${(66 + r * Math.cos(ang)).toFixed(1)}" cy="${(66 + r * Math.sin(ang)).toFixed(1)}" r="5" class="prev"/>` : ''}
+    <text x="66" y="64" text-anchor="middle" class="v">${pcPct(exec)}</text><text x="66" y="84" text-anchor="middle" class="t">executado</text></svg>`;
+}
+/* assinatura da Size: o app tem a marca do empreendimento, mas é uma plataforma da Size */
+const pcAssina = cl => `<div class="pc-size ${cl || ''}"><img src="logo.png" alt="Size Engenharia"><span>Plataforma <b>Size Engenharia</b></span></div>`;
+const pcRs = v => brl(v);
+const pcIcone = C => C.slug && (C.publicado || window.CLIENTE) ? 'c/' + esc(C.slug) + '/icon-192.png' : 'icon-192.png';
 
 /* ---------- login com a marca do empreendimento ---------- */
 function portalLogin(msg) {
@@ -52,7 +65,7 @@ function portalLogin(msg) {
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
-    <button class="btn full">Entrar</button>${botaoInstalar('no-login')}</form></div>`;
+    <button class="btn full">Entrar</button>${botaoInstalar('no-login')}${pcAssina()}</form></div>`;
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, b = $('button', f);
@@ -72,12 +85,16 @@ function portalIniciar() {
   const C = pcCli();
   pcTema(C.cor);
   document.title = C.nome;
-  const nav = [['#/c', 'Início', 'home', true], ['#/c/cronograma', 'Cronograma', 'cal', pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', pcTem('diario')],
-    ['#/c/qualidade', 'Qualidade', 'shield', pcTem('fvs') && !pcTem('financeiro')], ['#/c/financeiro', 'Financeiro', 'money', pcTem('financeiro')], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
-  $('#raiz').innerHTML = `<div class="pc-shell">
-    <header class="pc-top"><img src="${C.slug && C.publicado ? 'c/' + esc(C.slug) + '/icon-192.png' : 'icon-192.png'}" alt=""><div><b>${esc(C.nome)}</b><small id="titulo">${esc(C.obra_nome || '')}</small></div></header>
+  const ob = !!C.obra, orc = !ob || C.orcamentos > 0;
+  const nav = [['#/c', 'Início', 'home', true], ['#/c/orcamentos', 'Orçamentos', 'file', orc], ['#/c/cronograma', 'Cronograma', 'cal', ob && pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', ob && pcTem('diario')],
+    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
+  // celular: topo + menu embaixo; computador: menu à esquerda com a marca (o mesmo <nav>, arrumado pelo CSS)
+  $('#raiz').innerHTML = `<div class="pc-shell ${nav.length > 5 ? 'muitos' : ''}">
+    <header class="pc-top"><img src="${pcIcone(C)}" alt=""><div><b>${esc(C.nome)}</b><small id="titulo">${esc(C.obra_nome || '')}</small></div><span class="pc-selo">por Size Engenharia</span></header>
+    <nav class="pc-nav"><div class="pc-marca"><img src="${pcIcone(C)}" alt=""><div><b>${esc(C.nome)}</b><small>${esc(C.obra_nome || C.empresa || '')}</small></div></div>
+      ${nav.map(([h, t, i]) => `<a href="${h}" data-h="${h}">${ic(i)}<span>${t}</span></a>`).join('')}${pcAssina('lado')}</nav>
     <main class="view pc-view" id="view"></main>
-    <nav class="pc-nav">${nav.map(([h, t, i]) => `<a href="${h}" data-h="${h}">${ic(i)}<span>${t}</span></a>`).join('')}</nav></div>`;
+    <footer class="pc-rod">${pcAssina()}<small>Acompanhamento de obras e orçamentos · dados da obra mantidos pela Size Engenharia</small></footer></div>`;
   if (!/^#\/c(\/|$)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + '#/c');
   portalRotear();
   if (typeof pushSincronizar === 'function') pushSincronizar();
@@ -85,9 +102,9 @@ function portalIniciar() {
 async function portalRotear() {
   if (!$('.pc-shell')) return;
   const h = location.hash || '#/c', id = ++rotaN;
-  $$('.pc-nav a').forEach(a => a.classList.toggle('on', a.dataset.h === '#/c' ? h === '#/c' : h.indexOf(a.dataset.h) === 0));
+  $$('.pc-nav a').forEach(a => a.classList.toggle('on', a.dataset.h === '#/c' ? h === '#/c' : h.indexOf(a.dataset.h.replace(/s$/, '')) === 0));
   fecharModal();
-  const R = [[/^#\/c$/, pcInicio], [/^#\/c\/cronograma$/, pcCrono], [/^#\/c\/diario$/, pcDiarios], [/^#\/c\/diario\/(\d{4}-\d{2}-\d{2})$/, pcDiario],
+  const R = [[/^#\/c$/, pcInicio], [/^#\/c\/orcamentos$/, pcOrcs], [/^#\/c\/orcamento\/([\w-]+)$/, pcOrc], [/^#\/c\/cronograma$/, pcCrono], [/^#\/c\/diario$/, pcDiarios], [/^#\/c\/diario\/(\d{4}-\d{2}-\d{2})$/, pcDiario],
     [/^#\/c\/qualidade$/, pcFvs], [/^#\/c\/financeiro$/, pcFin], [/^#\/c\/conta$/, pcConta]];
   const r = R.find(([re]) => re.test(h));
   if (!r) { location.hash = '#/c'; return; }
@@ -121,18 +138,103 @@ async function pcPdf(acao, id) {
 /* ---------- telas ---------- */
 async function pcInicio() {
   pcTit(pcCli().obra_nome || '');
-  const d = await api('cli_inicio'), A = d.andamento;
-  view(`<section class="pc-card pc-hero"><div class="pc-k">Andamento da obra</div>
-      <div class="pc-big">${pcPct(A.pct_exec)}</div>${pcBarra(A.pct_prev, A.pct_exec)}
-      <div class="pc-k">previsto para hoje: ${pcPct(A.pct_prev)}${A.fim ? ' · término previsto ' + pcData(A.fim) : ''}</div></section>
+  const d = await api('cli_inicio'), A = d.andamento, C = Object.assign({}, pcCli(), d.cliente), capa = C.capa || (window.CLIENTE || {}).capa || '';
+  const hero = (titulo, sub, lado) => `<section class="pc-hero ${capa ? 'com-capa' : ''}" ${capa ? `style="--capa:url('${esc(capa)}')"` : ''}>
+    <div class="pc-hero-t"><small>${esc(C.empresa || '')}</small><h1>${esc(titulo)}</h1><span>${sub}</span></div>${lado || ''}</section>`;
+  const orcs = (d.orcamentos || []).length ? `<a class="pc-card pc-lnk" href="#/c/orcamentos"><div class="pc-k">${ic('file')} Orçamentos</div>${d.orcamentos.slice(0, 3).map(o => `<div class="pc-lin"><span><b>${esc(o.rotulo)}</b> ${esc(o.empreendimento || '')}${o.respostas ? ` <span class="pc-chip ok">${o.respostas} resposta${o.respostas > 1 ? 's' : ''}</span>` : ''}</span>${pcStOrc(o)}</div>`).join('')}</a>` : '';
+  if (!d.obra) {
+    view(hero('Olá, ' + (S.sess.usuario.nome || '').split(' ')[0], 'Acompanhe aqui os orçamentos da Size Engenharia para ' + esc(C.nome) + '.')
+      + `<div class="pc-grade">${orcs || '<section class="pc-card"><div class="pc-k">Orçamentos</div><div>Assim que a Size enviar um orçamento, ele aparece aqui para você analisar, comentar e aceitar.</div></section>'}
+        <section class="pc-card"><div class="pc-k">${ic('check')} Como funciona</div><ol class="pc-passos"><li>Você recebe o orçamento e analisa item a item.</li><li>Deixa suas considerações: incluir, retirar, mudar quantidade ou tirar dúvidas.</li><li>A Size responde e envia a revisão.</li><li>Fechou? Aceite pelo app. Depois você acompanha a obra por aqui.</li></ol></section></div>`);
+    return;
+  }
+  view(hero(C.obra_nome || C.nome, A.fim ? 'término previsto ' + pcData(A.fim) : 'acompanhamento da obra', `<div class="pc-hero-anel">${pcAnel(A.pct_exec, A.pct_prev)}<small>previsto para hoje: <b>${pcPct(A.pct_prev)}</b></small></div>`)
+    + `<div class="pc-grade">
     ${d.diario !== undefined ? (d.diario ? `<a class="pc-card pc-lnk" href="#/c/diario/${d.diario.data}"><div class="pc-k">Último diário · ${pcData(d.diario.data)}${d.diario.condicao ? ' · ' + esc(d.diario.condicao.toLowerCase()) : ''}</div>
       ${d.diario.foto ? `<div class="pc-fotos"><div class="pc-foto" data-pcfoto="${esc(d.diario.foto)}"></div></div>` : ''}
       <div>${d.diario.servicos.slice(0, 3).map(esc).join(' · ') || 'Sem serviços lançados'}${d.diario.servicos.length > 3 ? ' · +' + (d.diario.servicos.length - 3) : ''}</div></a>`
       : '<section class="pc-card"><div class="pc-k">Diário de obra</div><div>Os registros aparecem aqui assim que a equipe liberar.</div></section>') : ''}
     ${d.financeiro ? `<a class="pc-card pc-lnk" href="#/c/financeiro"><div class="pc-k">Financeiro</div><div class="pc-grid2"><div><small>Contratado</small><b>${brl(d.financeiro.contratado)}</b></div><div><small>Pago</small><b>${brl(d.financeiro.pago)}</b></div></div>
       ${d.medicao ? `<div class="pc-k" style="margin-top:6px">Última medição: ${esc(d.medicao.numero || '')} · ${esc(d.medicao.empreiteiro)} · ${brl(d.medicao.valor)} · ${esc(d.medicao.status.toLowerCase())}</div>` : ''}</a>` : ''}
-    ${d.proximas.length ? `<section class="pc-card"><div class="pc-k">Próximas etapas</div>${d.proximas.map(p => `<div class="pc-lin"><span>${esc(p.nome)}</span><small>inicia ${pcData(p.ini)}</small></div>`).join('')}</section>` : ''}`);
+    ${d.proximas.length ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Próximas etapas</div>${d.proximas.map(p => `<div class="pc-lin"><span>${esc(p.nome)}</span><small>inicia ${pcData(p.ini)}</small></div>`).join('')}</section>` : ''}
+    ${orcs}</div>`);
   pcFotos();
+}
+
+/* ---------- orçamentos (negociação) ---------- */
+const PC_ORC_ST = { Enviado: ['Em negociação', 'warn'], Aprovado: ['Aprovado', 'ok'], Revisado: ['Substituído', ''], Perdido: ['Encerrado', ''] };
+const pcStOrc = o => { const s = o.aceite ? ['Aceito', 'ok'] : PC_ORC_ST[o.status] || [o.status, '']; return `<span class="pc-chip ${s[1]}">${esc(s[0])}</span>`; };
+async function pcOrcs() {
+  pcTit('Orçamentos');
+  const L = (await api('cli_orcamentos')).orcamentos;
+  view(`<h2 class="pc-h">Orçamentos</h2>` + (L.length ? `<div class="pc-grade">${L.map(o => `<a class="pc-card pc-lnk pc-orc" href="#/c/orcamento/${esc(o.id)}">
+      <div class="pc-lin"><b>${esc(o.rotulo)}</b>${pcStOrc(o)}</div><div>${esc(o.empreendimento || '')}</div>
+      <div class="pc-big sm">${pcRs(o.total)}</div><small>enviado ${pcData(o.data)}${o.respostas ? ` · ${o.respostas} resposta${o.respostas > 1 ? 's' : ''} da Size` : ''}${o.abertos ? ` · ${o.abertos} consideração${o.abertos > 1 ? 'ões' : ''} aguardando` : ''}</small></a>`).join('')}</div>`
+    : '<section class="pc-card">Nenhum orçamento enviado ainda.</section>'));
+}
+async function pcOrc(id) {
+  const o = await api('cli_orcamento', { id }), aberto = o.modo === 'aberto', D = o.diferencas || { novos: [], alterados: [], retirados: [] };
+  pcTit('Orçamento ' + o.rotulo);
+  const marca = c => D.novos.includes(c) ? '<span class="pc-chip ok">novo</span>' : D.alterados.includes(c) ? '<span class="pc-chip warn">alterado</span>' : '';
+  const coms = o.comentarios;
+  view(`<a class="linkbtn" href="#/c/orcamentos">${ic('back')} Orçamentos</a>
+    <section class="pc-card pc-orc-cab"><div><small>${esc(o.cliente || '')}</small><h2>${esc(o.empreendimento || '')}</h2><div class="pc-lin" style="justify-content:flex-start;gap:8px"><b>${esc(o.rotulo)}</b>${pcStOrc(o)}${o.local ? `<small>${esc(o.local)}</small>` : ''}</div></div>
+      <div class="pc-orc-tot"><small>Valor total</small><b>${pcRs(o.total)}</b><small>data-base ${pcData(o.data_base)}${o.validade_ate ? ' · válido até ' + pcData(o.validade_ate) : ''}</small></div></section>
+    ${o.revisoes.length > 1 ? `<div class="pc-revs">${o.revisoes.map(r => `<a class="pc-chip ${r.id === o.id ? 'on' : ''}" href="#/c/orcamento/${esc(r.id)}">${esc(r.rotulo)}</a>`).join('')}</div>` : ''}
+    ${o.aceite ? `<div class="aviso ok">${ic('check')} Aceito por <b>${esc(o.aceite.nome)}</b> em ${esc(o.aceite.em)}. A Size entra em contato para os próximos passos.</div>` : ''}
+    ${o.diferencas && (D.novos.length || D.alterados.length || D.retirados.length) ? `<div class="aviso info"><b>O que mudou desde ${esc(D.de)}:</b> ${[D.novos.length && D.novos.length + ' novo' + (D.novos.length > 1 ? 's' : ''), D.alterados.length && D.alterados.length + ' alterado' + (D.alterados.length > 1 ? 's' : ''), D.retirados.length && D.retirados.length + ' retirado' + (D.retirados.length > 1 ? 's' : '') + ' (' + D.retirados.map(esc).join(', ') + ')'].filter(Boolean).join(' · ')}</div>` : ''}
+    <div class="pc-orc-grade"><div>
+    ${o.etapas.map(e => `<section class="pc-card pc-et-orc"><div class="pc-lin"><b>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.descricao)}</b><b>${pcRs(e.preco)}</b></div>
+      <table class="pc-tab"><thead><tr><th>Item</th><th class="n">Quant.</th>${aberto ? '<th class="n">Unit.</th><th class="n">Total</th>' : ''}<th></th></tr></thead><tbody>
+      ${e.itens.map(i => `<tr><td><small>${esc(i.codigo)}</small> ${esc(i.descricao)} ${marca(i.codigo)}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td>${aberto ? `<td class="n">${pcRs(i.preco_unit)}</td><td class="n"><b>${pcRs(i.preco)}</b></td>` : ''}
+        <td class="n">${o.pode_comentar ? `<button type="button" class="pc-mini" data-com="${esc(i.codigo)}" title="Comentar este item">${ic('plus')}</button>` : ''}</td></tr>`).join('')}</tbody></table></section>`).join('')}
+    ${o.cronograma ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Cronograma previsto</div>${o.cronograma.map(c => `<div class="pc-lin"><span>${esc(c.descricao)}</span><small>${pcData(c.ini)} a ${pcData(c.fim)}</small></div>`).join('')}</section>` : ''}
+    ${o.prazo_txt || o.pagamento_txt || o.texto_cliente ? `<section class="pc-card"><div class="pc-k">Condições</div>${o.prazo_txt ? `<p><b>Prazo:</b> ${esc(o.prazo_txt)}</p>` : ''}${o.pagamento_txt ? `<p><b>Pagamento:</b> ${esc(o.pagamento_txt)}</p>` : ''}${o.texto_cliente ? `<p style="white-space:pre-wrap">${esc(o.texto_cliente)}</p>` : ''}</section>` : ''}
+    </div><aside>
+    <section class="pc-card pc-acao">${o.pode_aceitar ? `<button type="button" class="btn full" id="pcAceitar">${ic('check')} Aceitar orçamento</button>` : ''}
+      ${o.pode_comentar ? `<button type="button" class="btn sec full" id="pcComGeral">${ic('plus')} Fazer uma consideração</button>` : ''}
+      ${o.contrato ? `<button type="button" class="btn sec full" id="pcCtr">${ic('pdf')} Baixar contrato</button>` : ''}
+      <button type="button" class="btn sec full" id="pcImp">${ic('download')} Imprimir / salvar PDF</button></section>
+    <section class="pc-card"><div class="pc-k">Considerações</div>${coms.length ? coms.map(c => `<div class="pc-com ${c.status}"><small>${esc(c.tipo_txt)}${c.item_desc ? ' · ' + esc(c.item_desc) : ''} · ${esc(c.autor)} · ${esc(String(c.em).slice(0, 10).split('-').reverse().join('/'))}</small><p>${esc(c.texto)}</p>
+      ${c.resposta ? `<div class="pc-resp"><small>Size Engenharia · ${esc(c.respondido_por)}</small><p>${esc(c.resposta)}</p></div>` : '<small class="mute">aguardando resposta da Size</small>'}</div>`).join('') : '<small class="mute">Nenhuma ainda. Use o + ao lado de um item ou “Fazer uma consideração”.</small>'}</section>
+    </aside></div>`);
+  const comentar = item => {
+    const it = item ? o.etapas.flatMap(e => e.itens).find(i => i.codigo === item) : null;
+    modal(it ? 'Sobre: ' + esc(it.descricao) : 'Consideração sobre o orçamento', `<div class="grid"><label>Tipo<select id="pcTipo">${(it ? [['quantidade', 'Mudar quantidade'], ['retirar', 'Retirar este item'], ['duvida', 'Dúvida']] : [['geral', 'Consideração geral'], ['incluir', 'Incluir um item'], ['duvida', 'Dúvida']]).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
+      <label>Sua mensagem<textarea id="pcTxt" rows="4" required placeholder="${it ? 'ex: precisamos de 30 m, não 20 m' : 'ex: incluir iluminação da praça'}"></textarea></label></div>`, {
+      ok: 'Enviar à Size', onOk: async () => { toast((await api('cli_orc_comentar', { id: o.id, item: item || '', tipo: $('#pcTipo').value, texto: $('#pcTxt').value })).msg); pcOrc(o.id); }
+    });
+  };
+  $$('[data-com]').forEach(b => { b.onclick = () => comentar(b.dataset.com); });
+  if ($('#pcComGeral')) $('#pcComGeral').onclick = () => comentar('');
+  if ($('#pcCtr')) $('#pcCtr').onclick = () => pcArquivo(o.id, 'contrato');
+  $('#pcImp').onclick = () => window.print();
+  if ($('#pcAceitar')) $('#pcAceitar').onclick = () => modal('Aceitar ' + esc(o.rotulo), `<div class="grid">
+      <div class="aviso info">Valor total <b>${pcRs(o.total)}</b>${o.validade_ate ? ' · proposta válida até ' + pcData(o.validade_ate) : ''}. Ao aceitar, a Size é avisada e o orçamento fica aprovado com o seu nome, a data e a hora.</div>
+      <label>Seu nome completo<input id="pcAnome" required value="${esc(S.sess.usuario.nome || '')}"></label>
+      <label>CPF ou CNPJ <small>(opcional)</small><input id="pcAdoc"></label>
+      <label>Contrato assinado <small>(opcional, PDF ou foto)</small><input type="file" id="pcAarq" accept="application/pdf,image/jpeg,image/png"></label>
+      <label class="chk"><input type="checkbox" id="pcAok"> Li o orçamento ${esc(o.rotulo)} e aceito os itens, valores e condições.</label></div>`, {
+    ok: 'Aceitar orçamento', onOk: async () => {
+      let arquivo = null;
+      const f = $('#pcAarq').files[0];
+      if (f) {
+        if (f.size > 10e6) throw new Error('Arquivo grande demais (máx. 10 MB).');
+        arquivo = { nome: f.name, mime: f.type, b64: await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = no; r.readAsDataURL(f); }) };
+      }
+      toast((await api('cli_orc_aceitar', { id: o.id, nome: $('#pcAnome').value, doc: $('#pcAdoc').value, concordo: $('#pcAok').checked, arquivo })).msg);
+      pcOrc(o.id);
+    }
+  });
+}
+async function pcArquivo(id, qual) {
+  const w = window.open('', '_blank');
+  try {
+    const r = await api('cli_orc_arquivo', { id, qual }), bin = atob(r.b64), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: r.mime || 'application/pdf' }));
+    if (w) w.location = url; else location.href = url;
+  } catch (e) { if (w) w.close(); toast(e.message, 1); }
 }
 async function pcCrono() {
   pcTit('Cronograma');

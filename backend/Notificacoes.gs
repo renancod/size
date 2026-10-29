@@ -66,6 +66,8 @@ function notificacoes_(q, ctx) {
   });
   // SINAPI do mês novo publicado: avisa quem gerencia a base de preços
   try { sinNotif_({ base: nivelBase_(ctx.u), admin: ctx.admin }).forEach(x => itens.push(x)); } catch (e) { /* sem SINAPI ainda */ }
+  // portal do cliente: considerações novas e aceites pelo app
+  try { propNotifCli_(ctx).forEach(x => itens.push(x)); } catch (e) { /* não derruba o sino */ }
   // app aberto com os avisos de fundo ativos: o que ele já mostrou não precisa ir de novo por push
   if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, itens);
   return { itens: itens, agora: fmtVal_(new Date()) };

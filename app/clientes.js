@@ -17,7 +17,7 @@ async function vClientes() {
       <button class="btn">Guardar chave</button></form>`}
     <div class="cl-lista">${A.clientes.map(c => `<a class="card cl-item" href="#/admin/cliente/${enc(c.id)}" style="text-decoration:none;color:inherit">
       <span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>
-      <span><b>${esc(c.nome)}</b> ${c.ativo ? '' : '<span class="bp-flag">desativado</span>'}<br><small>${esc(c.obra_nome)} · ${c.modelo === 'gestao' ? 'Gestão' : c.modelo === 'global' ? 'Global' : 'Personalizado'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
+      <span><b>${esc(c.nome)}</b> <span class="pc-chip ${c.estagio === 'Obra' ? 'ok' : c.estagio === 'Inativo' ? 'err' : 'warn'}">${esc(c.estagio)}</span><br><small>${c.obra_nome ? esc(c.obra_nome) : 'sem obra'} · ${c.orcamentos.length} ${c.orcamentos.length === 1 ? 'orçamento' : 'orçamentos'} · ${c.modelo === 'gestao' ? 'Gestão' : c.modelo === 'global' ? 'Global' : 'Personalizado'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
       ${ic('chevron')}</a>`).join('') || '<div class="card vazio"><p>Nenhum cliente ainda.</p></div>'}</div>`);
   if ($('#clGh')) $('#clGh').onsubmit = async e => {
     e.preventDefault();
@@ -28,16 +28,16 @@ async function vClientes() {
 
 async function vCliente(id) {
   const A = CL.d && CL.d.clientes ? CL.d : (CL.d = await api('cli_admin'));
-  const novo = id === 'novo', c = novo ? { nome: '', empresa: '', obra_id: (A.obras[0] || {}).id || '', modelo: 'gestao', modulos: A.modelos.gestao, cor: CL_CORES[0], slug: '', ativo: true, usuarios: [] } : A.clientes.find(x => String(x.id) === String(id));
+  const novo = id === 'novo', c = novo ? { nome: '', empresa: '', obra_id: '', modelo: 'gestao', modulos: A.modelos.gestao, cor: CL_CORES[0], slug: '', ativo: true, usuarios: [] } : A.clientes.find(x => String(x.id) === String(id));
   if (!c) { toast('Cliente não encontrado.', 1); location.hash = '#/admin/clientes'; return; }
   CL.img = null;
   titulo(novo ? 'Novo cliente' : c.nome);
-  const E = { cor: c.cor, modelo: c.modelo || 'personalizado', modulos: c.modulos.slice() };
+  const E = { cor: c.cor, modelo: c.modelo || 'personalizado', modulos: c.modulos.slice(), ativo: novo ? true : !!c.ativo };
   view(`<a class="linkbtn" href="#/admin/clientes">${ic('back')} Clientes</a>
     <form class="card grid" id="clF"><h3>Empreendimento</h3>
       <div class="g2"><label>Nome do app (empreendimento)<input name="nome" required maxlength="40" value="${esc(c.nome)}" placeholder="AVA Residence"></label>
       <label>Cliente (empresa)<input name="empresa" value="${esc(c.empresa)}" placeholder="Construtora Mar Azul"></label></div>
-      <div class="g2"><label>Obra<select name="obra_id" required>${A.obras.map(o => `<option value="${esc(o.id)}" ${String(o.id) === String(c.obra_id) ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></label>
+      <div class="g2"><label>Obra <small>(sem obra = em negociação: ele só vê os orçamentos enviados)</small><select name="obra_id"><option value="">— em negociação (ainda sem obra) —</option>${A.obras.map(o => `<option value="${esc(o.id)}" ${String(o.id) === String(c.obra_id) ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></label>
       <label>Endereço <small>(${esc(A.app_url)}c/…)</small><input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,39}" value="${esc(c.slug)}" placeholder="ava-residence"></label></div>
       <label>O que o cliente vê</label>
       <div class="seg" id="clMod">${[['gestao', 'Gestão'], ['global', 'Global'], ['personalizado', 'Escolher']].map(([k, t]) => `<button type="button" data-m="${k}" class="${E.modelo === k ? 'on' : ''}">${t}</button>`).join('')}</div>
@@ -46,8 +46,10 @@ async function vCliente(id) {
       <div class="cl-sw" id="clSw">${CL_CORES.map(x => `<button type="button" data-cor="${x}" style="background:${x}" aria-label="Cor ${x}"></button>`).join('')}<input type="color" id="clCor" value="${esc(c.cor)}" aria-label="Outra cor"></div>
       <label>Imagem do empreendimento <small>(vira o ícone do app e o fundo do login; quadrada fica melhor)</small><input type="file" id="clImg" accept="image/*"></label>
       <div class="cl-prev"><canvas id="clIcone" width="192" height="192"></canvas><div class="cl-top" id="clTopo"><div><b id="clTn">${esc(c.nome || 'Nome do empreendimento')}</b><small>assim fica o topo do app do cliente</small></div></div></div>
-      ${novo ? '' : `<label class="chk"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''}> Acesso ativo</label>`}
-      <div class="acoes"><button class="btn">${ic('check')} Salvar</button>${novo ? '' : `<button type="button" class="btn sec" id="clPub">${ic('download')} Publicar endereço</button>`}</div>
+      <div class="acoes"><button class="btn">${ic('check')} Salvar</button>${novo ? '' : `<button type="button" class="btn sec" id="clPub">${ic('download')} Publicar endereço</button>
+        <button type="button" class="btn ${c.ativo ? 'perigo' : 'sec'}" id="clAtivo">${c.ativo ? 'Encerrar acesso' : 'Reativar acesso'}</button>`}</div>
+      ${!novo && !c.ativo ? '<div class="aviso warn">Acesso encerrado: ninguém deste cliente consegue entrar. Os orçamentos e o histórico continuam guardados.</div>' : ''}
+      ${!novo && c.orcamentos.length ? `<div class="mute"><b>Orçamentos no portal:</b> ${c.orcamentos.map(o => `<a href="#/orc/orcamento/${enc(o.id)}">${esc(o.rotulo)}</a> (${esc(o.status.toLowerCase())}${o.aceite ? ', aceito no app' : ''}${o.abertos ? ', ' + o.abertos + ' consideração' + (o.abertos > 1 ? 'ões' : '') + ' para responder' : ''})`).join(' · ')}</div>` : ''}
       ${c.url ? `<div class="aviso info">Endereço do cliente: <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a> <button type="button" class="linkbtn" id="clCop">copiar</button></div>` : novo ? '' : '<div class="aviso warn">Endereço ainda não publicado: escolha a imagem e toque em Publicar endereço. Enquanto isso, o cliente já pode entrar pelo app da Size (com a cor dele).</div>'}
     </form>
     ${novo ? '' : `<div class="card"><div class="bp-h"><h3>${ic('users')} Acessos do cliente</h3><button type="button" class="btn sec peq" id="clNovoU">${ic('plus')} Novo acesso</button></div>
@@ -83,7 +85,7 @@ async function vCliente(id) {
   };
   if ($('#clCop')) $('#clCop').onclick = async () => { try { await navigator.clipboard.writeText(c.url); toast('Endereço copiado.'); } catch (e) { toast('Não consegui copiar.', 1); } };
   const salvar = async () => {
-    const r = await api('cli_salvar', { cliente: { id: novo ? '' : c.id, nome: f.nome.value, empresa: f.empresa.value, obra_id: f.obra_id.value, slug: f.slug.value.trim(), modelo: E.modelo, modulos: E.modulos, cor: pcCor(E.cor), ativo: f.ativo ? f.ativo.checked : true } });
+    const r = await api('cli_salvar', { cliente: { id: novo ? '' : c.id, nome: f.nome.value, empresa: f.empresa.value, obra_id: f.obra_id.value, slug: f.slug.value.trim(), modelo: E.modelo, modulos: E.modulos, cor: pcCor(E.cor), ativo: E.ativo } });
     CL.d = null;
     return r;
   };
@@ -93,15 +95,33 @@ async function vCliente(id) {
   };
   if ($('#clPub')) $('#clPub').onclick = async () => {
     if (!CL.img) return toast('Escolha a imagem do empreendimento: ela vira o ícone do app.', 1);
-    const b = $('#clPub'); b.disabled = true; b.textContent = 'Publicando…';
+    const b = $('#clPub'), passo = t => { b.textContent = t; };
+    b.disabled = true;
+    // janela com o andamento: a ida ao GitHub leva uns 15 s e o site entra no ar 1–2 min depois
+    modal('Publicando o endereço', '<div class="grid"><div id="clPasso">Salvando o cadastro…</div><div class="carregando"><span class="spin"></span></div><small class="mute">Pode continuar usando o app em outra aba; não feche esta.</small></div>', { semRodape: true });
+    const msg = t => { const e = $('#clPasso'); if (e) e.textContent = t; passo(t); };
     try {
       await salvar();
+      msg('Preparando os ícones…');
       const cor = pcCor(E.cor), cv = n => { const k = document.createElement('canvas'); k.width = k.height = n; return k; };
       const png = (n, redondo) => { const k = cv(n); clDesenhar(k, n, cor, redondo); return k.toDataURL('image/png'); };
       const imagens = { 'icon-192.png': png(192, true), 'icon-512.png': png(512, true), 'icon-maskable-512.png': png(512, false), 'icon-180.png': png(180, false), 'capa.jpg': clCapa(CL.img) };
+      msg('Enviando para o GitHub (uns 15 segundos)…');
       const r = await api('cli_publicar', { id: c.id, imagens });
-      toast(r.msg); vCliente(c.id);
-    } catch (x) { toast(x.message, 1); b.disabled = false; b.textContent = 'Publicar endereço'; }
+      msg('Enviado. O GitHub está colocando o endereço no ar (1 a 2 minutos)…');
+      let noAr = false;
+      for (let k = 0; k < 16 && !noAr; k++) {
+        await new Promise(ok => setTimeout(ok, 15000));
+        if (!$('#clPasso')) break;   // fechou a janela: segue sem esperar
+        try { const x = await fetch(r.url + 'cliente.js?v=' + Date.now(), { cache: 'no-store' }); noAr = x.ok && (await x.text()).includes(f.nome.value.trim()); } catch (e) { /* tenta de novo */ }
+      }
+      fecharModal(); toast(noAr ? 'Endereço no ar: ' + r.url : 'Publicado. Se ainda não abrir, aguarde mais um minuto.'); vCliente(c.id);
+    } catch (x) { fecharModal(); toast(x.message, 1); b.disabled = false; b.textContent = 'Publicar endereço'; }
+  };
+  if ($('#clAtivo')) $('#clAtivo').onclick = async () => {
+    if (E.ativo && !confirm('Encerrar o acesso de ' + c.nome + '? Ninguém deste cliente consegue mais entrar (dá para reativar depois).')) return;
+    E.ativo = !E.ativo;
+    try { toast((await salvar()).msg); vCliente(c.id); } catch (x) { E.ativo = !E.ativo; toast(x.message, 1); }
   };
   if ($('#clNovoU')) $('#clNovoU').onclick = () => clUsuario(c, null);
   $$('[data-u]').forEach(b => { b.onclick = () => clUsuario(c, c.usuarios.find(u => u.id === b.dataset.u)); });

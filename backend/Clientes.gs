@@ -21,12 +21,16 @@ function cliAchar_(id) {
   return c;
 }
 function cliObra_(c) {
+  if (!c.obra_id) return null;   // em negociação: ainda sem obra
   const o = central_('Obras').all().find(x => String(x.id) === String(c.obra_id));
   if (!o || !o.planilha_id) throw new Error('A obra deste acesso não foi encontrada. Fale com a Size.');
   return o;
 }
 function cliPub_(c, o) {
-  return { id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', modulos: cliModulos_(c), obra_nome: o ? o.nome : '', publicado: !!c.publicado_em };
+  return {
+    id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', modulos: o ? cliModulos_(c) : [], obra_nome: o ? o.nome : '',
+    obra: !!o, publicado: !!c.publicado_em, capa: c.slug && c.publicado_em && sim_(c.capa) ? 'c/' + c.slug + '/capa.jpg' : '', orcamentos: cliPropostas_(c.id).length
+  };
 }
 
 /* contexto das rotas cli: o cliente do usuário (ou, para o administrador pré-visualizar, q.cliente) e a planilha da obra */
@@ -36,10 +40,17 @@ function cliCtx_(q, ctx) {
   const c = cliAchar_(id);
   if (!c || (!sim_(c.ativo) && !ctx.admin)) throw new Error('O acesso deste cliente está desativado. Fale com a Size.');
   const mods = cliModulos_(c), mod = ROTAS[q.acao].cli;
+  ctx.cli = c; ctx.perms = [];
+  if (mod === 'orc') return;   // orçamentos: valem com ou sem obra
+  if (!c.obra_id) throw new Error('O acompanhamento da obra ainda não foi liberado.');
   if (typeof mod === 'string' && mods.indexOf(mod) < 0) throw new Error('Esta área não está liberada para você.');
+  cliAbrirObra_(ctx);
+}
+function cliAbrirObra_(ctx) {
+  const c = ctx.cli;
   let o = authCache_('co|' + c.obra_id);
   if (!o) { o = cliObra_(c); authGuardar_('co|' + c.obra_id, o); }
-  ctx.cli = c; ctx.mods = mods; ctx.obra = o; ctx.perms = []; ctx.ss = SpreadsheetApp.openById(o.planilha_id);
+  ctx.mods = cliModulos_(c); ctx.obra = o; ctx.ss = SpreadsheetApp.openById(o.planilha_id);
 }
 function cliSessao_(u) {
   const c = cliAchar_(u.cliente_id);
@@ -47,6 +58,7 @@ function cliSessao_(u) {
   let o = null;
   try { o = cliObra_(c); } catch (e) { /* mostra o erro ao abrir as telas */ }
   return {
+    empresa: String(config_().EMPRESA || 'Size Engenharia'),
     usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: false, trocar_senha: sim_(u.trocar_senha), orcamentos: '' },
     obras: [], permissoes: {}, cliente: cliPub_(c, o)
   };
@@ -156,7 +168,10 @@ function cliMedPdf_(q, ctx) {
 
 /* ---------- início ---------- */
 function cliInicio_(q, ctx) {
-  const and = cliAndamento_(ctx), r = { cliente: cliPub_(ctx.cli, ctx.obra), obra: { nome: ctx.obra.nome, endereco: ctx.obra.endereco || '' } };
+  const orcs = cliOrcResumo_(ctx.cli.id);
+  if (!ctx.cli.obra_id) return { cliente: cliPub_(ctx.cli, null), obra: null, orcamentos: orcs };
+  cliAbrirObra_(ctx);
+  const and = cliAndamento_(ctx), r = { cliente: cliPub_(ctx.cli, ctx.obra), obra: { nome: ctx.obra.nome, endereco: ctx.obra.endereco || '' }, orcamentos: orcs };
   r.andamento = { pct_exec: and.pct_exec, pct_prev: and.pct_prev, inicio: and.inicio, fim: and.fim };
   r.proximas = and.frentes.filter(f => f.ini && f.ini > and.hoje).sort((a, b) => a.ini.localeCompare(b.ini)).slice(0, 3).map(f => ({ nome: f.nome, ini: f.ini }));
   if (ctx.mods.indexOf('diario') >= 0) {
@@ -173,10 +188,17 @@ function cliInicio_(q, ctx) {
 function cliNotif_(ctx) {
   const c = cliAchar_(ctx.u.cliente_id);
   if (!c || !sim_(c.ativo)) return [];
-  const o = cliObra_(c), mods = cliModulos_(c), cx = { u: ctx.u, admin: false, obra: o, perms: [], ss: SpreadsheetApp.openById(o.planilha_id) };
-  const base = c.slug && c.publicado_em ? './c/' + c.slug + '/' : './', limite = Date.now() - 20 * 864e5, itens = [];
+  const o = cliObra_(c), base = c.slug && c.publicado_em ? './c/' + c.slug + '/' : './', limite = Date.now() - 20 * 864e5, itens = [];
   const novo = d => d instanceof Date && d.getTime() >= limite;
-  const add = (id, etapa, texto, resumo, rota, quando) => itens.push({ id: 'cli|' + id, obra: String(o.id), obra_nome: o.nome, numero: '', etapa: etapa, texto: texto, resumo: resumo || '', situacao: '', prioridade: '', quando: fmtVal_(quando), rota: rota, url: base + rota });
+  const add = (id, etapa, texto, resumo, rota, quando) => itens.push({ id: 'cli|' + id, obra: o ? String(o.id) : '', obra_nome: o ? o.nome : c.nome, numero: '', etapa: etapa, texto: texto, resumo: resumo || '', situacao: '', prioridade: '', quando: fmtVal_(quando), rota: rota, url: base + rota });
+  // orçamentos: revisão nova enviada e resposta da Size às considerações
+  cliPropostas_(c.id).filter(p => p.status === 'Enviado' && novo(p.enviado_em)).forEach(p => add('o|' + p.id, 'cli_orc', 'Orçamento ' + propRotulo_(p) + ' disponível', p.empreendimento, '#/c/orcamento/' + p.id, p.enviado_em));
+  const meus = {};
+  cliPropostas_(c.id).forEach(p => { meus[String(p.numero)] = p; });
+  central_('PropostaComentarios').all().filter(x => x.status === 'respondido' && meus[String(x.numero)] && novo(x.respondido_em))
+    .forEach(x => add('r|' + x.id, 'cli_orc', 'Resposta da Size no orçamento ' + x.numero, String(x.resposta).slice(0, 80), '#/c/orcamento/' + x.proposta, x.respondido_em));
+  if (!o) return itens;
+  const mods = cliModulos_(c), cx = { u: ctx.u, admin: false, obra: o, perms: [], ss: SpreadsheetApp.openById(o.planilha_id) };
   if (mods.indexOf('diario') >= 0) cliDiariosLib_(cx).filter(d => novo(d.cliente_em)).forEach(d => add('d|' + d._dia, 'cli_diario', 'Diário de ' + fmtBr_(d._dia) + ' disponível', d.condicao, '#/c/diario/' + d._dia, d.cliente_em));
   if (mods.indexOf('financeiro') >= 0) obraTab_(cx, 'Medicoes').all().filter(m => (m.status === MED_ST_.ok && novo(m.aprovado_em)) || (m.status === MED_ST_.paga && novo(m.pago_em)))
     .forEach(m => add('m|' + m.id + '|' + m.status, 'cli_med', 'Medição ' + (m.numero || '') + ' · ' + (m.empreiteiro_nome || ''), m.status === MED_ST_.paga ? 'paga' : 'aprovada', '#/c/financeiro', m.status === MED_ST_.paga ? m.pago_em : m.aprovado_em));
@@ -199,7 +221,7 @@ function cliAdmin_(q, ctx) {
   const U = central_('Usuarios').all(), obras = central_('Obras').all();
   return {
     clientes: central_('Clientes').all().map(c => Object.assign(pub_(c), {
-      modulos: cliModulos_(c), ativo: sim_(c.ativo), obra_nome: (obras.find(o => String(o.id) === String(c.obra_id)) || {}).nome || '',
+      modulos: cliModulos_(c), ativo: sim_(c.ativo), estagio: !sim_(c.ativo) ? 'Inativo' : c.obra_id ? 'Obra' : 'Negociação', orcamentos: cliOrcResumo_(c.id), obra_nome: (obras.find(o => String(o.id) === String(c.obra_id)) || {}).nome || '',
       url: c.slug && c.publicado_em ? cliUrl_(c.slug) : '',
       usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso) }))
     })),
@@ -212,7 +234,8 @@ function cliSalvar_(q, ctx) {
   const T = central_('Clientes'), d = q.cliente || {};
   const nome = String(d.nome || '').trim(), slug = String(d.slug || '').trim().toLowerCase(), cor = String(d.cor || '').trim();
   if (!nome) throw new Error('Informe o nome do empreendimento (é o nome do app do cliente).');
-  if (!central_('Obras').all().some(o => String(o.id) === String(d.obra_id))) throw new Error('Escolha a obra.');
+  // sem obra = cliente em negociação (só orçamentos); a obra é ligada quando o contrato fecha
+  if (d.obra_id && !central_('Obras').all().some(o => String(o.id) === String(d.obra_id))) throw new Error('Obra não encontrada.');
   if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) throw new Error('Endereço: só letras minúsculas, números e hífen (3 a 40).');
   if (!/^#[0-9a-f]{6}$/i.test(cor)) throw new Error('Cor inválida.');
   let c = d.id ? T.all().find(x => String(x.id) === String(d.id)) : null;
@@ -220,7 +243,7 @@ function cliSalvar_(q, ctx) {
   const novo = !c;
   if (novo) c = { id: T.proxCodigo('id', 'CL', 3), criado_em: new Date(), criado_por: ctx.u.nome, ativo: 'Sim' };
   const modelo = CLI_MODELOS_[d.modelo] ? d.modelo : 'personalizado';
-  c.nome = nome; c.empresa = String(d.empresa || '').trim(); c.obra_id = String(d.obra_id); c.cor = cor.toUpperCase(); c.modelo = modelo;
+  c.nome = nome; c.empresa = String(d.empresa || '').trim(); c.obra_id = d.obra_id ? String(d.obra_id) : ''; c.cor = cor.toUpperCase(); c.modelo = modelo;
   c.modulos = (modelo === 'personalizado' ? [].concat(d.modulos || []).filter(m => CLI_MODULOS_[m]) : CLI_MODELOS_[modelo]).join(',');
   if (c.slug && c.slug !== slug) c.publicado_em = '';   // endereço novo precisa ser publicado de novo
   c.slug = slug;
@@ -286,7 +309,7 @@ function cliArquivos_(c) {
     + ['cliente.js'].map(f => '<script src="' + p + f + '"></script>\n').join('')
     + ['config.js', 'app.js', 'portal.js', 'push.js', 'sw-registro.js'].map(f => '<script src="' + f + '"></script>\n').join('') + '</body>\n</html>\n';
   const manifest = {
-    id: './', name: c.nome, short_name: curto, description: 'Acompanhamento da obra ' + c.nome, lang: 'pt-BR', start_url: './', scope: './', display: 'standalone',
+    id: './', name: c.nome + ' · Size Engenharia', short_name: curto, description: 'Acompanhamento da obra ' + c.nome + ' — plataforma Size Engenharia', lang: 'pt-BR', start_url: './', scope: './', display: 'standalone',
     orientation: 'any', background_color: '#FFFFFF', theme_color: c.cor,
     icons: [{ src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
       { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }]
@@ -302,21 +325,190 @@ function cliPublicar_(q, ctx) {
   const im = q.imagens || {}, obrig = ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-180.png'];
   if (obrig.some(k => !im[k])) throw new Error('Escolha a imagem do empreendimento (vira o ícone do app).');
   c._capa = !!im['capa.jpg'];
-  const txt = cliArquivos_(c), arq = [];
-  Object.keys(txt).forEach(k => arq.push([k, Utilities.base64Encode(txt[k], Utilities.Charset.UTF_8)]));
-  obrig.concat(c._capa ? ['capa.jpg'] : []).forEach(k => {
+  const capa = !!im['capa.jpg'], dir = 'app/c/' + c.slug + '/';
+  c._capa = capa;
+  const txt = cliArquivos_(c);
+  delete c._capa;
+  // texto vai dentro da própria árvore; só as imagens precisam de envio separado (menos idas ao GitHub)
+  const tree = Object.keys(txt).map(k => ({ path: dir + k, mode: '100644', type: 'blob', content: txt[k] }));
+  obrig.concat(capa ? ['capa.jpg'] : []).forEach(k => {
     const b = String(im[k]).replace(/^data:[^,]+,/, '');
     if (b.length > 2500000) throw new Error('Imagem grande demais (' + k + ').');
-    arq.push([k, b]);
+    tree.push({ path: dir + k, mode: '100644', type: 'blob', sha: cliGh_('post', '/git/blobs', { content: b, encoding: 'base64' }).sha });
   });
-  delete c._capa;
-  // um commit só com todos os arquivos (o GitHub Pages publica em ~1 minuto)
+  // um commit só com todos os arquivos (o GitHub Pages publica em ~1 a 2 minutos)
   const ref = cliGh_('get', '/git/ref/heads/main'), base = cliGh_('get', '/git/commits/' + ref.object.sha);
-  const tree = arq.map(([nome, b64]) => ({ path: 'app/c/' + c.slug + '/' + nome, mode: '100644', type: 'blob', sha: cliGh_('post', '/git/blobs', { content: b64, encoding: 'base64' }).sha }));
   const t = cliGh_('post', '/git/trees', { base_tree: base.tree.sha, tree: tree });
   const cm = cliGh_('post', '/git/commits', { message: 'Portal do cliente: ' + c.nome + ' (c/' + c.slug + ')', tree: t.sha, parents: [ref.object.sha] });
   cliGh_('patch', '/git/refs/heads/main', { sha: cm.sha });
-  c.publicado_em = new Date(); T.update(c);
+  // a rota não segura a fila de gravação durante as idas ao GitHub; só aqui, para marcar publicado
+  const L = LockService.getScriptLock();
+  L.waitLock(20000);
+  try { const T2 = central_('Clientes'); T2._rows = null; const c2 = T2.all().find(x => String(x.id) === String(q.id)); c2.publicado_em = new Date(); c2.capa = capa ? 'Sim' : ''; T2.update(c2); }
+  finally { L.releaseLock(); }
   log_(ctx, 'cliente_publicar', c.id + ' · c/' + c.slug);
   return { msg: 'Publicado. Em 1 a 2 minutos o endereço fica no ar.', url: cliUrl_(c.slug) };
+}
+
+/* ---------- orçamento no portal: negociação antes do contrato ----------
+ * O cliente vê as revisões ENVIADAS a ele (Propostas.cliente_id; nunca rascunho nem cancelado), na versão do cliente:
+ * aberto = preço de cada item; fechado = só o total de cada etapa. Ele deixa considerações (por item ou geral) e pode aceitar
+ * a revisão em vigor (com o contrato assinado, se quiser); a Size responde, faz nova revisão e é avisada no sino. */
+const CLI_ORC_ST_ = ['Enviado', 'Aprovado', 'Revisado', 'Perdido'];
+const CLI_ORC_TIPOS_ = { duvida: 'Dúvida', incluir: 'Incluir item', retirar: 'Retirar item', quantidade: 'Mudar quantidade', geral: 'Consideração' };
+function propAceite_(p) { try { return p.aceite_json ? JSON.parse(p.aceite_json) : null; } catch (e) { return null; } }
+function cliPropostas_(cid) { return central_('Propostas').all().filter(p => String(p.cliente_id) === String(cid) && CLI_ORC_ST_.indexOf(p.status) >= 0); }
+function cliPropAchar_(ctx, id) {
+  const p = cliPropostas_(ctx.cli.id).find(x => String(x.id) === String(id));
+  if (!p) throw new Error('Orçamento não disponível.');
+  return p;
+}
+/* uma linha por número de orçamento: a revisão mais nova enviada */
+function cliOrcResumo_(cid) {
+  const por = {};
+  cliPropostas_(cid).forEach(p => { const k = String(p.numero); if (!por[k] || num_(p.revisao) > num_(por[k].revisao)) por[k] = p; });
+  const com = central_('PropostaComentarios').all();
+  return Object.keys(por).map(k => {
+    const p = por[k], t = propCalc_(p, propItens_(p.id)).total;
+    return { id: String(p.id), numero: p.numero, rotulo: propRotulo_(p), empreendimento: p.empreendimento, status: p.status, total: t.preco, aceite: !!p.aceite_json,
+      data: fmtVal_(p.enviado_em || p.atualizado_em), respostas: com.filter(c => String(c.numero) === k && c.status === 'respondido').length, abertos: com.filter(c => String(c.numero) === k && c.status === 'aberto').length };
+  }).sort((a, b) => String(b.data).localeCompare(String(a.data)));
+}
+function cliOrcamentos_(q, ctx) { return { orcamentos: cliOrcResumo_(ctx.cli.id) }; }
+function propComentarios_(numero) {
+  return central_('PropostaComentarios').all().filter(c => String(c.numero) === String(numero)).map(c => ({
+    id: String(c.id), proposta: String(c.proposta), item: String(c.item || ''), item_desc: c.item_desc || '', tipo: c.tipo, tipo_txt: CLI_ORC_TIPOS_[c.tipo] || c.tipo,
+    texto: c.texto, autor: c.autor, autor_tipo: c.autor_tipo, em: fmtVal_(c.em), status: c.status, resposta: c.resposta || '', respondido_por: c.respondido_por || '', respondido_em: fmtVal_(c.respondido_em)
+  })).sort((a, b) => String(a.em).localeCompare(String(b.em)));
+}
+/* versão do cliente: sem custo, BDI, gestão, composição ou observação interna */
+function cliOrcPub_(p) {
+  const calc = propCalc_(p, propItens_(p.id)), aberto = p.portal_modo !== 'fechado', et = [];
+  let atual = null;
+  calc.linhas.forEach(l => {
+    if (l.tipo === 'E') { const e = calc.etapas.find(x => x.codigo === l.codigo) || {}; atual = { codigo: l.codigo, descricao: l.descricao, preco: e.preco || 0, itens: [] }; et.push(atual); return; }
+    const i = { codigo: l.codigo, descricao: l.descricao, unidade: l.unidade, qtd: l.qtd };
+    if (aberto) { i.preco_unit = l.preco_unit; i.preco = l.preco; }
+    if (!atual) { atual = { codigo: '', descricao: 'Itens', preco: 0, itens: [] }; et.push(atual); }
+    atual.itens.push(i);
+  });
+  let crono = null;
+  try { const C = propCrono_(p, calc); crono = C && C.linhas ? C.linhas.filter(l => l.ini && l.fim).map(l => ({ codigo: l.codigo, descricao: l.descricao, ini: l.ini, fim: l.fim })) : null; } catch (e) { /* sem cronograma */ }
+  const val = p.data_base && num_(p.validade_dias) ? (() => { const d = new Date(String(baseData_(p.data_base)) + 'T12:00:00'); d.setDate(d.getDate() + num_(p.validade_dias)); return Utilities.formatDate(d, tz_(), 'yyyy-MM-dd'); })() : '';
+  return {
+    id: String(p.id), numero: p.numero, revisao: num_(p.revisao), rotulo: propRotulo_(p), status: p.status, modo: aberto ? 'aberto' : 'fechado',
+    cliente: p.cliente, empreendimento: p.empreendimento, local: p.local || '', data_base: baseData_(p.data_base), validade_ate: val,
+    prazo_txt: p.prazo_txt || '', pagamento_txt: p.pagamento_txt || '', texto_cliente: p.texto_cliente || '', total: calc.total.preco,
+    etapas: et, cronograma: crono && crono.length ? crono : null, contrato: p.contrato_id ? p.contrato_nome || 'contrato.pdf' : '', aceite: propAceite_(p)
+  };
+}
+/* o que mudou entre duas revisões enviadas (para o cliente ver o resultado da negociação) */
+function cliOrcDif_(a, b) {
+  const mapa = o => { const m = {}; o.etapas.forEach(e => e.itens.forEach(i => { m[norm_(i.descricao)] = i; })); return m; };
+  const A = mapa(a), B = mapa(b), r = { novos: [], retirados: [], alterados: [] };
+  Object.keys(B).forEach(k => { if (!A[k]) r.novos.push(B[k].codigo); else if (A[k].qtd !== B[k].qtd || (A[k].preco != null && A[k].preco !== B[k].preco)) r.alterados.push(B[k].codigo); });
+  Object.keys(A).forEach(k => { if (!B[k]) r.retirados.push(A[k].descricao); });
+  return r;
+}
+function cliOrcamento_(q, ctx) {
+  const p = cliPropAchar_(ctx, q.id), o = cliOrcPub_(p);
+  const revs = cliPropostas_(ctx.cli.id).filter(x => String(x.numero) === String(p.numero)).sort((a, b) => num_(a.revisao) - num_(b.revisao));
+  const ant = revs.filter(x => num_(x.revisao) < num_(p.revisao)).pop();
+  o.revisoes = revs.map(x => ({ id: String(x.id), rotulo: propRotulo_(x), status: x.status }));
+  o.diferencas = ant ? Object.assign({ de: propRotulo_(ant) }, cliOrcDif_(cliOrcPub_(ant), o)) : null;
+  o.comentarios = propComentarios_(p.numero);
+  o.pode_comentar = p.status === 'Enviado';
+  o.pode_aceitar = p.status === 'Enviado' && !p.aceite_json;
+  o.empresa = String(config_().EMPRESA || 'Size Engenharia');
+  return o;
+}
+function cliOrcComentar_(q, ctx) {
+  const p = cliPropAchar_(ctx, q.id);
+  if (p.status !== 'Enviado') throw new Error('Esta revisão não está mais em negociação.');
+  const texto = String(q.texto || '').trim(), tipo = CLI_ORC_TIPOS_[q.tipo] ? q.tipo : 'geral';
+  if (texto.length < 3) throw new Error('Escreva a sua consideração.');
+  let desc = '';
+  if (q.item) { const l = propItens_(p.id).find(x => String(x.codigo) === String(q.item) && x.tipo !== 'E'); if (!l) throw new Error('Item não encontrado.'); desc = l.descricao; }
+  central_('PropostaComentarios').insert({ id: 'PC-' + Utilities.getUuid().slice(0, 8), proposta: p.id, numero: p.numero, item: q.item ? String(q.item) : '', item_desc: desc, tipo: tipo,
+    texto: texto.slice(0, 2000), autor_tipo: 'cliente', autor: ctx.u.nome, em: new Date(), status: 'aberto' });
+  log_(ctx, 'cliente_comentario', propRotulo_(p) + ' · ' + tipo);
+  return { msg: 'Enviado à Size. Você recebe a resposta aqui.' };
+}
+function cliPasta_(nome) {
+  const r = raizPasta_(), it = r.getFoldersByName('Orçamentos de clientes'), f = it.hasNext() ? it.next() : r.createFolder('Orçamentos de clientes');
+  const it2 = f.getFoldersByName(nome);
+  return it2.hasNext() ? it2.next() : f.createFolder(nome);
+}
+function cliArquivoSalvar_(arq, pasta, prefixo) {
+  const b64 = String(arq.b64 || '').replace(/^data:[^,]+,/, ''), nome = String(arq.nome || 'arquivo.pdf').replace(/[\\/:*?"<>|]/g, '-').slice(0, 120);
+  if (!b64) throw new Error('Arquivo vazio.');
+  if (b64.length > 14000000) throw new Error('Arquivo grande demais (máx. 10 MB).');
+  const mime = /^(application\/pdf|image\/(jpeg|png))$/.test(arq.mime || '') ? arq.mime : 'application/pdf';
+  const f = pasta.createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime, prefixo + ' - ' + nome));
+  return { id: f.getId(), nome: nome };
+}
+function cliOrcAceitar_(q, ctx) {
+  const T = central_('Propostas'), p = cliPropAchar_(ctx, q.id);
+  if (p.status !== 'Enviado') throw new Error('Esta revisão não está mais em negociação.');
+  if (p.aceite_json) throw new Error('Este orçamento já foi aceito.');
+  const nome = String(q.nome || '').trim();
+  if (nome.length < 5) throw new Error('Informe o seu nome completo para registrar o aceite.');
+  if (!q.concordo) throw new Error('Confirme que leu e aceita o orçamento.');
+  const t = propCalc_(p, propItens_(p.id)).total, a = { nome: nome.slice(0, 120), doc: String(q.doc || '').trim().slice(0, 30), usuario: ctx.u.nome, login: ctx.u.login, em: agora_(), revisao: propRotulo_(p), total: t.preco };
+  if (q.arquivo && q.arquivo.b64) { const f = cliArquivoSalvar_(q.arquivo, cliPasta_(String(p.numero)), 'Aceite ' + propRotulo_(p)); a.arquivo_id = f.id; a.arquivo_nome = f.nome; }
+  p.aceite_json = JSON.stringify(a);
+  p.status = 'Aprovado'; p.decidido_em = new Date(); p.atualizado_em = new Date(); p.atualizado_por = 'Cliente: ' + ctx.u.nome;
+  propHist_(p, ctx, 'Aceito pelo cliente', nome + (a.arquivo_nome ? ' · contrato anexado' : '') + ' · ' + propRotulo_(p));
+  T.update(p);
+  log_(ctx, 'cliente_aceite', propRotulo_(p) + ' · ' + nome);
+  return { msg: 'Orçamento aceito. A Size foi avisada e entra em contato para os próximos passos.' };
+}
+/* contrato que a Size anexou ou o arquivo que o cliente mandou no aceite */
+function cliOrcArquivo_(q, ctx) {
+  const p = cliPropAchar_(ctx, q.id), a = propAceite_(p) || {}, id = q.qual === 'aceite' ? a.arquivo_id : p.contrato_id;
+  if (!id) throw new Error('Arquivo não disponível.');
+  const f = DriveApp.getFileById(id);
+  return { nome: f.getName(), mime: f.getMimeType(), b64: Utilities.base64Encode(f.getBlob().getBytes()) };
+}
+
+/* ---------- lado da Size ---------- */
+function propPortal_(q, ctx) {
+  const T = central_('Propostas'), p = propAchar_(q.id);
+  if (q.cliente_id && !central_('Clientes').all().some(c => String(c.id) === String(q.cliente_id))) throw new Error('Cliente não encontrado.');
+  p.cliente_id = q.cliente_id ? String(q.cliente_id) : '';
+  p.portal_modo = q.modo === 'fechado' ? 'fechado' : 'aberto';
+  p.atualizado_em = new Date(); p.atualizado_por = ctx.u.nome;
+  propHist_(p, ctx, 'Portal do cliente', p.cliente_id ? 'cliente ' + p.cliente_id + ' · ' + (p.portal_modo === 'fechado' ? 'só total por etapa' : 'preço por item') : 'retirado do portal');
+  T.update(p);
+  return { msg: p.cliente_id ? (p.status === 'Rascunho' ? 'Ligado ao cliente. Ele vê quando você enviar o orçamento.' : 'O cliente já vê este orçamento no portal.') : 'Retirado do portal do cliente.' };
+}
+function propContrato_(q, ctx) {
+  const T = central_('Propostas'), p = propAchar_(q.id);
+  if (q.remover) { p.contrato_id = ''; p.contrato_nome = ''; }
+  else { const f = cliArquivoSalvar_(q.arquivo || {}, cliPasta_(String(p.numero)), 'Contrato ' + propRotulo_(p)); p.contrato_id = f.id; p.contrato_nome = f.nome; }
+  propHist_(p, ctx, 'Contrato', q.remover ? 'removido' : 'anexado: ' + p.contrato_nome);
+  T.update(p);
+  return { msg: q.remover ? 'Contrato removido.' : 'Contrato anexado: o cliente baixa pelo portal.' };
+}
+function propResponder_(q, ctx) {
+  const T = central_('PropostaComentarios'), c = T.all().find(x => String(x.id) === String(q.id));
+  if (!c) throw new Error('Consideração não encontrada.');
+  const r = String(q.resposta || '').trim();
+  if (r.length < 2) throw new Error('Escreva a resposta.');
+  c.resposta = r.slice(0, 2000); c.respondido_por = ctx.u.nome; c.respondido_em = new Date(); c.status = 'respondido';
+  T.update(c);
+  return { msg: 'Resposta enviada ao cliente.' };
+}
+/* sino da Size: considerações novas e aceites pelo app (para quem gerencia orçamentos) */
+function propNotifCli_(ctx) {
+  if (nivelBase_(ctx.u) !== 'Gerir') return [];
+  const P = {}, itens = [];
+  central_('Propostas').all().forEach(p => { P[String(p.id)] = p; });
+  central_('PropostaComentarios').all().filter(c => c.autor_tipo === 'cliente' && c.status === 'aberto').forEach(c => {
+    const p = P[String(c.proposta)] || {};
+    itens.push({ id: 'pc|' + c.id, obra: '', obra_nome: 'Orçamentos', numero: propRotulo_(p), etapa: 'prop_cli', rota: '#/orc/orcamento/' + c.proposta,
+      texto: (CLI_ORC_TIPOS_[c.tipo] || 'Consideração') + ' do cliente: ' + String(c.texto).slice(0, 80), resumo: c.autor, situacao: '', prioridade: '', quando: fmtVal_(c.em) });
+  });
+  Object.keys(P).forEach(k => { const p = P[k], a = propAceite_(p); if (a && p.status === 'Aprovado' && !p.obra_id) itens.push({ id: 'pa|' + p.id, obra: '', obra_nome: 'Orçamentos', numero: propRotulo_(p), etapa: 'prop_cli', rota: '#/orc/orcamento/' + p.id, texto: 'Aceito pelo cliente no app (' + a.nome + ') — gerar a obra', resumo: '', situacao: '', prioridade: '', quando: a.em }); });
+  return itens;
 }

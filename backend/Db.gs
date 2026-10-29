@@ -7,7 +7,8 @@ const SCHEMA_CENTRAL = {
   // cliente_id preenchido = usuário do portal do cliente (só vê a obra desse cliente, só leitura)
   Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id'],
   // portal do cliente: uma linha por cliente/obra; modulos = o que ele vê; slug = endereço próprio (c/<slug>/) com ícone e nome do empreendimento
-  Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em'],
+  // obra_id vazio = cliente em negociação (só vê os orçamentos enviados a ele)
+  Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em', 'capa'],
   Acessos: ['usuario_id', 'usuario', 'obra_id', 'obra', 'perfil', 'permissoes'],
   Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro', 'lat', 'lng', 'feriados'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
@@ -26,7 +27,12 @@ const SCHEMA_CENTRAL = {
   // orçamentos de clientes (antes de existir a obra): cada revisão é uma linha; os custos dos itens ficam congelados no orçamento
   Propostas: ['id', 'numero', 'revisao', 'status', 'cliente', 'cliente_doc', 'contato', 'telefone', 'email', 'empreendimento', 'local', 'data_base', 'validade_dias',
     'bdi_pct', 'bdi_base', 'gestao_pct', 'gestao_base', 'prazo_txt', 'pagamento_txt', 'texto_cliente', 'obs', 'motivo', 'obra_id', 'historico_json',
-    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em', 'cronograma_json', 'sinapi_regime'],
+    'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em', 'cronograma_json', 'sinapi_regime',
+    // portal do cliente: cliente que vê este orçamento (quando enviado), modo aberto (preço por item) ou fechado (só total por etapa),
+    // contrato anexado pela Size e o aceite do cliente pelo app (nome, data, arquivo assinado)
+    'cliente_id', 'portal_modo', 'contrato_id', 'contrato_nome', 'aceite_json'],
+  // considerações do cliente no orçamento (por item ou geral) e a resposta da Size
+  PropostaComentarios: ['id', 'proposta', 'numero', 'item', 'item_desc', 'tipo', 'texto', 'autor_tipo', 'autor', 'em', 'status', 'resposta', 'respondido_por', 'respondido_em'],
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
   // sem_bdi / sem_gestao: item fora do BDI ou da gestão (ex. AVA: mobilização e canteiro sem BDI)
   // fonte: vazio = base da Size; SINAPI = composição do SINAPI; SINAPI-INSUMO = insumo do SINAPI (custo congelado do mês e do regime do orçamento)
