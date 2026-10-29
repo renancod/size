@@ -1,0 +1,33 @@
+{
+  "id": "./",
+  "name": "Dorata Emp. Imob. · Size Engenharia",
+  "short_name": "Dorata",
+  "description": "Acompanhamento da obra Dorata Emp. Imob. — plataforma Size Engenharia",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#251A06",
+  "icons": [
+    {
+      "src": "icon-192.png?v=mvtvhxqz",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png?v=mvtvhxqz",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png?v=mvtvhxqz",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
