@@ -381,14 +381,25 @@ function propComentarios_(numero) {
     texto: c.texto, autor: c.autor, autor_tipo: c.autor_tipo, em: fmtVal_(c.em), status: c.status, resposta: c.resposta || '', respondido_por: c.respondido_por || '', respondido_em: fmtVal_(c.respondido_em)
   })).sort((a, b) => String(a.em).localeCompare(String(b.em)));
 }
-/* versão do cliente: sem custo, BDI, gestão, composição ou observação interna */
+/* versão do cliente. Fechado: só o total de cada etapa. Aberto (planilha aberta): preço de cada item com o custo
+ * (material e mão de obra / serviço), o BDI e a administração (gestão), e os insumos das composições (cli_orc_insumos).
+ * Nunca vai observação interna nem o código da composição da base. */
 function cliOrcPub_(p) {
   const calc = propCalc_(p, propItens_(p.id)), aberto = p.portal_modo !== 'fechado', et = [];
   let atual = null;
   calc.linhas.forEach(l => {
-    if (l.tipo === 'E') { const e = calc.etapas.find(x => x.codigo === l.codigo) || {}; atual = { codigo: l.codigo, descricao: l.descricao, preco: e.preco || 0, itens: [] }; et.push(atual); return; }
+    if (l.tipo === 'E') {
+      const e = calc.etapas.find(x => x.codigo === l.codigo) || {};
+      atual = { codigo: l.codigo, descricao: l.descricao, preco: e.preco || 0, itens: [] };
+      if (aberto) Object.assign(atual, { custo: e.custo || 0, bdi: e.bdi || 0, gestao: e.gestao || 0 });
+      et.push(atual); return;
+    }
     const i = { codigo: l.codigo, descricao: l.descricao, unidade: l.unidade, qtd: l.qtd };
-    if (aberto) { i.preco_unit = l.preco_unit; i.preco = l.preco; }
+    if (aberto) Object.assign(i, {
+      preco_unit: l.preco_unit, preco: l.preco, custo_unit: propR2_(l.custo_unit), unit_mat: propR2_(l.unit_mat), unit_serv: propR2_(l.unit_mo + l.unit_eq + l.unit_sv),
+      custo: l.custo, v_mat: l.v_mat, v_serv: l.v_serv, bdi: l.bdi, gestao: l.gestao, sem_bdi: l.sem_bdi, sem_gestao: l.sem_gestao,
+      insumos: !!l.comp_cod && l.fonte !== 'SINAPI-INSUMO', fonte: l.fonte ? 'SINAPI' : ''
+    });
     if (!atual) { atual = { codigo: '', descricao: 'Itens', preco: 0, itens: [] }; et.push(atual); }
     atual.itens.push(i);
   });
@@ -399,6 +410,8 @@ function cliOrcPub_(p) {
     id: String(p.id), numero: p.numero, revisao: num_(p.revisao), rotulo: propRotulo_(p), status: p.status, modo: aberto ? 'aberto' : 'fechado',
     cliente: p.cliente, empreendimento: p.empreendimento, local: p.local || '', data_base: baseData_(p.data_base), validade_ate: val,
     prazo_txt: p.prazo_txt || '', pagamento_txt: p.pagamento_txt || '', texto_cliente: p.texto_cliente || '', total: calc.total.preco,
+    resumo: aberto ? { custo: calc.total.custo, v_mat: calc.total.v_mat, v_serv: calc.total.v_serv, bdi: calc.total.bdi, gestao: calc.total.gestao,
+      bdi_pct: num_(p.bdi_pct), gestao_pct: num_(p.gestao_pct), bdi_base: p.bdi_base === 'total' ? 'custo total' : 'mão de obra e serviços', gestao_base: p.gestao_base === 'total' ? 'custo total' : 'mão de obra e serviços' } : null,
     etapas: et, cronograma: crono && crono.length ? crono : null, contrato: p.contrato_id ? p.contrato_nome || 'contrato.pdf' : '', aceite: propAceite_(p)
   };
 }
@@ -511,4 +524,37 @@ function propNotifCli_(ctx) {
   });
   Object.keys(P).forEach(k => { const p = P[k], a = propAceite_(p); if (a && p.status === 'Aprovado' && !p.obra_id) itens.push({ id: 'pa|' + p.id, obra: '', obra_nome: 'Orçamentos', numero: propRotulo_(p), etapa: 'prop_cli', rota: '#/orc/orcamento/' + p.id, texto: 'Aceito pelo cliente no app (' + a.nome + ') — gerar a obra', resumo: '', situacao: '', prioridade: '', quando: a.em }); });
   return itens;
+}
+
+/* insumos da composição de um item (só na planilha aberta): da base da Size (abre as auxiliares) ou do SINAPI */
+function cliOrcInsumos_(q, ctx) {
+  const p = cliPropAchar_(ctx, q.id);
+  if (p.portal_modo === 'fechado') throw new Error('Este orçamento mostra só o total de cada etapa.');
+  const l = propItens_(p.id).find(x => x.tipo !== 'E' && String(x.codigo) === String(q.item));
+  if (!l || !l.comp_cod || l.fonte === 'SINAPI-INSUMO') throw new Error('Este item não tem composição.');
+  const r = { descricao: l.descricao, unidade: l.unidade, qtd: num_(l.qtd), custo_unit: propR2_(num_(l.unit_mat) + num_(l.unit_mo) + num_(l.unit_eq) + num_(l.unit_sv)), insumos: [], fonte: l.fonte ? 'SINAPI' : 'Size' };
+  if (l.fonte === 'SINAPI') {
+    const s = sinapiComposicao_({ codigo: l.comp_cod }, ctx), reg = p.sinapi_regime === 'cd' ? 'preco_cd' : 'preco_sd';
+    r.insumos = s.itens.map(i => ({ codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, tipo: i.tipo === 'C' ? 'Composição auxiliar' : sinCat_(i.classe) === 'mat' ? 'Material' : sinCat_(i.classe) === 'eq' ? 'Equipamento' : sinCat_(i.classe) === 'sv' ? 'Serviço' : 'Mão de obra', coef: i.coef, preco: i[reg] }));
+    r.referencia = 'SINAPI ' + sinMesTxt_(s.mes) + (p.sinapi_regime === 'cd' ? ' desonerado' : ' não desonerado');
+  } else {
+    const ix = baseIndice_(), acc = {};
+    if (!ix.C[String(l.comp_cod)]) throw new Error('A composição deste item não está mais disponível.');
+    const abre = (cod, fator, pilha) => (ix.itens[String(cod)] || []).forEach(x => {
+      const k = fator * num_(x.coef);
+      if (x.ref_tipo === 'C') { if (ix.C[String(x.ref)] && pilha.indexOf(String(x.ref)) < 0) abre(x.ref, k, pilha.concat(String(x.ref))); return; }
+      const i = ix.I[String(x.ref)];
+      if (!i) return;
+      const preco = basePrecoProprio_(x) ? num_(x.preco) : num_(i.preco), key = i.codigo + '|' + preco;
+      const a = acc[key] || (acc[key] = { codigo: String(i.codigo), descricao: i.descricao, unidade: i.unidade, tipo: i.tipo || 'Material', coef: 0, preco: preco });
+      a.coef += k;
+    });
+    abre(l.comp_cod, 1, [String(l.comp_cod)]);
+    r.insumos = Object.values(acc);
+    r.referencia = 'base de preços da Size';
+  }
+  r.insumos.forEach(i => { i.coef = Math.round(i.coef * 1e6) / 1e6; i.custo = propR2_(i.coef * i.preco); i.qtd_total = Math.round(i.coef * r.qtd * 1e4) / 1e4; });
+  r.insumos.sort((a, b) => b.custo - a.custo);
+  r.soma = propR2_(r.insumos.reduce((t, i) => t + i.custo, 0));
+  return r;
 }

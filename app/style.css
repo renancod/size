@@ -1557,3 +1557,8 @@ body.portal{background:var(--bg)}
 }
 .pc-shell.muitos .pc-nav a{min-width:0;padding:4px 4px}
 @media print{body.portal .pc-nav,body.portal .pc-top,body.portal .pc-acao,body.portal .pc-mini,body.portal .linkbtn{display:none!important}.pc-shell{display:block}.pc-orc-grade{display:block}}
+/* planilha aberta no portal: custo, BDI e administração */
+.pc-det{font-size:.76rem;color:#4B5565;margin-top:3px}.pc-det .linkbtn{font-size:.76rem;padding:0}
+.pc-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.pc-resumo div{display:grid;gap:1px;padding:8px 10px;border-radius:10px;background:var(--bg)}.pc-resumo b{color:var(--pc);font-size:1.05rem}.pc-resumo small{font-size:.72rem;color:var(--mute)}
+.pc-resumo div:last-child{background:var(--pc-l)}

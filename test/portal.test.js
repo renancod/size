@@ -129,6 +129,10 @@ test('negociação: cliente sem obra vê só o orçamento enviado, comenta, rece
   adm('prop_status', { id: id1, op: 'enviar' });
   o = cliente('cli_orcamento', { id: id1 });
   assert.equal(o.etapas[0].itens[1].preco, 540);
+  // planilha aberta: custo (material e MO), BDI e administração de cada item e o resumo
+  assert.deepEqual([o.etapas[0].itens[1].custo, o.etapas[0].itens[1].v_mat, o.etapas[0].itens[1].bdi], [450, 300, 90]);
+  assert.deepEqual([o.resumo.bdi_pct, o.resumo.bdi, o.resumo.custo], [20, 390, 1950]);
+  assert.match(bruto('cli_orc_insumos', { id: id1, item: o.etapas[0].itens[1].codigo }).erro, /não tem composição/);   // preço direto
   assert.equal(o.diferencas.alterados.length, 1);
   assert.equal(o.comentarios[0].resposta, 'Ajustado na revisão 1.');
   assert.ok(cliente('notificacoes').itens.some(i => i.etapa === 'cli_orc'));

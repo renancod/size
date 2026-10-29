@@ -180,13 +180,16 @@ async function pcOrc(id) {
   view(`<a class="linkbtn" href="#/c/orcamentos">${ic('back')} Orçamentos</a>
     <section class="pc-card pc-orc-cab"><div><small>${esc(o.cliente || '')}</small><h2>${esc(o.empreendimento || '')}</h2><div class="pc-lin" style="justify-content:flex-start;gap:8px"><b>${esc(o.rotulo)}</b>${pcStOrc(o)}${o.local ? `<small>${esc(o.local)}</small>` : ''}</div></div>
       <div class="pc-orc-tot"><small>Valor total</small><b>${pcRs(o.total)}</b><small>data-base ${pcData(o.data_base)}${o.validade_ate ? ' · válido até ' + pcData(o.validade_ate) : ''}</small></div></section>
+    ${o.resumo ? `<section class="pc-card pc-resumo">${[['Custo direto', o.resumo.custo, `material ${pcRs(o.resumo.v_mat)} · MO/serv. ${pcRs(o.resumo.v_serv)}`], ['BDI ' + pcPct(o.resumo.bdi_pct), o.resumo.bdi, 'sobre ' + o.resumo.bdi_base],
+      ['Administração ' + pcPct(o.resumo.gestao_pct), o.resumo.gestao, 'sobre ' + o.resumo.gestao_base], ['Preço de venda', o.total, '']].map(([t, v, s]) => `<div><small>${esc(t)}</small><b>${pcRs(v)}</b>${s ? `<small>${esc(s)}</small>` : ''}</div>`).join('')}</section>` : ''}
     ${o.revisoes.length > 1 ? `<div class="pc-revs">${o.revisoes.map(r => `<a class="pc-chip ${r.id === o.id ? 'on' : ''}" href="#/c/orcamento/${esc(r.id)}">${esc(r.rotulo)}</a>`).join('')}</div>` : ''}
     ${o.aceite ? `<div class="aviso ok">${ic('check')} Aceito por <b>${esc(o.aceite.nome)}</b> em ${esc(o.aceite.em)}. A Size entra em contato para os próximos passos.</div>` : ''}
     ${o.diferencas && (D.novos.length || D.alterados.length || D.retirados.length) ? `<div class="aviso info"><b>O que mudou desde ${esc(D.de)}:</b> ${[D.novos.length && D.novos.length + ' novo' + (D.novos.length > 1 ? 's' : ''), D.alterados.length && D.alterados.length + ' alterado' + (D.alterados.length > 1 ? 's' : ''), D.retirados.length && D.retirados.length + ' retirado' + (D.retirados.length > 1 ? 's' : '') + ' (' + D.retirados.map(esc).join(', ') + ')'].filter(Boolean).join(' · ')}</div>` : ''}
     <div class="pc-orc-grade"><div>
     ${o.etapas.map(e => `<section class="pc-card pc-et-orc"><div class="pc-lin"><b>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.descricao)}</b><b>${pcRs(e.preco)}</b></div>
       <table class="pc-tab"><thead><tr><th>Item</th><th class="n">Quant.</th>${aberto ? '<th class="n">Unit.</th><th class="n">Total</th>' : ''}<th></th></tr></thead><tbody>
-      ${e.itens.map(i => `<tr><td><small>${esc(i.codigo)}</small> ${esc(i.descricao)} ${marca(i.codigo)}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td>${aberto ? `<td class="n">${pcRs(i.preco_unit)}</td><td class="n"><b>${pcRs(i.preco)}</b></td>` : ''}
+      ${e.itens.map(i => `<tr><td><small>${esc(i.codigo)}</small> ${esc(i.descricao)} ${marca(i.codigo)}
+        ${aberto ? `<div class="pc-det">custo ${pcRs(i.custo_unit)}/${esc(i.unidade || 'un')} <small>(material ${pcRs(i.unit_mat)} + MO/serv. ${pcRs(i.unit_serv)})</small> · BDI ${i.sem_bdi ? '<small>não incide</small>' : pcRs(i.bdi)} · adm. ${i.sem_gestao ? '<small>não incide</small>' : pcRs(i.gestao)}${i.insumos ? ` · <button type="button" class="linkbtn" data-ins="${esc(i.codigo)}">ver insumos${i.fonte ? ' (SINAPI)' : ''}</button>` : ''}</div>` : ''}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td>${aberto ? `<td class="n">${pcRs(i.preco_unit)}</td><td class="n"><b>${pcRs(i.preco)}</b></td>` : ''}
         <td class="n">${o.pode_comentar ? `<button type="button" class="pc-mini" data-com="${esc(i.codigo)}" title="Comentar este item">${ic('plus')}</button>` : ''}</td></tr>`).join('')}</tbody></table></section>`).join('')}
     ${o.cronograma ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Cronograma previsto</div>${o.cronograma.map(c => `<div class="pc-lin"><span>${esc(c.descricao)}</span><small>${pcData(c.ini)} a ${pcData(c.fim)}</small></div>`).join('')}</section>` : ''}
     ${o.prazo_txt || o.pagamento_txt || o.texto_cliente ? `<section class="pc-card"><div class="pc-k">Condições</div>${o.prazo_txt ? `<p><b>Prazo:</b> ${esc(o.prazo_txt)}</p>` : ''}${o.pagamento_txt ? `<p><b>Pagamento:</b> ${esc(o.pagamento_txt)}</p>` : ''}${o.texto_cliente ? `<p style="white-space:pre-wrap">${esc(o.texto_cliente)}</p>` : ''}</section>` : ''}
@@ -206,6 +209,20 @@ async function pcOrc(id) {
     });
   };
   $$('[data-com]').forEach(b => { b.onclick = () => comentar(b.dataset.com); });
+  // insumos da composição: a janela abre na hora e a lista entra quando o servidor responder
+  $$('[data-ins]').forEach(b => { b.onclick = async () => {
+    const it = o.etapas.flatMap(e => e.itens).find(i => i.codigo === b.dataset.ins);
+    modal('Insumos · ' + esc(it.descricao), '<div class="carregando"><span class="spin"></span></div>', { semRodape: true, larga: true });
+    const caixa = $('#modal .mcaixa');
+    try {
+      const r = await api('cli_orc_insumos', { id: o.id, item: it.codigo });
+      if ($('#modal .mcaixa') !== caixa) return;
+      $('#modal .mcorpo').innerHTML = `<div class="pc-k">${nf(r.qtd)} ${esc(r.unidade || '')} no orçamento · custo ${pcRs(r.custo_unit)}/${esc(r.unidade || 'un')} · referência: ${esc(r.referencia)}</div>
+        <div class="rolar"><table class="pc-tab"><thead><tr><th>Insumo</th><th>Tipo</th><th class="n">Coef.</th><th class="n">Preço</th><th class="n">Custo/${esc(r.unidade || 'un')}</th><th class="n">Quant. total</th></tr></thead><tbody>
+        ${r.insumos.map(i => `<tr><td>${esc(i.descricao)} <small>${esc(i.codigo)}</small></td><td><small>${esc(i.tipo)}</small></td><td class="n">${nf(i.coef)} ${esc(i.unidade || '')}</td><td class="n">${pcRs(i.preco)}</td><td class="n"><b>${pcRs(i.custo)}</b></td><td class="n">${nf(i.qtd_total)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="4">Soma dos insumos${Math.abs(r.soma - r.custo_unit) > 0.05 ? ' <small>(o custo do orçamento é o da data-base; os preços dos insumos podem ter mudado depois)</small>' : ''}</td><td class="n"><b>${pcRs(r.soma)}</b></td><td></td></tr></tfoot></table></div>`;
+    } catch (e) { if ($('#modal .mcaixa') === caixa) fecharModal(); toast(e.message, 1); }
+  }; });
   if ($('#pcComGeral')) $('#pcComGeral').onclick = () => comentar('');
   if ($('#pcCtr')) $('#pcCtr').onclick = () => pcArquivo(o.id, 'contrato');
   $('#pcImp').onclick = () => window.print();
