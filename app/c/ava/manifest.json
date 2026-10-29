@@ -1,15 +1,15 @@
 {
   "id": "./",
-  "name": "AVA",
+  "name": "AVA · Size Engenharia",
   "short_name": "AVA",
-  "description": "Acompanhamento da obra AVA",
+  "description": "Acompanhamento da obra AVA — plataforma Size Engenharia",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#FFFFFF",
-  "theme_color": "#552614",
+  "theme_color": "#4E1E0D",
   "icons": [
     {
       "src": "icon-192.png",
