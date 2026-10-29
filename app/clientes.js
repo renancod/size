@@ -1,7 +1,7 @@
-/* Administração do portal do cliente: cadastro (obra, modelo Gestão/Global ou módulos um a um, cor), logins de cada cliente
- * e publicação do endereço próprio (c/<slug>/) com o ícone e o nome do empreendimento. Os ícones são recortados aqui no
- * navegador (canvas) a partir da imagem escolhida e enviados ao servidor, que publica no GitHub Pages. */
-const CL = { d: null, img: null };
+/* Administração do portal do cliente: cadastro (empreendimentos com o tipo Gerenciamento/Execução ou módulos um a um e a foto
+ * do cartão, cor), logins de cada cliente e publicação do endereço próprio (c/<slug>/) com a logo, o ícone e o fundo do login.
+ * Os ícones são recortados aqui no navegador (canvas) a partir da logo e enviados ao servidor, que publica no GitHub Pages. */
+const CL = { d: null, img: null, fundo: null };
 const CL_CORES = ['#1D6F5F', '#2B4C7E', '#8A5A2B', '#5B3E8C', '#9C2F3E', '#2E3440', '#0F6E8C', '#6B7A1F'];
 const clSlug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
@@ -9,7 +9,7 @@ async function vClientes() {
   titulo('Portal do cliente');
   const A = CL.d = await api('cli_admin');
   view(`<div class="card"><div class="bp-h"><h3>${ic('eye')} Portal do cliente</h3><a class="btn" href="#/admin/cliente/novo">${ic('plus')} Novo cliente</a></div>
-      <p class="mute" style="margin:0">Cada cliente acompanha uma obra pelo app com o nome, o ícone e a cor do empreendimento. Ele só vê o que você liberar e nunca custos, compras ou dados internos.</p></div>
+      <p class="mute" style="margin:0">Cada cliente acompanha pelo app, com a logo e a cor da empresa dele, os empreendimentos que a Size gerencia ou executa e os orçamentos. Ele só vê o que você liberar e nunca custos, compras ou dados internos.</p></div>
     ${A.github ? '' : `<form class="card grid" id="clGh"><h3>${ic('download')} Publicação do endereço do cliente</h3>
       <p class="mute" style="margin:0">Para o sistema publicar o endereço próprio de cada cliente, ele precisa de uma chave do GitHub com permissão de escrita no repositório do app. Faça isso uma vez só:
       no GitHub, Settings → Developer settings → Fine-grained tokens → Generate new token, repositório <b>renancod/size</b>, permissão <b>Contents: Read and write</b>. Cole a chave abaixo: ela fica guardada só no servidor.</p>
@@ -17,7 +17,7 @@ async function vClientes() {
       <button class="btn">Guardar chave</button></form>`}
     <div class="cl-lista">${A.clientes.map(c => `<a class="card cl-item" href="#/admin/cliente/${enc(c.id)}" style="text-decoration:none;color:inherit">
       <span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>
-      <span><b>${esc(c.nome)}</b> <span class="pc-chip ${c.estagio === 'Obra' ? 'ok' : c.estagio === 'Inativo' ? 'err' : 'warn'}">${esc(c.estagio)}</span><br><small>${c.obra_nome ? esc(c.obra_nome) : 'sem obra'} · ${c.orcamentos.length} ${c.orcamentos.length === 1 ? 'orçamento' : 'orçamentos'} · ${c.modelo === 'gestao' ? 'Gestão' : c.modelo === 'global' ? 'Global' : 'Personalizado'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
+      <span><b>${esc(c.nome)}</b> <span class="pc-chip ${c.estagio === 'Obra' ? 'ok' : c.estagio === 'Inativo' ? 'err' : 'warn'}">${esc(c.estagio)}</span><br><small>${c.empreendimentos.length ? c.empreendimentos.map(e => esc(e.nome) + ' (' + esc(A.tipos[e.modelo]) + ')').join(', ') : 'sem obra'} · ${c.orcamentos.length} ${c.orcamentos.length === 1 ? 'orçamento' : 'orçamentos'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
       ${ic('chevron')}</a>`).join('') || '<div class="card vazio"><p>Nenhum cliente ainda.</p></div>'}</div>`);
   if ($('#clGh')) $('#clGh').onsubmit = async e => {
     e.preventDefault();
@@ -28,43 +28,64 @@ async function vClientes() {
 
 async function vCliente(id) {
   const A = CL.d && CL.d.clientes ? CL.d : (CL.d = await api('cli_admin'));
-  const novo = id === 'novo', c = novo ? { nome: '', empresa: '', obra_id: '', modelo: 'gestao', modulos: A.modelos.gestao, cor: CL_CORES[0], slug: '', ativo: true, usuarios: [] } : A.clientes.find(x => String(x.id) === String(id));
+  const novo = id === 'novo', c = novo ? { nome: '', empresa: '', empreendimentos: [], cor: CL_CORES[0], slug: '', ativo: true, usuarios: [] } : A.clientes.find(x => String(x.id) === String(id));
   if (!c) { toast('Cliente não encontrado.', 1); location.hash = '#/admin/clientes'; return; }
-  CL.img = null;
+  CL.img = null; CL.fundo = null;
   titulo(novo ? 'Novo cliente' : c.nome);
-  const E = { cor: c.cor, modelo: c.modelo || 'personalizado', modulos: c.modulos.slice(), ativo: novo ? true : !!c.ativo };
+  const E = { cor: c.cor, ativo: novo ? true : !!c.ativo, semFundo: false, emps: c.empreendimentos.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos.slice(), foto: e.foto, salvo: true })) };
   view(`<a class="linkbtn" href="#/admin/clientes">${ic('back')} Clientes</a>
-    <form class="card grid" id="clF"><h3>Empreendimento</h3>
-      <div class="g2"><label>Nome do app (empreendimento)<input name="nome" required maxlength="40" value="${esc(c.nome)}" placeholder="AVA Residence"></label>
-      <label>Cliente (empresa)<input name="empresa" value="${esc(c.empresa)}" placeholder="Construtora Mar Azul"></label></div>
-      <div class="g2"><label>Obra <small>(sem obra = em negociação: ele só vê os orçamentos enviados)</small><select name="obra_id"><option value="">— em negociação (ainda sem obra) —</option>${A.obras.map(o => `<option value="${esc(o.id)}" ${String(o.id) === String(c.obra_id) ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></label>
-      <label>Endereço <small>(${esc(A.app_url)}c/…)</small><input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,39}" value="${esc(c.slug)}" placeholder="ava-residence"></label></div>
-      <label>O que o cliente vê</label>
-      <div class="seg" id="clMod">${[['gestao', 'Gestão'], ['global', 'Global'], ['personalizado', 'Escolher']].map(([k, t]) => `<button type="button" data-m="${k}" class="${E.modelo === k ? 'on' : ''}">${t}</button>`).join('')}</div>
-      <div class="cl-mods" id="clMods"></div>
+    <form class="card grid" id="clF"><h3>Cliente</h3>
+      <div class="g2"><label>Nome do app <small>(nome do cliente)</small><input name="nome" required maxlength="40" value="${esc(c.nome)}" placeholder="Mar Azul Incorporadora"></label>
+      <label>Empresa <small>(razão social ou contato)</small><input name="empresa" value="${esc(c.empresa)}" placeholder="Construtora Mar Azul"></label></div>
+      <label>Endereço <small>(${esc(A.app_url)}c/…)</small><input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,39}" value="${esc(c.slug)}" placeholder="mar-azul"></label>
+      <div class="bp-h" style="margin-top:6px"><h3 style="margin:0">${ic('building')} Empreendimentos</h3><button type="button" class="btn sec peq" id="clEmpN">${ic('plus')} Adicionar empreendimento</button></div>
+      <small class="mute">As obras que a Size gerencia ou executa para este cliente. Sem nenhuma, ele está em negociação e só vê os orçamentos enviados.</small>
+      <div id="clEmps" class="cl-emps"></div>
       <label>Cor do app</label>
       <div class="cl-sw" id="clSw">${CL_CORES.map(x => `<button type="button" data-cor="${x}" style="background:${x}" aria-label="Cor ${x}"></button>`).join('')}<input type="color" id="clCor" value="${esc(c.cor)}" aria-label="Outra cor"></div>
-      <label>Imagem do empreendimento <small>(vira o ícone do app e o fundo do login; quadrada fica melhor)</small><input type="file" id="clImg" accept="image/*"></label>
-      <div class="cl-prev"><canvas id="clIcone" width="192" height="192"></canvas><div class="cl-top" id="clTopo"><div><b id="clTn">${esc(c.nome || 'Nome do empreendimento')}</b><small>assim fica o topo do app do cliente</small></div></div></div>
+      <div class="g2"><label>Logo da empresa do cliente <small>(topo do app, login e ícone no celular; PNG com fundo transparente fica melhor)</small><input type="file" id="clImg" accept="image/*"></label>
+      <label>Fundo do login <small>(opcional; foto deitada, 1920 × 1080 ou maior)</small><input type="file" id="clFundo" accept="image/*"></label></div>
+      <div id="clFundoAv"></div>
+      ${c.capa ? `<label class="chk"><input type="checkbox" id="clSemFundo"> Tirar o fundo do login publicado (fica só a cor)</label>` : ''}
+      <div class="cl-prev"><canvas id="clIcone" width="192" height="192"></canvas><div class="cl-top" id="clTopo"><div><b id="clTn">${esc(c.nome || 'Nome do cliente')}</b><small>assim fica o topo do app do cliente</small></div></div></div>
+      ${c.logo || c.url ? `<small class="mute">${c.logo ? 'Logo publicada. ' : ''}Escolha uma imagem só se quiser trocar; publicar sem imagem nova mantém as que estão no ar.</small>` : ''}
       <div class="acoes"><button class="btn">${ic('check')} Salvar</button>${novo ? '' : `<button type="button" class="btn sec" id="clPub">${ic('download')} Publicar endereço</button>
         <button type="button" class="btn ${c.ativo ? 'perigo' : 'sec'}" id="clAtivo">${c.ativo ? 'Encerrar acesso' : 'Reativar acesso'}</button>`}</div>
       ${!novo && !c.ativo ? '<div class="aviso warn">Acesso encerrado: ninguém deste cliente consegue entrar. Os orçamentos e o histórico continuam guardados.</div>' : ''}
       ${!novo && c.orcamentos.length ? `<div class="mute"><b>Orçamentos no portal:</b> ${c.orcamentos.map(o => `<a href="#/orc/orcamento/${enc(o.id)}">${esc(o.rotulo)}</a> (${esc(o.status.toLowerCase())}${o.aceite ? ', aceito no app' : ''}${o.abertos ? ', ' + o.abertos + ' consideração' + (o.abertos > 1 ? 'ões' : '') + ' para responder' : ''})`).join(' · ')}</div>` : ''}
-      ${c.url ? `<div class="aviso info">Endereço do cliente: <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a> <button type="button" class="linkbtn" id="clCop">copiar</button></div>` : novo ? '' : '<div class="aviso warn">Endereço ainda não publicado: escolha a imagem e toque em Publicar endereço. Enquanto isso, o cliente já pode entrar pelo app da Size (com a cor dele).</div>'}
+      ${c.url ? `<div class="aviso info">Endereço do cliente: <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a> <button type="button" class="linkbtn" id="clCop">copiar</button></div>` : novo ? '' : '<div class="aviso warn">Endereço ainda não publicado: escolha a logo e toque em Publicar endereço. Enquanto isso, o cliente já pode entrar pelo app da Size (com a cor dele).</div>'}
     </form>
     ${novo ? '' : `<div class="card"><div class="bp-h"><h3>${ic('users')} Acessos do cliente</h3><button type="button" class="btn sec peq" id="clNovoU">${ic('plus')} Novo acesso</button></div>
       ${c.usuarios.map(u => `<div class="lin-sel" style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)"><span><b>${esc(u.nome)}</b> ${u.ativo ? '' : '<span class="bp-flag">desativado</span>'}<br><small>${esc(u.login)}${u.email ? ' · ' + esc(u.email) : ''}${u.ultimo_acesso ? ' · último acesso ' + esc(u.ultimo_acesso) : ' · ainda não entrou'}</small></span>
         <button type="button" class="btn sec peq" data-u="${esc(u.id)}">Editar</button></div>`).join('') || '<p class="mute">Nenhum acesso ainda. Crie um login para cada pessoa do cliente (dono, fiscal…).</p>'}</div>`}`);
 
-  const mods = () => {
-    const fixo = E.modelo !== 'personalizado';
-    if (fixo) E.modulos = A.modelos[E.modelo].slice();
-    $('#clMods').innerHTML = `<label class="chk"><input type="checkbox" checked disabled> Andamento da obra <small>(sempre)</small></label>` + Object.entries(A.modulos).map(([k, t]) =>
-      `<label class="chk"><input type="checkbox" data-mk="${k}" ${E.modulos.includes(k) ? 'checked' : ''} ${fixo ? 'disabled' : ''}> ${esc(t)}</label>`).join('');
-    $$('[data-mk]').forEach(i => { i.onchange = () => { E.modulos = $$('[data-mk]').filter(x => x.checked).map(x => x.dataset.mk); }; });
+  // empreendimentos: obra, tipo (Gerenciamento / Execução / escolher os módulos) e a foto do cartão
+  const emps = () => {
+    $('#clEmps').innerHTML = E.emps.map((e, i) => {
+      const fixo = e.modelo !== 'personalizado';
+      if (fixo) e.modulos = A.modelos[e.modelo].slice();
+      return `<div class="cl-emp" data-i="${i}"><div class="cl-emp-f" data-foto="${i}">${e.foto && e.salvo ? '' : ic('camera')}</div><div class="grid">
+        <div class="g2"><label>Obra<select data-ob="${i}"><option value="">— escolha a obra —</option>${A.obras.filter(o => o.ativa || o.id === e.obra).map(o => `<option value="${esc(o.id)}" ${o.id === e.obra ? 'selected' : ''}>${esc(o.nome)}${o.ativa ? '' : ' (desativada)'}</option>`).join('')}</select></label>
+        <div><label>O que a Size faz</label><div class="seg">${[['gestao', 'Gerenciamento'], ['global', 'Execução'], ['personalizado', 'Escolher']].map(([k, t]) => `<button type="button" data-tp="${i}" data-m="${k}" class="${e.modelo === k ? 'on' : ''}">${t}</button>`).join('')}</div></div></div>
+        <div class="cl-mods"><label class="chk"><input type="checkbox" checked disabled> Andamento <small>(sempre)</small></label>${Object.entries(A.modulos).map(([k, t]) => `<label class="chk"><input type="checkbox" data-mk="${i}" value="${k}" ${e.modulos.includes(k) ? 'checked' : ''} ${fixo ? 'disabled' : ''}> ${esc(t)}</label>`).join('')}</div>
+        <div class="acoes">${e.salvo ? `<label class="btn sec peq" style="cursor:pointer">${ic('camera')} ${e.foto ? 'Trocar foto' : 'Escolher foto'}<input type="file" accept="image/*" data-fsel="${i}" hidden></label>${e.foto ? `<button type="button" class="btn sec peq" data-frem="${i}">Usar foto do diário</button>` : ''}` : '<small class="mute">Salve para escolher a foto (sem foto, o cartão usa a do último diário liberado).</small>'}
+          <button type="button" class="btn sec peq perigo" data-rem="${i}">Retirar</button></div></div></div>`;
+    }).join('') || '<p class="mute" style="margin:0">Nenhum empreendimento: cliente em negociação.</p>';
+    $$('[data-ob]').forEach(s => { s.onchange = () => { const e = E.emps[+s.dataset.ob]; if (e.obra !== s.value) { e.obra = s.value; e.salvo = false; e.foto = false; emps(); } }; });
+    $$('[data-tp]').forEach(b => { b.onclick = () => { E.emps[+b.dataset.tp].modelo = b.dataset.m; emps(); }; });
+    $$('[data-mk]').forEach(x => { x.onchange = () => { const e = E.emps[+x.dataset.mk]; e.modulos = $$(`[data-mk="${x.dataset.mk}"]`).filter(y => y.checked).map(y => y.value); }; });
+    $$('[data-rem]').forEach(b => { b.onclick = () => { E.emps.splice(+b.dataset.rem, 1); emps(); }; });
+    $$('[data-fsel]').forEach(inp => { inp.onchange = async () => {
+      const e = E.emps[+inp.dataset.fsel], arq = inp.files[0];
+      if (!arq) return;
+      try { const im = await clCarregar(arq); toast((await api('cli_emp_foto_salvar', { id: c.id, obra: e.obra, arquivo: { b64: clReduzir(im, 1280, 'image/jpeg') } })).msg); CL.d = null; vCliente(c.id); } catch (x) { toast(x.message, 1); }
+    }; });
+    $$('[data-frem]').forEach(b => { b.onclick = async () => { try { toast((await api('cli_emp_foto_salvar', { id: c.id, obra: E.emps[+b.dataset.frem].obra, remover: true })).msg); CL.d = null; vCliente(c.id); } catch (x) { toast(x.message, 1); } }; });
+    // miniatura da foto escolhida (a mesma rota que o portal usa, na pré-visualização do administrador)
+    E.emps.forEach((e, i) => { if (e.foto && e.salvo) api('cli_emp_foto', { cliente: c.id, obra: e.obra }).then(r => { const el = $(`[data-foto="${i}"]`); if (el && r.b64) el.style.backgroundImage = `url('data:image/jpeg;base64,${r.b64}')`; }).catch(() => {}); });
   };
-  $$('#clMod [data-m]').forEach(b => { b.onclick = () => { E.modelo = b.dataset.m; $$('#clMod [data-m]').forEach(x => x.classList.toggle('on', x === b)); mods(); }; });
-  mods();
+  $('#clEmpN').onclick = () => { E.emps.push({ obra: '', modelo: 'gestao', modulos: A.modelos.gestao.slice(), foto: false, salvo: false }); emps(); };
+  emps();
   const pinta = () => {
     const cor = pcCor(E.cor);
     $('#clTopo').style.background = cor;
@@ -76,16 +97,26 @@ async function vCliente(id) {
   $('#clCor').oninput = e => { E.cor = e.target.value.toUpperCase(); pinta(); };
   pinta();
   const f = $('#clF');
-  f.nome.oninput = () => { $('#clTn').textContent = f.nome.value || 'Nome do empreendimento'; if (novo && !f.slug.dataset.mexeu) f.slug.value = clSlug(f.nome.value); };
+  f.nome.oninput = () => { $('#clTn').textContent = f.nome.value || 'Nome do cliente'; if (novo && !f.slug.dataset.mexeu) f.slug.value = clSlug(f.nome.value); };
   f.slug.oninput = () => { f.slug.dataset.mexeu = '1'; };
   $('#clImg').onchange = async e => {
     const arq = e.target.files[0];
     if (!arq) return;
-    try { CL.img = await clCarregar(arq); E.cor = clCorDaImagem(CL.img); pinta(); toast('Cor sugerida pela imagem. Troque se quiser.'); } catch (x) { toast(x.message, 1); }
+    try { CL.img = await clCarregar(arq); E.cor = clCorDaImagem(CL.img); pinta(); toast('Cor sugerida pela logo. Troque se quiser.'); } catch (x) { toast(x.message, 1); }
   };
+  $('#clFundo').onchange = async e => {
+    const arq = e.target.files[0];
+    if (!arq) return;
+    try {
+      CL.fundo = await clCarregar(arq);
+      $('#clFundoAv').innerHTML = CL.fundo.naturalWidth < 1280 ? `<div class="aviso warn">Esta imagem tem só ${CL.fundo.naturalWidth} × ${CL.fundo.naturalHeight} px: no computador o fundo vai ficar borrado. Use uma de pelo menos 1280 px de largura (ideal 1920 × 1080).</div>` : '';
+    } catch (x) { toast(x.message, 1); }
+  };
+  if ($('#clSemFundo')) $('#clSemFundo').onchange = e => { E.semFundo = e.target.checked; };
   if ($('#clCop')) $('#clCop').onclick = async () => { try { await navigator.clipboard.writeText(c.url); toast('Endereço copiado.'); } catch (e) { toast('Não consegui copiar.', 1); } };
   const salvar = async () => {
-    const r = await api('cli_salvar', { cliente: { id: novo ? '' : c.id, nome: f.nome.value, empresa: f.empresa.value, obra_id: f.obra_id.value, slug: f.slug.value.trim(), modelo: E.modelo, modulos: E.modulos, cor: pcCor(E.cor), ativo: E.ativo } });
+    if (E.emps.some(e => !e.obra)) throw new Error('Escolha a obra de cada empreendimento (ou retire a linha vazia).');
+    const r = await api('cli_salvar', { cliente: { id: novo ? '' : c.id, nome: f.nome.value, empresa: f.empresa.value, slug: f.slug.value.trim(), empreendimentos: E.emps.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos })), cor: pcCor(E.cor), ativo: E.ativo } });
     CL.d = null;
     return r;
   };
@@ -94,7 +125,7 @@ async function vCliente(id) {
     try { const r = await salvar(); toast(r.msg); if (novo) location.hash = '#/admin/cliente/' + enc(r.id); else vCliente(c.id); } catch (x) { toast(x.message, 1); }
   };
   if ($('#clPub')) $('#clPub').onclick = async () => {
-    if (!CL.img) return toast('Escolha a imagem do empreendimento: ela vira o ícone do app.', 1);
+    if (!CL.img && !c.url) return toast('Escolha a logo da empresa do cliente: ela vira o ícone do app.', 1);
     const b = $('#clPub'), passo = t => { b.textContent = t; };
     b.disabled = true;
     // janela com o andamento: a ida ao GitHub leva uns 15 s e o site entra no ar 1–2 min depois
@@ -105,9 +136,11 @@ async function vCliente(id) {
       msg('Preparando os ícones…');
       const cor = pcCor(E.cor), cv = n => { const k = document.createElement('canvas'); k.width = k.height = n; return k; };
       const png = (n, redondo) => { const k = cv(n); clDesenhar(k, n, cor, redondo); return k.toDataURL('image/png'); };
-      const imagens = { 'icon-192.png': png(192, true), 'icon-512.png': png(512, true), 'icon-maskable-512.png': png(512, false), 'icon-180.png': png(180, false), 'capa.jpg': clCapa(CL.img) };
+      // logo nova: ícones + logo.png; sem logo nova, os ícones publicados continuam (o nome e a cor são atualizados)
+      const imagens = CL.img ? { 'icon-192.png': png(192, true), 'icon-512.png': png(512, true), 'icon-maskable-512.png': png(512, false), 'icon-180.png': png(180, false), 'logo.png': clReduzir(CL.img, 512, 'image/png') } : {};
+      if (CL.fundo) imagens['capa.jpg'] = clReduzir(CL.fundo, 1920, 'image/jpeg');
       msg('Enviando para o GitHub (uns 15 segundos)…');
-      const r = await api('cli_publicar', { id: c.id, imagens });
+      const r = await api('cli_publicar', { id: c.id, imagens, sem_capa: E.semFundo && !CL.fundo });
       msg('Enviado. O GitHub está colocando o endereço no ar (1 a 2 minutos)…');
       let noAr = false;
       for (let k = 0; k < 16 && !noAr; k++) {
@@ -161,11 +194,14 @@ function clDesenhar(k, n, cor, redondo) {
   else { g.fillStyle = 'rgba(255,255,255,.9)'; g.font = `700 ${Math.round(n * 0.42)}px system-ui,sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText((($('#clTn') || {}).textContent || '?').trim().charAt(0).toUpperCase(), n / 2, n / 2 + n * 0.02); }
   g.restore();
 }
-function clCapa(im) {
-  const W = Math.min(1280, im.naturalWidth), H = Math.round(im.naturalHeight * W / im.naturalWidth), k = document.createElement('canvas');
+/* reduz para caber em max px (lado maior), sem aumentar; PNG mantém o fundo transparente da logo */
+function clReduzir(im, max, tipo) {
+  const f = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight)), W = Math.round(im.naturalWidth * f), H = Math.round(im.naturalHeight * f), k = document.createElement('canvas');
   k.width = W; k.height = H;
-  k.getContext('2d').drawImage(im, 0, 0, W, H);
-  return k.toDataURL('image/jpeg', 0.8);
+  const g = k.getContext('2d');
+  if (tipo === 'image/jpeg') { g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); }
+  g.drawImage(im, 0, 0, W, H);
+  return k.toDataURL(tipo, 0.82);
 }
 /* cor predominante (pixels mais saturados) → depois o pcCor escurece se ficar clara demais */
 function clCorDaImagem(im) {

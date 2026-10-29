@@ -89,7 +89,7 @@ test('administrador: lista, endereço único e publicação exige a chave do Git
   const t = preparar();
   const A = t.adm('cli_admin');
   assert.equal(A.clientes[0].usuarios[0].login, 'dono.ava');
-  assert.deepEqual(A.clientes[0].modulos, ['cronograma', 'diario', 'fvs', 'financeiro']);
+  assert.deepEqual(A.clientes[0].empreendimentos[0].modulos, ['cronograma', 'diario', 'fvs', 'financeiro']);   // cadastro antigo (uma obra) vira o 1º empreendimento
   assert.equal(A.github, false);
   assert.throws(() => t.adm('cli_salvar', { cliente: { nome: 'Outro', obra_id: t.obra, modelo: 'global', cor: '#000000', slug: 'ava-residence' } }), /outro cliente/);
   const img = 'data:image/png;base64,' + Buffer.from('png').toString('base64');
@@ -167,4 +167,39 @@ test('negociação: cliente sem obra vê só o orçamento enviado, comenta, rece
   // não fechou: encerra o acesso e ele perde na hora
   adm('cli_salvar', { cliente: { id: cli, nome: 'Dunas', obra_id: '', modelo: 'global', cor: '#2B4C7E', slug: 'dunas', ativo: false } });
   assert.match(bruto('cli_orcamentos').erro, /desativado/);
+});
+
+test('vários empreendimentos: cartões no início, cada obra com o seu tipo, foto do cadastro e aviso que abre na obra certa', () => {
+  const t = preparar('gestao');
+  const obra2 = t.adm('admin_obra_criar', { nome: 'Condomínio Norte', sigla: 'CN', endereco: 'Rua Y' }).id;
+  const emps = [{ obra: t.obra, modelo: 'gestao' }, { obra: obra2, modelo: 'global' }];
+  assert.throws(() => t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', obra_id: '', empreendimentos: [emps[0], emps[0]], cor: '#1D6F5F', slug: 'ava-residence' } }), /duas vezes/);
+  t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', empresa: 'Mar Azul', empreendimentos: emps, cor: '#1D6F5F', slug: 'ava-residence' } });
+  const ini = t.cliente('cli_inicio');
+  assert.equal(ini.obra, null);
+  assert.deepEqual(ini.empreendimentos.map(e => [e.nome, e.tipo]), [['Loteamento Sul', 'Gerenciamento'], ['Condomínio Norte', 'Execução']]);
+  assert.ok(typeof ini.empreendimentos[1].andamento.pct_exec === 'number');
+  assert.equal(t.cliente('cli_inicio', { obra: obra2 }).obra.nome, 'Condomínio Norte');
+  // Execução não mostra financeiro; Gerenciamento mostra
+  assert.match(t.G.chamar({ acao: 'cli_financeiro', token: t.sessao.token, obra: obra2 }).erro, /não está liberada/);
+  assert.ok(t.cliente('cli_financeiro', { obra: t.obra }).total);
+  // obra que não é dele
+  const outra = t.adm('admin_obra_criar', { nome: 'Outra', sigla: 'OT', endereco: 'Z' }).id;
+  assert.match(t.G.chamar({ acao: 'cli_cronograma', token: t.sessao.token, obra: outra }).erro, /não está liberado/);
+  // foto do cartão: sem foto nem diário → vazia; com a foto do cadastro → a imagem; salvar o cadastro mantém a foto
+  assert.equal(t.cliente('cli_emp_foto', { obra: obra2 }).b64, '');
+  t.adm('cli_emp_foto_salvar', { id: t.cli, obra: obra2, arquivo: FOTO });
+  t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', empreendimentos: emps, cor: '#1D6F5F', slug: 'ava-residence' } });
+  assert.ok(t.cliente('cli_emp_foto', { obra: obra2 }).b64);
+  assert.equal(t.adm('cli_admin').clientes[0].empreendimentos[1].foto, true);
+  // aviso de diário liberado leva o empreendimento na rota
+  const cod = t.eng('exec_etapa_salvar', { nome: 'Pavimentação', local: 'Rua X', itens: [{ servico: 'Base', qtd_prevista: 500, inicio: dia(-10), termino: dia(10) }] }).codigo;
+  const item = t.eng('exec_dados').etapas.find(e => e.codigo === cod).itens[0];
+  t.eng('exec_diario_salvar', { data: dia(0), lancamentos: [{ item_id: item.id, qtd: 40 }], enviar: true });
+  t.eng('exec_cliente', { data: dia(0), mostrar: true });
+  const n = t.cliente('notificacoes').itens.find(i => i.etapa === 'cli_diario');
+  assert.equal(n.obra_nome, 'Loteamento Sul');
+  assert.match(n.rota, new RegExp('\\?o=' + t.obra + '$'));
+  // a sessão traz a lista para o menu
+  assert.equal(t.cliente('sessao').cliente.empreendimentos.length, 2);
 });

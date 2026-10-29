@@ -1,8 +1,9 @@
 /**
- * Portal do cliente: o cliente entra com login próprio e acompanha UMA obra, só leitura, com a cor, o nome e o ícone
- * do empreendimento (endereço próprio c/<slug>/ publicado no GitHub Pages).
- * - O que ele vê vem do cadastro (aba Clientes, coluna modulos): andamento sempre; cronograma, diário, FVS e financeiro conforme o modelo
- *   (Gestão = tudo; Global = sem financeiro) ou marcados um a um.
+ * Portal do cliente: o cliente entra com login próprio e acompanha os empreendimentos (obras) que a Size gerencia ou executa
+ * para ele, só leitura, com a logo, o nome e a cor da empresa dele (endereço próprio c/<slug>/ publicado no GitHub Pages).
+ * - Empreendimentos: aba Clientes, coluna emps_json = [{ obra, modelo, modulos, foto }]. Cada um tem o seu tipo
+ *   (Gerenciamento = tudo, com financeiro; Execução = sem financeiro; ou módulos marcados um a um). Cadastro antigo
+ *   (uma obra só: obra_id, modelo, modulos) vale como um empreendimento.
  * - Segurança: o usuário do cliente (Usuarios.cliente_id) só chama as rotas "cli" (rota_ recusa o resto) e cada rota daqui
  *   devolve só o que pode sair: nunca custo, BDI, fornecedor, compras, estoque, ocorrências ou observações internas.
  * - Diário: só os dias que o engenheiro liberou (Diarios.cliente = Sim). Financeiro: contratos das empreiteiras
@@ -13,54 +14,70 @@ const CLI_MODULOS_ = { cronograma: 'Cronograma', diario: 'Diário de obra', fvs:
 const CLI_MODELOS_ = { gestao: ['cronograma', 'diario', 'fvs', 'financeiro'], global: ['cronograma', 'diario', 'fvs'] };
 const CLI_COR_PADRAO_ = '#1D6F5F';
 
-function cliModulos_(c) { return String(c.modulos || '').split(',').map(s => s.trim()).filter(m => CLI_MODULOS_[m]); }
+const CLI_TIPOS_ = { gestao: 'Gerenciamento', global: 'Execução', personalizado: 'Personalizado' };
+const cliMods_ = v => [].concat(Array.isArray(v) ? v : String(v || '').split(',')).map(s => String(s).trim()).filter(m => CLI_MODULOS_[m]);
+function cliModulos_(c) { return cliMods_(c.modulos); }
+/* empreendimentos do cliente: [{ obra, modelo, modulos[], foto }] na ordem do cadastro */
+function cliEmps_(c) {
+  let L = null;
+  try { L = c.emps_json ? JSON.parse(c.emps_json) : null; } catch (e) { L = null; }
+  if (!Array.isArray(L)) L = c.obra_id ? [{ obra: String(c.obra_id), modelo: c.modelo, modulos: cliModulos_(c) }] : [];
+  return L.filter(e => e && e.obra).map(e => {
+    const modelo = CLI_MODELOS_[e.modelo] ? e.modelo : 'personalizado';
+    return { obra: String(e.obra), modelo: modelo, modulos: modelo === 'personalizado' ? cliMods_(e.modulos) : CLI_MODELOS_[modelo].slice(), foto: e.foto || '' };
+  });
+}
 function cliAchar_(id) {
   const k = 'cl|' + id;
   let c = authCache_(k);
   if (!c) { c = central_('Clientes').all().find(x => String(x.id) === String(id)); if (c) authGuardar_(k, c); }
   return c;
 }
-function cliObra_(c) {
-  if (!c.obra_id) return null;   // em negociação: ainda sem obra
-  const o = central_('Obras').all().find(x => String(x.id) === String(c.obra_id));
+function cliObra_(id) {
+  const o = central_('Obras').all().find(x => String(x.id) === String(id));
   if (!o || !o.planilha_id) throw new Error('A obra deste acesso não foi encontrada. Fale com a Size.');
   return o;
 }
-function cliPub_(c, o) {
+function cliPub_(c) {
+  const E = cliEmps_(c), obras = E.length ? central_('Obras').all() : [], pre = c.slug && c.publicado_em ? 'c/' + c.slug + '/' : '';
+  const emps = E.map(e => { const o = obras.find(x => String(x.id) === String(e.obra)) || {}; return { id: e.obra, nome: o.nome || e.obra, sigla: o.sigla || '', endereco: o.endereco || '', modelo: e.modelo, tipo: CLI_TIPOS_[e.modelo], modulos: e.modulos }; });
   return {
-    id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', modulos: o ? cliModulos_(c) : [], obra_nome: o ? o.nome : '',
-    obra: !!o, publicado: !!c.publicado_em, capa: c.slug && c.publicado_em && sim_(c.capa) ? 'c/' + c.slug + '/capa.jpg' : '', orcamentos: cliPropostas_(c.id).length
+    id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', empreendimentos: emps,
+    // compatibilidade (app antigo aberto no celular): o primeiro empreendimento
+    obra: emps.length > 0, modulos: emps.length ? emps[0].modulos : [], obra_nome: emps.length ? emps[0].nome : '',
+    publicado: !!c.publicado_em, capa: pre && sim_(c.capa) ? pre + 'capa.jpg' : '', logo: pre && sim_(c.logo) ? pre + 'logo.png' : '', orcamentos: cliPropostas_(c.id).length
   };
 }
 
-/* contexto das rotas cli: o cliente do usuário (ou, para o administrador pré-visualizar, q.cliente) e a planilha da obra */
+/* contexto das rotas cli: o cliente do usuário (ou, para o administrador pré-visualizar, q.cliente) e a planilha da obra
+ * escolhida (q.obra; sem ela, o primeiro empreendimento) */
 function cliCtx_(q, ctx) {
   let id = ctx.u.cliente_id;
   if (!id) { if (!ctx.admin) throw new Error('Área do portal do cliente.'); id = q.cliente; }
   const c = cliAchar_(id);
   if (!c || (!sim_(c.ativo) && !ctx.admin)) throw new Error('O acesso deste cliente está desativado. Fale com a Size.');
-  const mods = cliModulos_(c), mod = ROTAS[q.acao].cli;
+  const mod = ROTAS[q.acao].cli;
   ctx.cli = c; ctx.perms = [];
   if (mod === 'orc') return;   // orçamentos: valem com ou sem obra
-  if (!c.obra_id) throw new Error('O acompanhamento da obra ainda não foi liberado.');
-  if (typeof mod === 'string' && mods.indexOf(mod) < 0) throw new Error('Esta área não está liberada para você.');
-  cliAbrirObra_(ctx);
+  const E = cliEmps_(c);
+  if (!E.length) throw new Error('O acompanhamento da obra ainda não foi liberado.');
+  const e = q.obra ? E.find(x => x.obra === String(q.obra)) : E[0];
+  if (!e) throw new Error('Este empreendimento não está liberado para você.');
+  if (typeof mod === 'string' && mod !== 'obra' && e.modulos.indexOf(mod) < 0) throw new Error('Esta área não está liberada para você.');
+  cliAbrirObra_(ctx, e);
 }
-function cliAbrirObra_(ctx) {
-  const c = ctx.cli;
-  let o = authCache_('co|' + c.obra_id);
-  if (!o) { o = cliObra_(c); authGuardar_('co|' + c.obra_id, o); }
-  ctx.mods = cliModulos_(c); ctx.obra = o; ctx.ss = SpreadsheetApp.openById(o.planilha_id);
+function cliAbrirObra_(ctx, e) {
+  let o = authCache_('co|' + e.obra);
+  if (!o) { o = cliObra_(e.obra); authGuardar_('co|' + e.obra, o); }
+  ctx.emp = e; ctx.mods = e.modulos; ctx.obra = o; ctx.ss = SpreadsheetApp.openById(o.planilha_id);
 }
 function cliSessao_(u) {
   const c = cliAchar_(u.cliente_id);
   if (!c || !sim_(c.ativo)) throw new Error('O acesso deste cliente está desativado. Fale com a Size.');
-  let o = null;
-  try { o = cliObra_(c); } catch (e) { /* mostra o erro ao abrir as telas */ }
   return {
     empresa: String(config_().EMPRESA || 'Size Engenharia'),
     usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: false, trocar_senha: sim_(u.trocar_senha), orcamentos: '' },
-    obras: [], permissoes: {}, cliente: cliPub_(c, o)
+    obras: [], permissoes: {}, cliente: cliPub_(c)
   };
 }
 
@@ -124,6 +141,34 @@ function cliFoto_(q, ctx) {
   return { mime: 'image/jpeg', b64: Utilities.base64Encode(file.getBlob().getBytes()) };
 }
 
+/* foto do cartão do empreendimento: a que a Size escolheu no cadastro ou, sem ela, a mais recente de um diário liberado */
+function cliEmpFoto_(q, ctx) {
+  let id = ctx.emp.foto;
+  if (!id && ctx.mods.indexOf('diario') >= 0) {
+    const lib = {}, fs = obraTab_(ctx, 'FotosExec').all();
+    cliDiariosLib_(ctx).forEach(d => { lib[d._dia] = 1; });
+    const f = fs.filter(x => lib[ymd_(x.data)]).sort((a, b) => ymd_(b.data).localeCompare(ymd_(a.data)))[0];
+    if (f) id = f.mini_id || f.file_id;
+  }
+  if (!id) return { b64: '' };
+  return { mime: 'image/jpeg', b64: Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes()) };
+}
+/* administrador: foto do empreendimento (o app já reduz para até 1280 px) */
+function cliEmpFotoSalvar_(q, ctx) {
+  const T = central_('Clientes'), c = T.all().find(x => String(x.id) === String(q.id));
+  if (!c) throw new Error('Cliente não encontrado.');
+  const E = cliEmps_(c), e = E.find(x => x.obra === String(q.obra));
+  if (!e) throw new Error('Salve o empreendimento no cadastro antes de escolher a foto.');
+  if (q.remover) e.foto = '';
+  else {
+    const a = q.arquivo || {};
+    e.foto = cliArquivoSalvar_({ b64: a.b64, mime: 'image/jpeg', nome: 'foto.jpg' }, cliPasta_('Portal · ' + c.nome), 'Foto ' + e.obra).id;
+  }
+  c.emps_json = JSON.stringify(E); c.atualizado_em = new Date();
+  T.update(c);
+  return { msg: q.remover ? 'Foto retirada: o cartão usa a foto do último diário liberado.' : 'Foto do empreendimento salva.' };
+}
+
 /* ---------- qualidade: FVS aprovadas ---------- */
 function cliFvsLista_(ctx) { return obraTab_(ctx, 'Fvs').all().filter(f => f.status === FVS_ST_.ok); }
 function cliFvs_(q, ctx) {
@@ -167,11 +212,31 @@ function cliMedPdf_(q, ctx) {
 }
 
 /* ---------- início ---------- */
+/* sem q.obra e com mais de um empreendimento: um cartão por empreendimento (andamento guardado 10 min por obra);
+ * com q.obra (ou um só empreendimento): o painel daquela obra */
 function cliInicio_(q, ctx) {
-  const orcs = cliOrcResumo_(ctx.cli.id);
-  if (!ctx.cli.obra_id) return { cliente: cliPub_(ctx.cli, null), obra: null, orcamentos: orcs };
-  cliAbrirObra_(ctx);
-  const and = cliAndamento_(ctx), r = { cliente: cliPub_(ctx.cli, ctx.obra), obra: { nome: ctx.obra.nome, endereco: ctx.obra.endereco || '' }, orcamentos: orcs };
+  const orcs = cliOrcResumo_(ctx.cli.id), E = cliEmps_(ctx.cli), cli = cliPub_(ctx.cli);
+  if (!E.length) return { cliente: cli, obra: null, orcamentos: orcs };
+  const e = q.obra ? E.find(x => x.obra === String(q.obra)) : E.length === 1 ? E[0] : null;
+  if (q.obra && !e) throw new Error('Este empreendimento não está liberado para você.');
+  if (!e) {
+    const cache = CacheService.getScriptCache();
+    const emps = cli.empreendimentos.map((p, i) => {
+      const k = 'cliand|' + p.id;
+      let a = null;
+      try { a = JSON.parse(cache.get(k) || 'null'); } catch (x) { a = null; }
+      if (!a) {
+        try { const cx = { u: ctx.u, admin: false, perms: [] }; cliAbrirObra_(cx, E[i]); const A = cliAndamento_(cx); a = { pct_exec: A.pct_exec, pct_prev: A.pct_prev, inicio: A.inicio, fim: A.fim }; }
+        catch (x) { a = { erro: x.message }; }
+        try { cache.put(k, JSON.stringify(a), 600); } catch (x) { /* sem memória */ }
+      }
+      return Object.assign({}, p, { andamento: a });
+    });
+    return { cliente: cli, obra: null, empreendimentos: emps, orcamentos: orcs.filter(o => !o.obra_id) };
+  }
+  cliAbrirObra_(ctx, e);
+  const p = cli.empreendimentos.find(x => x.id === e.obra);
+  const and = cliAndamento_(ctx), r = { cliente: cli, emp: p, obra: { id: e.obra, nome: ctx.obra.nome, endereco: ctx.obra.endereco || '' }, orcamentos: E.length > 1 ? orcs.filter(o => o.obra_id === e.obra) : orcs };
   r.andamento = { pct_exec: and.pct_exec, pct_prev: and.pct_prev, inicio: and.inicio, fim: and.fim };
   r.proximas = and.frentes.filter(f => f.ini && f.ini > and.hoje).sort((a, b) => a.ini.localeCompare(b.ini)).slice(0, 3).map(f => ({ nome: f.nome, ini: f.ini }));
   if (ctx.mods.indexOf('diario') >= 0) {
@@ -188,21 +253,27 @@ function cliInicio_(q, ctx) {
 function cliNotif_(ctx) {
   const c = cliAchar_(ctx.u.cliente_id);
   if (!c || !sim_(c.ativo)) return [];
-  const o = cliObra_(c), base = c.slug && c.publicado_em ? './c/' + c.slug + '/' : './', limite = Date.now() - 20 * 864e5, itens = [];
+  const base = c.slug && c.publicado_em ? './c/' + c.slug + '/' : './', limite = Date.now() - 20 * 864e5, itens = [];
   const novo = d => d instanceof Date && d.getTime() >= limite;
-  const add = (id, etapa, texto, resumo, rota, quando) => itens.push({ id: 'cli|' + id, obra: o ? String(o.id) : '', obra_nome: o ? o.nome : c.nome, numero: '', etapa: etapa, texto: texto, resumo: resumo || '', situacao: '', prioridade: '', quando: fmtVal_(quando), rota: rota, url: base + rota });
+  let o = null;   // empreendimento da vez (a rota leva ?o= para o portal abrir nele)
+  const add = (id, etapa, texto, resumo, rota, quando) => { if (o) rota += '?o=' + encodeURIComponent(o.id);
+    itens.push({ id: 'cli|' + id, obra: o ? String(o.id) : '', obra_nome: o ? o.nome : c.nome, numero: '', etapa: etapa, texto: texto, resumo: resumo || '', situacao: '', prioridade: '', quando: fmtVal_(quando), rota: rota, url: base + rota }); };
   // orçamentos: revisão nova enviada e resposta da Size às considerações
   cliPropostas_(c.id).filter(p => p.status === 'Enviado' && novo(p.enviado_em)).forEach(p => add('o|' + p.id, 'cli_orc', 'Orçamento ' + propRotulo_(p) + ' disponível', p.empreendimento, '#/c/orcamento/' + p.id, p.enviado_em));
   const meus = {};
   cliPropostas_(c.id).forEach(p => { meus[String(p.numero)] = p; });
   central_('PropostaComentarios').all().filter(x => x.status === 'respondido' && meus[String(x.numero)] && novo(x.respondido_em))
     .forEach(x => add('r|' + x.id, 'cli_orc', 'Resposta da Size no orçamento ' + x.numero, String(x.resposta).slice(0, 80), '#/c/orcamento/' + x.proposta, x.respondido_em));
-  if (!o) return itens;
-  const mods = cliModulos_(c), cx = { u: ctx.u, admin: false, obra: o, perms: [], ss: SpreadsheetApp.openById(o.planilha_id) };
-  if (mods.indexOf('diario') >= 0) cliDiariosLib_(cx).filter(d => novo(d.cliente_em)).forEach(d => add('d|' + d._dia, 'cli_diario', 'Diário de ' + fmtBr_(d._dia) + ' disponível', d.condicao, '#/c/diario/' + d._dia, d.cliente_em));
-  if (mods.indexOf('financeiro') >= 0) obraTab_(cx, 'Medicoes').all().filter(m => (m.status === MED_ST_.ok && novo(m.aprovado_em)) || (m.status === MED_ST_.paga && novo(m.pago_em)))
-    .forEach(m => add('m|' + m.id + '|' + m.status, 'cli_med', 'Medição ' + (m.numero || '') + ' · ' + (m.empreiteiro_nome || ''), m.status === MED_ST_.paga ? 'paga' : 'aprovada', '#/c/financeiro', m.status === MED_ST_.paga ? m.pago_em : m.aprovado_em));
-  if (mods.indexOf('fvs') >= 0) cliFvsLista_(cx).filter(f => novo(f.aprovado_em)).forEach(f => add('f|' + f.id, 'cli_fvs', 'FVS ' + (f.numero || '') + ' aprovada', f.servico || f.modelo_nome, '#/c/qualidade', f.aprovado_em));
+  cliEmps_(c).forEach(e => {
+    const cx = { u: ctx.u, admin: false, perms: [] };
+    try { cliAbrirObra_(cx, e); } catch (x) { return; }
+    const mods = e.modulos, op = cliEmps_(c).length > 1 ? cx.obra.id + '|' : '';   // id antigo (uma obra só) continua igual
+    o = cx.obra;
+    if (mods.indexOf('diario') >= 0) cliDiariosLib_(cx).filter(d => novo(d.cliente_em)).forEach(d => add(op + 'd|' + d._dia, 'cli_diario', 'Diário de ' + fmtBr_(d._dia) + ' disponível', d.condicao, '#/c/diario/' + d._dia, d.cliente_em));
+    if (mods.indexOf('financeiro') >= 0) obraTab_(cx, 'Medicoes').all().filter(m => (m.status === MED_ST_.ok && novo(m.aprovado_em)) || (m.status === MED_ST_.paga && novo(m.pago_em)))
+      .forEach(m => add(op + 'm|' + m.id + '|' + m.status, 'cli_med', 'Medição ' + (m.numero || '') + ' · ' + (m.empreiteiro_nome || ''), m.status === MED_ST_.paga ? 'paga' : 'aprovada', '#/c/financeiro', m.status === MED_ST_.paga ? m.pago_em : m.aprovado_em));
+    if (mods.indexOf('fvs') >= 0) cliFvsLista_(cx).filter(f => novo(f.aprovado_em)).forEach(f => add(op + 'f|' + f.id, 'cli_fvs', 'FVS ' + (f.numero || '') + ' aprovada', f.servico || f.modelo_nome, '#/c/qualidade', f.aprovado_em));
+  });
   return itens;
 }
 
@@ -220,31 +291,44 @@ function execCliente_(q, ctx) {
 function cliAdmin_(q, ctx) {
   const U = central_('Usuarios').all(), obras = central_('Obras').all();
   return {
-    clientes: central_('Clientes').all().map(c => Object.assign(pub_(c), {
-      modulos: cliModulos_(c), ativo: sim_(c.ativo), estagio: !sim_(c.ativo) ? 'Inativo' : c.obra_id ? 'Obra' : 'Negociação', orcamentos: cliOrcResumo_(c.id), obra_nome: (obras.find(o => String(o.id) === String(c.obra_id)) || {}).nome || '',
+    clientes: central_('Clientes').all().map(c => { const E = cliEmps_(c); return Object.assign(pub_(c), {
+      empreendimentos: E.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos, foto: !!e.foto, nome: (obras.find(o => String(o.id) === e.obra) || {}).nome || e.obra })),
+      ativo: sim_(c.ativo), estagio: !sim_(c.ativo) ? 'Inativo' : E.length ? 'Obra' : 'Negociação', orcamentos: cliOrcResumo_(c.id), logo: sim_(c.logo), capa: sim_(c.capa),
       url: c.slug && c.publicado_em ? cliUrl_(c.slug) : '',
       usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso) }))
-    })),
-    obras: obras.filter(o => sim_(o.ativa)).map(o => ({ id: String(o.id), nome: o.nome })),
-    modulos: CLI_MODULOS_, modelos: CLI_MODELOS_, github: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'), app_url: cliUrl_('')
+    }); }),
+    obras: obras.map(o => ({ id: String(o.id), nome: o.nome, ativa: sim_(o.ativa) })),
+    modulos: CLI_MODULOS_, modelos: CLI_MODELOS_, tipos: CLI_TIPOS_, github: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'), app_url: cliUrl_('')
   };
 }
 function cliUrl_(slug) { return String(config_().APP_URL || APP_URL_PADRAO).replace(/\/?$/, '/') + (slug ? 'c/' + slug + '/' : ''); }
 function cliSalvar_(q, ctx) {
   const T = central_('Clientes'), d = q.cliente || {};
   const nome = String(d.nome || '').trim(), slug = String(d.slug || '').trim().toLowerCase(), cor = String(d.cor || '').trim();
-  if (!nome) throw new Error('Informe o nome do empreendimento (é o nome do app do cliente).');
-  // sem obra = cliente em negociação (só orçamentos); a obra é ligada quando o contrato fecha
-  if (d.obra_id && !central_('Obras').all().some(o => String(o.id) === String(d.obra_id))) throw new Error('Obra não encontrada.');
+  if (!nome) throw new Error('Informe o nome do cliente (é o nome do app dele).');
+  // sem empreendimento = cliente em negociação (só orçamentos); a obra é ligada quando o contrato fecha
+  const obras = central_('Obras').all(), vistos = {};
+  const novosE = [].concat(d.empreendimentos || (d.obra_id ? [{ obra: d.obra_id, modelo: d.modelo, modulos: d.modulos }] : [])).map(e => {
+    const id = String((e || {}).obra || '');
+    if (!obras.some(o => String(o.id) === id)) throw new Error('Obra não encontrada' + (id ? ' (' + id + ')' : ': escolha a obra de cada empreendimento') + '.');
+    if (vistos[id]) throw new Error('A mesma obra está duas vezes na lista de empreendimentos.');
+    vistos[id] = 1;
+    const modelo = CLI_MODELOS_[e.modelo] ? e.modelo : 'personalizado', mods = modelo === 'personalizado' ? cliMods_(e.modulos) : CLI_MODELOS_[modelo].slice();
+    return { obra: id, modelo: modelo, modulos: mods };
+  });
   if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) throw new Error('Endereço: só letras minúsculas, números e hífen (3 a 40).');
   if (!/^#[0-9a-f]{6}$/i.test(cor)) throw new Error('Cor inválida.');
   let c = d.id ? T.all().find(x => String(x.id) === String(d.id)) : null;
   if (T.all().some(x => x !== c && String(x.slug) === slug)) throw new Error('Esse endereço já é de outro cliente.');
   const novo = !c;
   if (novo) c = { id: T.proxCodigo('id', 'CL', 3), criado_em: new Date(), criado_por: ctx.u.nome, ativo: 'Sim' };
-  const modelo = CLI_MODELOS_[d.modelo] ? d.modelo : 'personalizado';
-  c.nome = nome; c.empresa = String(d.empresa || '').trim(); c.obra_id = d.obra_id ? String(d.obra_id) : ''; c.cor = cor.toUpperCase(); c.modelo = modelo;
-  c.modulos = (modelo === 'personalizado' ? [].concat(d.modulos || []).filter(m => CLI_MODULOS_[m]) : CLI_MODELOS_[modelo]).join(',');
+  // a foto de cada empreendimento continua (ela é trocada por cli_emp_foto_salvar)
+  const antes = novo ? [] : cliEmps_(c);
+  novosE.forEach(e => { e.foto = (antes.find(x => x.obra === e.obra) || {}).foto || ''; });
+  c.nome = nome; c.empresa = String(d.empresa || '').trim(); c.cor = cor.toUpperCase();
+  c.emps_json = JSON.stringify(novosE);
+  // colunas antigas = primeiro empreendimento (leitura de quem ainda usa uma obra só)
+  c.obra_id = novosE.length ? novosE[0].obra : ''; c.modelo = novosE.length ? novosE[0].modelo : ''; c.modulos = novosE.length ? novosE[0].modulos.join(',') : '';
   if (c.slug && c.slug !== slug) c.publicado_em = '';   // endereço novo precisa ser publicado de novo
   c.slug = slug;
   if (d.ativo !== undefined) c.ativo = d.ativo ? 'Sim' : 'Não';
@@ -314,24 +398,25 @@ function cliArquivos_(c) {
     icons: [{ src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
       { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }]
   };
-  const cfg = { id: String(c.id), slug: c.slug, nome: c.nome, empresa: c.empresa || '', cor: c.cor, capa: c._capa ? p + 'capa.jpg' : '' };
+  const cfg = { id: String(c.id), slug: c.slug, nome: c.nome, empresa: c.empresa || '', cor: c.cor, capa: c._capa ? p + 'capa.jpg' : '', logo: c._logo ? p + 'logo.png' : '' };
   return { 'index.html': index, 'manifest.json': JSON.stringify(manifest, null, 2), 'cliente.js': '// gerado pelo cadastro de clientes do sistema (não editar à mão)\nwindow.CLIENTE = ' + JSON.stringify(cfg) + ';\n' };
 }
-/* q.imagens: { 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-180.png', 'capa.jpg'? } em base64 (o app recorta no navegador) */
+/* q.imagens (base64, recortadas no navegador): logo nova = 'logo.png' + os 4 ícones; 'capa.jpg' = fundo do login.
+ * Sem imagem nova, o que já está publicado continua (dá para republicar só o nome ou a cor); q.sem_capa tira o fundo. */
 function cliPublicar_(q, ctx) {
   const T = central_('Clientes'), c = T.all().find(x => String(x.id) === String(q.id));
   if (!c) throw new Error('Cliente não encontrado.');
   if (!c.slug) throw new Error('Defina o endereço do cliente antes de publicar.');
-  const im = q.imagens || {}, obrig = ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-180.png'];
-  if (obrig.some(k => !im[k])) throw new Error('Escolha a imagem do empreendimento (vira o ícone do app).');
-  c._capa = !!im['capa.jpg'];
-  const capa = !!im['capa.jpg'], dir = 'app/c/' + c.slug + '/';
-  c._capa = capa;
+  const im = q.imagens || {}, icones = ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-180.png'];
+  const temIcone = icones.every(k => im[k]), dir = 'app/c/' + c.slug + '/';
+  if (!temIcone && !c.publicado_em) throw new Error('Escolha a logo da empresa do cliente (vira o ícone do app).');
+  const capa = im['capa.jpg'] ? true : q.sem_capa ? false : sim_(c.capa), logo = im['logo.png'] ? true : sim_(c.logo);
+  c._capa = capa; c._logo = logo;
   const txt = cliArquivos_(c);
-  delete c._capa;
+  delete c._capa; delete c._logo;
   // texto vai dentro da própria árvore; só as imagens precisam de envio separado (menos idas ao GitHub)
   const tree = Object.keys(txt).map(k => ({ path: dir + k, mode: '100644', type: 'blob', content: txt[k] }));
-  obrig.concat(capa ? ['capa.jpg'] : []).forEach(k => {
+  (temIcone ? icones : []).concat(['logo.png', 'capa.jpg'].filter(k => im[k])).forEach(k => {
     const b = String(im[k]).replace(/^data:[^,]+,/, '');
     if (b.length > 2500000) throw new Error('Imagem grande demais (' + k + ').');
     tree.push({ path: dir + k, mode: '100644', type: 'blob', sha: cliGh_('post', '/git/blobs', { content: b, encoding: 'base64' }).sha });
@@ -344,7 +429,7 @@ function cliPublicar_(q, ctx) {
   // a rota não segura a fila de gravação durante as idas ao GitHub; só aqui, para marcar publicado
   const L = LockService.getScriptLock();
   L.waitLock(20000);
-  try { const T2 = central_('Clientes'); T2._rows = null; const c2 = T2.all().find(x => String(x.id) === String(q.id)); c2.publicado_em = new Date(); c2.capa = capa ? 'Sim' : ''; T2.update(c2); }
+  try { const T2 = central_('Clientes'); T2._rows = null; const c2 = T2.all().find(x => String(x.id) === String(q.id)); c2.publicado_em = new Date(); c2.capa = capa ? 'Sim' : ''; c2.logo = logo ? 'Sim' : ''; T2.update(c2); }
   finally { L.releaseLock(); }
   log_(ctx, 'cliente_publicar', c.id + ' · c/' + c.slug);
   return { msg: 'Publicado. Em 1 a 2 minutos o endereço fica no ar.', url: cliUrl_(c.slug) };
@@ -377,7 +462,7 @@ function cliOrcResumo_(cid) {
   const com = central_('PropostaComentarios').all();
   return Object.keys(por).map(k => {
     const p = por[k], t = propCalc_(p, propItens_(p.id)).total;
-    return { id: String(p.id), numero: p.numero, rotulo: propRotulo_(p), empreendimento: p.empreendimento, status: p.status, total: t.preco, aceite: !!p.aceite_json,
+    return { id: String(p.id), numero: p.numero, rotulo: propRotulo_(p), empreendimento: p.empreendimento, status: p.status, total: t.preco, aceite: !!p.aceite_json, obra_id: String(p.obra_id || ''),
       data: fmtVal_(p.enviado_em || p.atualizado_em), respostas: com.filter(c => String(c.numero) === k && c.status === 'respondido').length, abertos: com.filter(c => String(c.numero) === k && c.status === 'aberto').length };
   }).sort((a, b) => String(b.data).localeCompare(String(a.data)));
 }

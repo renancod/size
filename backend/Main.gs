@@ -196,10 +196,12 @@ const ROTAS = {
   cli_fvs_pdf: { cli: 'fvs', fn: cliFvsPdf_ },
   cli_financeiro: { cli: 'financeiro', fn: cliFinanceiro_ },
   cli_med_pdf: { cli: 'financeiro', fn: cliMedPdf_ },
+  cli_emp_foto: { cli: 'obra', fn: cliEmpFoto_ },
   // cadastro dos clientes do portal (administrador)
   cli_admin: { admin: true, fn: cliAdmin_ },
   cli_salvar: { admin: true, lock: true, fn: cliSalvar_ },
   cli_usuario_salvar: { admin: true, lock: true, fn: cliUsuarioSalvar_ },
+  cli_emp_foto_salvar: { admin: true, lock: true, fn: cliEmpFotoSalvar_ },
   cli_publicar: { admin: true, fn: cliPublicar_ },   // trava só no fim (as idas ao GitHub demoram)
   cli_github: { admin: true, lock: true, fn: cliGithub_ },
   exec_cliente: { obra: true, perm: 'exec_planejar', lock: true, fn: execCliente_ },

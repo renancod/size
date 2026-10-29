@@ -35,7 +35,18 @@ function pcTema(cor) {
   document.body.classList.add('portal');
 }
 const pcCli = () => (S.sess && S.sess.cliente) || window.CLIENTE || {};
-const pcTem = m => (pcCli().modulos || []).includes(m);
+/* empreendimentos do cliente e o escolhido (PC.obra, lembrado no aparelho); sessão antiga sem a lista = a obra única */
+const pcEmps = () => { const C = pcCli(); return C.empreendimentos || (C.obra ? [{ id: '', nome: C.obra_nome || C.nome, modulos: C.modulos || [], tipo: '' }] : []); };
+const pcEmp = () => { const L = pcEmps(); return L.find(e => e.id === PC.obra) || L[0] || null; };
+const pcVarios = () => pcEmps().length > 1;
+const pcTem = m => ((pcEmp() || {}).modulos || []).includes(m);
+/* chamadas da obra levam o empreendimento escolhido */
+const pcApi = (acao, d) => api(acao, Object.assign(pcEmp() && pcEmp().id ? { obra: pcEmp().id } : {}, d || {}));
+function pcEscolher(id) {
+  if (!pcEmps().some(e => e.id === id) || PC.obra === id) return;
+  PC.obra = id; LS.set('pc_obra', id); PC.fotos.clear();
+  pcNav();
+}
 const pcData = s => s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : '';
 const pcPct = n => (Math.round((Number(n) || 0) * 10) / 10).toLocaleString('pt-BR') + '%';
 const PC_SIT = { concluida: ['Concluída', 'ok'], concluido: ['Concluída', 'ok'], atrasada: ['Atrasada', 'err'], atrasado: ['Atrasada', 'err'], atencao: ['Atenção', 'warn'], risco: ['Atenção', 'warn'],
@@ -55,6 +66,8 @@ function pcAnel(exec, prev, n) {
 const pcAssina = cl => `<div class="pc-size ${cl || ''}"><img src="logo.png" alt="Size Engenharia"><span>Plataforma <b>Size Engenharia</b></span></div>`;
 const pcRs = v => brl(v);
 const pcIcone = C => C.slug && (C.publicado || window.CLIENTE) ? 'c/' + esc(C.slug) + '/icon-192.png' : 'icon-192.png';
+/* logo da empresa do cliente (quando publicada); sem ela, o ícone do app */
+const pcLogo = (C, cl) => C.logo ? `<img class="pc-logo ${cl || ''}" src="${esc(C.logo)}" alt="${esc(C.nome || '')}">` : `<img src="${pcIcone(C)}" alt="">`;
 
 /* ---------- login com a marca do empreendimento ---------- */
 function portalLogin(msg) {
@@ -62,7 +75,7 @@ function portalLogin(msg) {
   pcTema(C.cor);
   document.title = C.nome || 'Acompanhamento da obra';
   $('#raiz').innerHTML = `<div class="pc-login" ${C.capa ? `style="background-image:url('${esc(C.capa)}')"` : ''}><form class="card" id="f">
-    <div class="pc-login-h"><img src="c/${esc(C.slug)}/icon-192.png" alt=""><div><b>${esc(C.nome || '')}</b><small>Acompanhamento da obra</small></div></div>
+    <div class="pc-login-h ${C.logo ? 'com-logo' : ''}">${C.logo ? `<img class="pc-logo" src="${esc(C.logo)}" alt="${esc(C.nome || '')}">` : `<img src="c/${esc(C.slug)}/icon-192.png" alt="">`}<div><b>${esc(C.nome || '')}</b><small>Acompanhamento de obras e orçamentos</small></div></div>
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
@@ -86,28 +99,58 @@ function portalIniciar() {
   const C = pcCli();
   pcTema(C.cor);
   document.title = C.nome;
-  const ob = !!C.obra, orc = !ob || C.orcamentos > 0;
-  const nav = [['#/c', 'Início', 'home', true], ['#/c/orcamentos', 'Orçamentos', 'file', orc], ['#/c/cronograma', 'Cronograma', 'cal', ob && pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', ob && pcTem('diario')],
-    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')],
-    ['#/c/relatorios', 'Relatórios', 'pdf', ob && (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro'))], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
+  PC.obra = LS.get('pc_obra') || '';
   // celular: topo + menu embaixo; computador: menu à esquerda com a marca (o mesmo <nav>, arrumado pelo CSS)
-  $('#raiz').innerHTML = `<div class="pc-shell ${nav.length > 5 ? 'muitos' : ''}">
-    <header class="pc-top"><img src="${pcIcone(C)}" alt=""><div><b>${esc(C.nome)}</b><small id="titulo">${esc(C.obra_nome || '')}</small></div><span class="pc-selo">por Size Engenharia</span></header>
-    <nav class="pc-nav"><div class="pc-marca"><img src="${pcIcone(C)}" alt=""><div><b>${esc(C.nome)}</b><small>${esc(C.obra_nome || C.empresa || '')}</small></div></div>
-      ${nav.map(([h, t, i]) => `<a href="${h}" data-h="${h}">${ic(i)}<span>${t}</span></a>`).join('')}${pcAssina('lado')}</nav>
+  $('#raiz').innerHTML = `<div class="pc-shell">
+    <header class="pc-top">${pcLogo(C)}<div><b>${esc(C.nome)}</b><small id="titulo"></small></div><span id="pcObraTopo"></span><span class="pc-selo">por Size Engenharia</span></header>
+    <nav class="pc-nav"></nav>
     <main class="view pc-view" id="view"></main>
     <footer class="pc-rod">${pcAssina()}<small>Acompanhamento de obras e orçamentos · dados da obra mantidos pela Size Engenharia</small></footer></div>`;
+  pcNav();
   if (!/^#\/c(\/|$)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + '#/c');
   portalRotear();
   if (typeof pushSincronizar === 'function') pushSincronizar();
 }
+/* menu: as abas da obra seguem o empreendimento escolhido (cada um tem o seu tipo); com mais de um, o seletor fica no menu */
+function pcNav() {
+  const C = pcCli(), E = pcEmp(), ob = !!E, orc = !ob || C.orcamentos > 0, vs = pcVarios();
+  const nav = [['#/c', 'Início', 'home', true], ['#/c/orcamentos', 'Orçamentos', 'file', orc], ['#/c/cronograma', 'Cronograma', 'cal', ob && pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', ob && pcTem('diario')],
+    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')],
+    ['#/c/relatorios', 'Relatórios', 'pdf', ob && (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro'))], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
+  const n = $('.pc-nav');
+  if (!n) return;
+  $('.pc-shell').classList.toggle('muitos', nav.length > 5);
+  n.innerHTML = `<div class="pc-marca">${pcLogo(C)}<div><b>${esc(C.nome)}</b><small>${esc(C.empresa || '')}</small></div></div>
+    ${vs ? `<button type="button" class="pc-obra-sel lado" data-trocar>${ic('building')}<span><small>Empreendimento</small><b>${esc(E.nome)}</b></span>${ic('chevron')}</button>` : ''}
+    ${nav.map(([h, t, i]) => `<a href="${h}" data-h="${h}">${ic(i)}<span>${t}</span></a>`).join('')}${pcAssina('lado')}`;
+  // celular: o seletor fica no topo
+  $('#pcObraTopo').innerHTML = vs ? `<button type="button" class="pc-obra-sel topo" data-trocar title="Trocar de empreendimento">${esc(E.sigla || E.nome)} ▾</button>` : '';
+  pcMarcarNav();
+  $$('[data-trocar]').forEach(b => { b.onclick = pcTrocar; });
+}
+function pcMarcarNav() {
+  const h = location.hash || '#/c', hn = /^#\/c\/rel\//.test(h) ? '#/c/relatorios' : /^#\/c\/obra\//.test(h) ? '#/c' : h;
+  $$('.pc-nav a').forEach(a => a.classList.toggle('on', a.dataset.h === '#/c' ? hn === '#/c' : hn.indexOf(a.dataset.h.replace(/s$/, '')) === 0));
+}
+/* trocar de empreendimento sem voltar ao início: fica na mesma aba se o outro também tiver */
+function pcTrocar() {
+  modal('Empreendimentos', `<div class="pc-troca">${pcEmps().map(e => `<button type="button" class="pc-lin ${e.id === (pcEmp() || {}).id ? 'on' : ''}" data-ob="${esc(e.id)}"><span><b>${esc(e.nome)}</b><br><small>${esc(e.tipo || '')}${e.endereco ? ' · ' + esc(e.endereco) : ''}</small></span>${ic('chevron')}</button>`).join('')}</div>`, { semRodape: true });
+  $$('#modal [data-ob]').forEach(b => { b.onclick = () => {
+    fecharModal(); pcEscolher(b.dataset.ob);
+    const aba = (location.hash.match(/^#\/c\/(cronograma|diario|qualidade|financeiro|relatorios)/) || [])[1], mod = { cronograma: 'cronograma', diario: 'diario', qualidade: 'fvs', financeiro: 'financeiro' }[aba];
+    const ir = aba && (aba === 'relatorios' ? (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro')) : pcTem(mod)) ? '#/c/' + aba : '#/c/obra/' + enc(b.dataset.ob);
+    if (location.hash === ir) portalRotear(); else location.hash = ir;
+  }; });
+}
 async function portalRotear() {
   if (!$('.pc-shell')) return;
+  // aviso do sino de outro empreendimento: "…?o=<obra>" escolhe a obra e sai do endereço
+  const mo = (location.hash || '').match(/^(#\/c[^?]*)\?o=([\w-]+)$/);
+  if (mo) { pcEscolher(decodeURIComponent(mo[2])); history.replaceState(null, '', location.pathname + location.search + mo[1]); }
   const h = location.hash || '#/c', id = ++rotaN;
-  const hn = /^#\/c\/rel\//.test(h) ? '#/c/relatorios' : h;
-  $$('.pc-nav a').forEach(a => a.classList.toggle('on', a.dataset.h === '#/c' ? hn === '#/c' : hn.indexOf(a.dataset.h.replace(/s$/, '')) === 0));
+  pcMarcarNav();
   fecharModal();
-  const R = [[/^#\/c$/, pcInicio], [/^#\/c\/relatorios$/, pcRels], [/^#\/c\/rel\/andamento\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})$/, pcRelAnd],
+  const R = [[/^#\/c$/, pcInicio], [/^#\/c\/obra\/([\w-]+)$/, pcObra], [/^#\/c\/relatorios$/, pcRels], [/^#\/c\/rel\/andamento\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})$/, pcRelAnd],
     [/^#\/c\/rel\/rdo\/(\d{4}-\d{2}-\d{2})$/, pcRelRdo], [/^#\/c\/rel\/financeiro$/, pcRelFin], [/^#\/c\/orcamentos$/, pcOrcs], [/^#\/c\/orcamento\/([\w-]+)$/, pcOrc], [/^#\/c\/cronograma$/, pcCrono], [/^#\/c\/diario$/, pcDiarios], [/^#\/c\/diario\/(\d{4}-\d{2}-\d{2})$/, pcDiario],
     [/^#\/c\/qualidade$/, pcFvs], [/^#\/c\/financeiro$/, pcFin], [/^#\/c\/conta$/, pcConta]];
   const r = R.find(([re]) => re.test(h));
@@ -124,7 +167,7 @@ async function pcFotos(raiz) {
   for (const el of $$('[data-pcfoto]', raiz || document)) {
     const id = el.dataset.pcfoto;
     try {
-      if (!PC.fotos.has(id)) PC.fotos.set(id, 'data:image/jpeg;base64,' + (await api('cli_foto', { id, mini: 1 })).b64);
+      if (!PC.fotos.has(id)) PC.fotos.set(id, 'data:image/jpeg;base64,' + (await pcApi('cli_foto', { id, mini: 1 })).b64);
       el.style.backgroundImage = `url('${PC.fotos.get(id)}')`; el.classList.add('ok');
     } catch (e) { el.classList.add('falha'); }
   }
@@ -132,7 +175,7 @@ async function pcFotos(raiz) {
 async function pcPdf(acao, id) {
   const w = window.open('', '_blank');
   try {
-    const r = await api(acao, { id }), bin = atob(r.b64), u8 = new Uint8Array(bin.length);
+    const r = await pcApi(acao, { id }), bin = atob(r.b64), u8 = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
     if (w) w.location = url; else location.href = url;
@@ -140,19 +183,47 @@ async function pcPdf(acao, id) {
 }
 
 /* ---------- telas ---------- */
+const pcHero = (C, titulo, sub, lado, capa, cl) => `<section class="pc-hero ${capa ? 'com-capa' : ''} ${cl || ''}" ${capa ? `style="--capa:url('${esc(capa)}')"` : ''}>
+    <div class="pc-hero-t"><small>${esc(C.empresa || C.nome || '')}</small><h1>${esc(titulo)}</h1><span>${sub}</span></div>${lado || ''}</section>`;
+const pcOrcCard = L => L.length ? `<a class="pc-card pc-lnk" href="#/c/orcamentos"><div class="pc-k">${ic('file')} Orçamentos</div>${L.slice(0, 3).map(o => `<div class="pc-lin"><span><b>${esc(o.rotulo)}</b> ${esc(o.empreendimento || '')}${o.respostas ? ` <span class="pc-chip ok">${o.respostas} resposta${o.respostas > 1 ? 's' : ''}</span>` : ''}</span>${pcStOrc(o)}</div>`).join('')}</a>` : '';
+/* foto de cada empreendimento (a do cadastro ou a do último diário liberado), depois que a tela aparece */
+async function pcEmpFotos() {
+  for (const el of $$('[data-empfoto]')) {
+    const k = 'emp|' + el.dataset.empfoto;
+    try {
+      if (!PC.fotos.has(k)) { const r = await api('cli_emp_foto', { obra: el.dataset.empfoto }); PC.fotos.set(k, r.b64 ? 'data:image/jpeg;base64,' + r.b64 : ''); }
+      if (PC.fotos.get(k)) { el.style.setProperty('--capa', `url('${PC.fotos.get(k)}')`); el.classList.add('com-capa'); }
+    } catch (e) { /* fica com a cor */ }
+  }
+}
 async function pcInicio() {
-  pcTit(pcCli().obra_nome || '');
-  const d = await api('cli_inicio'), A = d.andamento, C = Object.assign({}, pcCli(), d.cliente), capa = C.capa || (window.CLIENTE || {}).capa || '';
-  const hero = (titulo, sub, lado) => `<section class="pc-hero ${capa ? 'com-capa' : ''}" ${capa ? `style="--capa:url('${esc(capa)}')"` : ''}>
-    <div class="pc-hero-t"><small>${esc(C.empresa || '')}</small><h1>${esc(titulo)}</h1><span>${sub}</span></div>${lado || ''}</section>`;
-  const orcs = (d.orcamentos || []).length ? `<a class="pc-card pc-lnk" href="#/c/orcamentos"><div class="pc-k">${ic('file')} Orçamentos</div>${d.orcamentos.slice(0, 3).map(o => `<div class="pc-lin"><span><b>${esc(o.rotulo)}</b> ${esc(o.empreendimento || '')}${o.respostas ? ` <span class="pc-chip ok">${o.respostas} resposta${o.respostas > 1 ? 's' : ''}</span>` : ''}</span>${pcStOrc(o)}</div>`).join('')}</a>` : '';
-  if (!d.obra) {
-    view(hero('Olá, ' + (S.sess.usuario.nome || '').split(' ')[0], 'Acompanhe aqui os orçamentos da Size Engenharia para ' + esc(C.nome) + '.')
+  pcTit('');
+  const E = pcEmps();
+  if (E.length === 1) return pcObra(E[0].id);
+  const d = await api('cli_inicio'), C = Object.assign({}, pcCli(), d.cliente), orcs = pcOrcCard(d.orcamentos || []);
+  if (!d.empreendimentos) {
+    view(pcHero(C, 'Olá, ' + (S.sess.usuario.nome || '').split(' ')[0], 'Acompanhe aqui os orçamentos da Size Engenharia para ' + esc(C.nome) + '.', '', C.capa || (window.CLIENTE || {}).capa || '')
       + `<div class="pc-grade">${orcs || '<section class="pc-card"><div class="pc-k">Orçamentos</div><div>Assim que a Size enviar um orçamento, ele aparece aqui para você analisar, comentar e aceitar.</div></section>'}
         <section class="pc-card"><div class="pc-k">${ic('check')} Como funciona</div><ol class="pc-passos"><li>Você recebe o orçamento e analisa item a item.</li><li>Deixa suas considerações: incluir, retirar, mudar quantidade ou tirar dúvidas.</li><li>A Size responde e envia a revisão.</li><li>Fechou? Aceite pelo app. Depois você acompanha a obra por aqui.</li></ol></section></div>`);
     return;
   }
-  view(hero(C.obra_nome || C.nome, A.fim ? 'término previsto ' + pcData(A.fim) : 'acompanhamento da obra', `<div class="pc-hero-anel">${pcAnel(A.pct_exec, A.pct_prev)}<small>previsto para hoje: <b>${pcPct(A.pct_prev)}</b></small></div>`)
+  // vários empreendimentos: um cartão para cada, com a foto, o tipo e o andamento
+  view(`<div class="pc-boas">${C.logo ? `<img class="pc-logo" src="${esc(C.logo)}" alt="">` : ''}<div><small>${esc(C.empresa || C.nome)}</small><h1>Olá, ${esc((S.sess.usuario.nome || '').split(' ')[0])}</h1><span>${d.empreendimentos.length} empreendimentos acompanhados pela Size Engenharia</span></div></div>
+    <div class="pc-emps">${d.empreendimentos.map(e => { const A = e.andamento || {};
+      return `<a class="pc-emp" href="#/c/obra/${enc(e.id)}"><div class="pc-emp-f" data-empfoto="${esc(e.id)}"><span class="pc-chip">${esc(e.tipo || '')}</span><b>${esc(e.sigla || '')}</b></div>
+        <div class="pc-emp-t"><b>${esc(e.nome)}</b><small>${esc(e.endereco || '')}</small>
+        ${A.erro ? '<small class="mute">andamento indisponível</small>' : `${pcBarra(A.pct_prev, A.pct_exec)}<div class="pc-lin"><small><b>${pcPct(A.pct_exec)}</b> executado · previsto ${pcPct(A.pct_prev)}</small><small>${A.fim ? 'término ' + pcData(A.fim) : ''}</small></div>`}</div></a>`; }).join('')}</div>
+    ${orcs ? `<div class="pc-grade">${orcs}</div>` : ''}`);
+  pcEmpFotos();
+}
+/* painel de um empreendimento: andamento, último diário, financeiro, próximas etapas e os orçamentos ligados a ele */
+async function pcObra(id) {
+  if (id) pcEscolher(id);
+  const E = pcEmp();
+  pcTit(pcVarios() ? 'Painel da obra' : '');
+  const d = await pcApi('cli_inicio'), A = d.andamento, C = Object.assign({}, pcCli(), d.cliente), orcs = pcOrcCard(d.orcamentos || []);
+  view((pcVarios() ? `<a class="linkbtn" href="#/c">${ic('back')} Todos os empreendimentos</a>` : '')
+    + pcHero(C, d.obra.nome || C.nome, (E && E.tipo ? esc(E.tipo) + ' · ' : '') + (A.fim ? 'término previsto ' + pcData(A.fim) : 'acompanhamento da obra'), `<div class="pc-hero-anel">${pcAnel(A.pct_exec, A.pct_prev)}<small>previsto para hoje: <b>${pcPct(A.pct_prev)}</b></small></div>`, '', '').replace('<section class="pc-hero', `<section data-empfoto="${esc(d.obra.id)}" class="pc-hero`)
     + `<div class="pc-grade">
     ${d.diario !== undefined ? (d.diario ? `<a class="pc-card pc-lnk" href="#/c/diario/${d.diario.data}"><div class="pc-k">Último diário · ${pcData(d.diario.data)}${d.diario.condicao ? ' · ' + esc(d.diario.condicao.toLowerCase()) : ''}</div>
       ${d.diario.foto ? `<div class="pc-fotos"><div class="pc-foto" data-pcfoto="${esc(d.diario.foto)}"></div></div>` : ''}
@@ -162,7 +233,7 @@ async function pcInicio() {
       ${d.medicao ? `<div class="pc-k" style="margin-top:6px">Última medição: ${esc(d.medicao.numero || '')} · ${esc(d.medicao.empreiteiro)} · ${brl(d.medicao.valor)} · ${esc(d.medicao.status.toLowerCase())}</div>` : ''}</a>` : ''}
     ${d.proximas.length ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Próximas etapas</div>${d.proximas.map(p => `<div class="pc-lin"><span>${esc(p.nome)}</span><small>inicia ${pcData(p.ini)}</small></div>`).join('')}</section>` : ''}
     ${orcs}</div>`);
-  pcFotos();
+  pcEmpFotos().then(() => pcFotos());
 }
 
 /* ---------- orçamentos (negociação) ---------- */
@@ -259,7 +330,7 @@ async function pcArquivo(id, qual) {
 }
 async function pcCrono() {
   pcTit('Cronograma');
-  const d = await api('cli_cronograma');
+  const d = await pcApi('cli_cronograma');
   const M = d.meses.filter(m => m.pct_prev != null);
   const curva = M.length > 1 ? (() => {
     const W = 320, H = 120, x = i => 8 + i * (W - 16) / (M.length - 1), y = p => H - 10 - (Math.min(100, p || 0) / 100) * (H - 20);
@@ -273,7 +344,7 @@ async function pcCrono() {
 }
 async function pcDiarios() {
   pcTit('Diário de obra');
-  const L = (await api('cli_diarios')).diarios;
+  const L = (await pcApi('cli_diarios')).diarios;
   view(L.length ? L.map(d => `<a class="pc-card pc-lnk pc-dia" href="#/c/diario/${d.data}">${d.foto ? `<div class="pc-foto" data-pcfoto="${esc(d.foto)}"></div>` : `<div class="pc-foto vazio">${ic('camera')}</div>`}
       <div><b>${pcData(d.data)}</b><small>${esc(d.condicao || '')}${d.tmax !== '' && d.tmax != null ? ' · ' + nf(d.tmin) + '° a ' + nf(d.tmax) + '°' : ''}${d.fotos ? ' · ' + d.fotos + (d.fotos > 1 ? ' fotos' : ' foto') : ''}</small>
       <span>${d.servicos.slice(0, 2).map(esc).join(' · ')}${d.servicos.length > 2 ? ' · +' + (d.servicos.length - 2) : ''}</span></div></a>`).join('')
@@ -282,7 +353,7 @@ async function pcDiarios() {
 }
 async function pcDiario(data) {
   pcTit('Diário de ' + pcData(data));
-  const d = await api('cli_diario', { data });
+  const d = await pcApi('cli_diario', { data });
   view(`<div class="pc-lin"><a class="linkbtn" href="#/c/diario">${ic('back')} Todos os dias</a><a class="btn sec peq" href="#/c/rel/rdo/${d.data}">${ic('pdf')} RDO (PDF)</a></div>
     <section class="pc-card"><div class="pc-k">${pcData(d.data)} · diário nº ${d.numero}</div>
       <div class="pc-lin"><span>${ic('sun')} ${esc(d.condicao || '—')}</span><small>${d.tmax !== '' && d.tmax != null ? nf(d.tmin) + '° a ' + nf(d.tmax) + '°' : ''}</small></div>
@@ -294,21 +365,21 @@ async function pcDiario(data) {
     const f = d.fotos.find(x => x.id === b.dataset.ver);
     modal(esc(f.legenda || 'Foto'), '<div class="carregando"><span class="spin"></span></div>', { semRodape: true, larga: true });
     const caixa = $('#modal .mcaixa');
-    try { const r = await api('cli_foto', { id: f.id }); if ($('#modal .mcaixa') === caixa) $('#modal .mcorpo').innerHTML = `<img class="pc-grande" src="data:image/jpeg;base64,${r.b64}" alt="${esc(f.legenda)}">${f.etapa ? `<small>${esc(f.etapa)}</small>` : ''}`; }
+    try { const r = await pcApi('cli_foto', { id: f.id }); if ($('#modal .mcaixa') === caixa) $('#modal .mcorpo').innerHTML = `<img class="pc-grande" src="data:image/jpeg;base64,${r.b64}" alt="${esc(f.legenda)}">${f.etapa ? `<small>${esc(f.etapa)}</small>` : ''}`; }
     catch (e) { fecharModal(); toast(e.message, 1); }
   }; });
   pcFotos();
 }
 async function pcFvs() {
   pcTit('Qualidade');
-  const L = (await api('cli_fvs')).fvs;
+  const L = (await pcApi('cli_fvs')).fvs;
   view(`<section class="pc-card"><div class="pc-k">Fichas de verificação aprovadas (FVS)</div>${L.map(f => `<div class="pc-lin"><span><b>${esc(f.numero || '')}</b> ${esc(f.servico || '')}${f.etapa ? `<small> · ${esc(f.etapa)}</small>` : ''}<br><small>aprovada ${pcData(f.aprovado_em)}</small></span>
     ${f.pdf ? `<button type="button" class="btn sec peq" data-fvs="${esc(f.id)}">${ic('pdf')} PDF</button>` : ''}</div>`).join('') || '<div>Nenhuma FVS aprovada ainda.</div>'}</section>`);
   $$('[data-fvs]').forEach(b => { b.onclick = () => pcPdf('cli_fvs_pdf', b.dataset.fvs); });
 }
 async function pcFin() {
   pcTit('Financeiro');
-  const d = await api('cli_financeiro'), T = d.total;
+  const d = await pcApi('cli_financeiro'), T = d.total;
   view(`<section class="pc-card"><div class="pc-grid2"><div><small>Contratado</small><b>${brl(T.contratado)}</b></div><div><small>Medido</small><b>${brl(T.medido)}</b></div>
       <div><small>Pago</small><b>${brl(T.pago)}</b></div><div><small>Saldo a medir</small><b>${brl(T.saldo)}</b></div></div></section>
     <section class="pc-card"><div class="pc-k">Contratos</div>${d.contratos.map(c => `<div class="pc-et"><div class="pc-lin"><b>${esc(c.numero || '')} · ${esc(c.empreiteiro)}</b><small>${esc(c.status)}</small></div>
@@ -344,7 +415,7 @@ async function pcRels() {
   pcTit('Relatórios');
   const h = pcHoje(), m0 = h.slice(0, 8) + '01', ma = pcMais(m0, -1), mi = ma.slice(0, 8) + '01';
   const per = [['Últimos 7 dias', pcMais(h, -6), h], ['Este mês', m0, h], ['Mês passado', mi, ma], ['Últimos 90 dias', pcMais(h, -89), h]];
-  const L = pcTem('diario') ? (await api('cli_diarios')).diarios : [];
+  const L = pcTem('diario') ? (await pcApi('cli_diarios')).diarios : [];
   view(`<h2 class="pc-h">Relatórios</h2><div class="pc-grade">
     ${pcTem('cronograma') ? `<section class="pc-card"><div class="pc-k">${ic('chart')} Andamento da obra</div><p class="mute" style="margin:0 0 8px">Executado × previsto, curva de avanço, etapas, prazos, clima e fotos do período.</p>
       <div class="pc-acao">${per.map(([t, a, b]) => `<a class="btn sec" href="#/c/rel/andamento/${a}/${b}">${esc(t)} <small>${pcData(a).slice(0, 5)} a ${pcData(b).slice(0, 5)}</small></a>`).join('')}
@@ -358,7 +429,7 @@ async function pcRels() {
 function pcDoc(titulo, sub, corpo, nomeArq) {
   const C = pcCli();
   view(`<div class="pc-doc-bar"><a class="linkbtn" href="#/c/relatorios">${ic('back')} Relatórios</a><button type="button" class="btn" id="pcDocImp">${ic('download')} Imprimir / salvar PDF</button><small class="mute">no celular: compartilhar → imprimir → salvar como PDF</small></div>
-    <article class="pc-doc"><header class="pc-doc-h"><img class="sz" src="logo.png" alt="Size Engenharia"><div><b>${esc(titulo)}</b><span>${esc(C.obra_nome || C.nome)}${sub ? ' · ' + sub : ''}</span></div><img class="emp" src="${pcIcone(C)}" alt=""></header>
+    <article class="pc-doc"><header class="pc-doc-h"><img class="sz" src="logo.png" alt="Size Engenharia"><div><b>${esc(titulo)}</b><span>${esc((pcEmp() || {}).nome || C.nome)}${sub ? ' · ' + sub : ''}</span></div><img class="emp" src="${pcIcone(C)}" alt=""></header>
     ${corpo}
     <footer class="pc-doc-f"><span>Emitido pela plataforma Size Engenharia em ${new Date().toLocaleString('pt-BR')}</span><span>${esc(C.nome)}</span></footer></article>`);
   $('#pcDocImp').onclick = () => { const t = document.title; document.title = nomeArq; window.print(); setTimeout(() => { document.title = t; }, 1500); };
@@ -376,7 +447,7 @@ function pcCurvaS(cv) {
 }
 async function pcRelAnd(de, ate) {
   pcTit('Relatório de andamento');
-  const r = await api('cli_rel_andamento', { de, ate }), G = r.geral, P = r.periodo;
+  const r = await pcApi('cli_rel_andamento', { de, ate }), G = r.geral, P = r.periodo;
   const fr = r.frentes.map(f => `<div class="pc-doc-b"><div class="pc-lin"><b>${esc(f.nome)}</b><b>${pcPct(f.pct)}</b></div>${pcBarra(f.pct_prev, f.pct)}
     <table class="pc-tab"><thead><tr><th>Serviço</th><th class="n">Previsto</th><th class="n">Executado</th><th class="n">No período</th><th class="n">%</th></tr></thead><tbody>
     ${f.itens.map(i => `<tr><td>${esc(i.servico)}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td><td class="n">${nf(i.executado)}</td><td class="n">${i.periodo ? nf(i.periodo) : '—'}</td><td class="n">${pcPct(i.pct)}</td></tr>`).join('')}</tbody></table></div>`).join('');
@@ -394,7 +465,7 @@ async function pcRelAnd(de, ate) {
 }
 async function pcRelRdo(data) {
   pcTit('RDO');
-  const r = await api('cli_rdo', { data }), d = r.diario, c = d.clima, n = 'RDO ' + String(d.numero).padStart(3, '0');
+  const r = await pcApi('cli_rdo', { data }), d = r.diario, c = d.clima, n = 'RDO ' + String(d.numero).padStart(3, '0');
   const per = (t, p) => p ? `<div><b>${t}</b><span>${esc(p.desc || '')}</span><small>${nf(p.mm)} mm${p.tmax !== '' && p.tmax != null ? ' · ' + Math.round(p.tmin) + '–' + Math.round(p.tmax) + '°C' : ''}</small></div>` : '';
   const pes = r.equipes.reduce((t, e) => t + e.pessoas, 0);
   pcDoc('Relatório diário de obra', `${n} · ${pcData(r.data)}`, `
@@ -407,7 +478,7 @@ async function pcRelRdo(data) {
 }
 async function pcRelFin() {
   pcTit('Resumo financeiro');
-  const d = await api('cli_financeiro'), T = d.total;
+  const d = await pcApi('cli_financeiro'), T = d.total;
   pcDoc('Resumo financeiro da obra', 'posição em ' + pcData(pcHoje()), `
     <div class="pc-kpis">${pcKpi(pcRs(T.contratado), 'contratado')}${pcKpi(pcRs(T.medido), 'medido')}${pcKpi(pcRs(T.pago), 'pago')}${pcKpi(pcRs(T.saldo), 'saldo a medir')}</div>
     <h3 class="pc-doc-s">Contratos</h3>${d.contratos.length ? `<table class="pc-tab"><thead><tr><th>Contrato</th><th class="n">Contratado</th><th class="n">Medido</th><th class="n">Pago</th><th class="n">Saldo</th></tr></thead><tbody>
