@@ -258,3 +258,21 @@ test('importação: planilha sem as colunas certas explica o que falta', () => {
   assert.throws(() => t.adm('base_importar', { abas: [{ nome: 'X', linhas: [['A', 'B'], [1, 2]] }] }), /colunas Tipo, Código/);
   assert.throws(() => t.usuario('fulano', 'Ver')('base_importar', { abas: ABAS }), /só pode consultar/);
 });
+
+test('memória do servidor: base, lista de orçamentos e sino vêm guardados e renovam na hora em que alguém grava', () => {
+  const t = preparar(), tk = t.G.chamar({ acao: 'login', login: 'admin', senha: t.G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1] }).dados.token;
+  const bruto = (acao, d = {}) => t.G.chamar({ acao, token: tk, ...d });
+  ins(t, 'PAV007', 'Meio-fio de concreto 100x30x12', 'm', 'Material', 27);
+  assert.equal(bruto('base_dados').dados.insumos.length, 1);
+  const r = bruto('base_dados');
+  assert.match(r.t.cache, /m/);                                                    // segunda vez: da memória, sem ler as abas da base
+  assert.equal(r.dados.nivel, 'Gerir');
+  ins(t, '1148', 'Assentamento de meio-fio', 'm', 'Mão de obra', 16);
+  assert.equal(bruto('base_dados').dados.insumos.length, 2);                       // gravou: renovou
+  assert.equal(t.adm('empresa_dados').base.insumos, 2);
+  bruto('prop_listar');
+  t.adm('prop_salvar', { proposta: { cliente: 'X', empreendimento: 'Y' }, itens: [{ descricao: 'Item', unidade: 'm', qtd: 1, unit_mat: 10 }] });
+  assert.equal(bruto('prop_listar').dados.propostas.length, 1);
+  bruto('notificacoes');
+  assert.match(bruto('notificacoes').t.cache, /m/);
+});

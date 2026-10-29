@@ -10,6 +10,13 @@ function notificacoes_(q, ctx) {
     if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, ci);
     return { itens: ci, agora: fmtVal_(new Date()) };
   }
+  // guardado 1 minuto por pessoa; qualquer gravação no sistema renova na hora (Db.gs memMudou_('notif'))
+  const itens = memoria_('notif', String(ctx.u.id), () => notifMontar_(ctx), 60);
+  // app aberto com os avisos de fundo ativos: o que ele já mostrou não precisa ir de novo por push
+  if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, itens);
+  return { itens: itens, agora: fmtVal_(new Date()) };
+}
+function notifMontar_(ctx) {
   const itens = [], limiteMeus = Date.now() - 10 * 864e5, hojeStr = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
   const fd = d => d instanceof Date ? Utilities.formatDate(d, tz_(), 'dd/MM') : '';
   // obra desativada não gera aviso para ninguém (nem admin): o sino e o push vêm daqui
@@ -68,9 +75,7 @@ function notificacoes_(q, ctx) {
   try { sinNotif_({ base: nivelBase_(ctx.u), admin: ctx.admin }).forEach(x => itens.push(x)); } catch (e) { /* sem SINAPI ainda */ }
   // portal do cliente: considerações novas e aceites pelo app
   try { propNotifCli_(ctx).forEach(x => itens.push(x)); } catch (e) { /* não derruba o sino */ }
-  // app aberto com os avisos de fundo ativos: o que ele já mostrou não precisa ir de novo por push
-  if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, itens);
-  return { itens: itens, agora: fmtVal_(new Date()) };
+  return itens;
 }
 
 function diasAte_(d) {

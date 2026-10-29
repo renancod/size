@@ -600,6 +600,7 @@ const ETAPA_NOTIF = {
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {
   if (!S.token || !S.sess) return;
+  NOTIF.em = Date.now();
   let r;
   try { r = await api('notificacoes', LS.get('cs_fcm') && pushLigado() ? { push: LS.get('cs_fcm') } : {}); } catch (e) { return; }
   const novos = r.itens.filter(i => !NOTIF.conhecidos.has(i.id));
@@ -612,13 +613,17 @@ async function buscarNotif() {
   atualizarSino();
   if (typeof empAtualizarPend === 'function') empAtualizarPend();   // pendências nos cartões das obras do Início
 }
+/* o sino não disputa com a tela: a primeira busca espera a tela abrir; com o aviso no celular ligado o push já
+ * avisa na hora, então a consulta fica a cada 3 minutos (senão, a cada minuto) */
 function iniciarNotif() {
-  clearInterval(NOTIF.timer);
+  clearInterval(NOTIF.timer); clearTimeout(NOTIF.ini);
   NOTIF.primeira = true;
-  buscarNotif().then(pushSincronizar);
-  NOTIF.timer = setInterval(() => { if (!document.hidden) buscarNotif(); }, 60000);
+  NOTIF.ini = setTimeout(() => buscarNotif().then(pushSincronizar), 2500);
+  NOTIF.timer = setInterval(() => {
+    if (!document.hidden && Date.now() - (NOTIF.em || 0) >= (LS.get('cs_fcm') && pushLigado() ? 180000 : 60000) - 2000) buscarNotif();
+  }, 60000);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sess) buscarNotif(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sess && Date.now() - (NOTIF.em || 0) > 30000) buscarNotif(); });
 function atualizarSino() {
   const b = $('#sino .sino-n');
   if (!b) return;

@@ -77,13 +77,14 @@ function propPub_(p, comTotal) {
 
 /* ---------- leitura ---------- */
 function propListar_(q, ctx) {
-  const T = central_('Propostas').all(), I = central_('PropostaItens').all(), por = {};
-  I.forEach(x => { (por[x.proposta] = por[x.proposta] || []).push(x); });
-  return {
-    nivel: ctx.base, admin: ctx.admin,
-    propostas: T.map(p => { const o = propPub_(p); o.total = propCalc_(p, (por[p.id] || []).sort((a, b) => num_(a.ordem) - num_(b.ordem))).total; return o; })
-      .sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em)))
-  };
+  // guardada na memória do Google (Db.gs memoria_): renova a cada gravação em Propostas ou PropostaItens
+  const propostas = memoria_('prop', 'lista', () => {
+    const T = central_('Propostas').all(), I = central_('PropostaItens').all(), por = {};
+    I.forEach(x => { (por[x.proposta] = por[x.proposta] || []).push(x); });
+    return T.map(p => { const o = propPub_(p); o.total = propCalc_(p, (por[p.id] || []).sort((a, b) => num_(a.ordem) - num_(b.ordem))).total; return o; })
+      .sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em)));
+  });
+  return { nivel: ctx.base, admin: ctx.admin, propostas: propostas };
 }
 function propDetalhe_(q, ctx) {
   const p = propAchar_(q.id), calc = propCalc_(p, propItens_(p.id));
@@ -373,9 +374,7 @@ function empresaDados_(q, ctx) {
   if (nivel) {
     ctx.base = nivel;
     r.propostas = propListar_(q, ctx).propostas;
-    const ix = baseIndice_();
-    r.base = { composicoes: Object.keys(ix.C).length, insumos: Object.keys(ix.I).length,
-      velhos: Object.keys(ix.I).filter(k => { const d = baseData_(ix.I[k].data_preco); return d && (Date.now() - new Date(d + 'T12:00').getTime()) / 864e5 > 180; }).length };
+    r.base = baseResumo_();
   }
   return r;
 }

@@ -105,6 +105,18 @@ function baseUsos_(ix) {
 
 /* ---------- leitura ---------- */
 function baseDados_(q, ctx) {
+  // guardada na memória do Google (Db.gs memoria_): a base é a leitura mais pesada do módulo Orçamentos
+  return Object.assign(memoria_('base', 'dados', baseMontar_), { nivel: ctx.base, hoje: baseHoje_() });
+}
+/* resumo do Início: quantas composições e insumos e quantos preços passaram de 6 meses */
+function baseResumo_() {
+  return memoria_('base', 'resumo', () => {
+    const ix = baseIndice_();
+    return { composicoes: Object.keys(ix.C).length, insumos: Object.keys(ix.I).length,
+      velhos: Object.keys(ix.I).filter(k => { const d = baseData_(ix.I[k].data_preco); return d && (Date.now() - new Date(d + 'T12:00').getTime()) / 864e5 > 180; }).length };
+  });
+}
+function baseMontar_() {
   const ix = baseIndice_(), memo = {}, u = baseUsos_(ix);
   const insumos = Object.keys(ix.I).map(k => {
     const i = ix.I[k];
@@ -124,7 +136,7 @@ function baseDados_(q, ctx) {
     return o;
   });
   return {
-    nivel: ctx.base, tipos: BASE_TIPOS, insumos: insumos, composicoes: composicoes, hoje: baseHoje_(),
+    tipos: BASE_TIPOS, insumos: insumos, composicoes: composicoes,
     unidades: central_('Unidades').all().map(r => String(r.unidade).trim()).filter(Boolean)
   };
 }

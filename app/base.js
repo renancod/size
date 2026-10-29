@@ -172,8 +172,8 @@ function bpSem(nivel) {
 function bpGrupos(aqui) {
   const D = BP.d, g = [{ t: 'Orçamentos', itens: [{ k: 'props', t: 'Orçamentos de clientes', i: 'file', on: aqui === 'props' }] }, { t: 'Base de preços', itens: [
     { k: 'painel', t: 'Painel da base', i: 'chart', on: aqui === 'painel' },
-    { k: 'comp', t: 'Composições', i: 'layers', n: D.composicoes.length, on: aqui === 'comp' },
-    { k: 'ins', t: 'Insumos', i: 'box', n: D.insumos.length, on: aqui === 'ins' }, { k: 'sinapi', t: 'SINAPI (Caixa)', i: 'grid2', on: aqui === 'sinapi' }] }];
+    { k: 'comp', t: 'Composições', i: 'layers', n: D ? D.composicoes.length : null, on: aqui === 'comp' },
+    { k: 'ins', t: 'Insumos', i: 'box', n: D ? D.insumos.length : null, on: aqui === 'ins' }, { k: 'sinapi', t: 'SINAPI (Caixa)', i: 'grid2', on: aqui === 'sinapi' }] }];
   if (bpGere()) g.push({ t: 'Ações', itens: [{ k: 'a:prop', t: 'Novo orçamento', i: 'plus', cl: 'acao' }, { k: 'a:comp', t: 'Nova composição', i: 'plus', cl: 'acao' }, { k: 'a:ins', t: 'Novo insumo', i: 'plus', cl: 'acao' },
     { k: 'a:imp', t: 'Importar orçamento', i: 'upload', cl: 'acao', on: aqui === 'imp' }] });
   return g;

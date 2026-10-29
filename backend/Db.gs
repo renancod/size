@@ -99,6 +99,7 @@ function centralSS_() {
 function central_(nome) {
   const t = tabela_(centralSS_(), nome, SCHEMA_CENTRAL[nome]);
   if (AUTH_TABS_.indexOf(nome) >= 0) t.auth = true;
+  Object.keys(MEM_GRUPOS_).forEach(g => { if (MEM_GRUPOS_[g].indexOf(nome) >= 0) t.grupo = g; });
   return t;
 }
 
@@ -127,6 +128,42 @@ function authGuardar_(k, v) {
   } catch (e) { /* sem memória: lê a planilha */ }
 }
 function authMudou_() { try { CacheService.getScriptCache().put('auth_ger', Utilities.getUuid().slice(0, 8), 21600); } catch (e) { /* vence sozinho */ } }
+
+/* Mesma ideia para os dados que várias telas leem e que mudam pouco: a base de preços (base_dados, o resumo do
+ * Início) e a lista de orçamentos. Cada gravação numa aba do grupo troca a geração dele; mudança feita à mão na
+ * planilha vale em até MEM_TTL_ segundos. Valor grande vai em pedaços (o Google aceita até 100 KB por chave).
+ * "notif": qualquer gravação do sistema (menos Log e Aparelhos) renova os avisos do sino guardados por 1 minuto. */
+const MEM_GRUPOS_ = { base: ['Insumos', 'Composicoes', 'ComposicaoItens', 'InsumoPrecos', 'Unidades'], prop: ['Propostas', 'PropostaItens'] }, MEM_TTL_ = 600;
+const memJson_ = v => JSON.stringify(v, function (key, x) { return this[key] instanceof Date ? { $d: this[key].toISOString() } : x; });
+const memLer_ = s => JSON.parse(s, (key, x) => (x && typeof x === 'object' && x.$d ? new Date(x.$d) : x));
+function memGer_(c, g) {
+  let v = c.get('ger_' + g);
+  if (!v) { v = Utilities.getUuid().slice(0, 8); c.put('ger_' + g, v, 21600); }
+  return v;
+}
+function memMudou_(g) { try { CacheService.getScriptCache().put('ger_' + g, Utilities.getUuid().slice(0, 8), 21600); } catch (e) { /* vence sozinho */ } }
+function memoria_(g, k, fn, ttl) {
+  let c, chave;
+  try { c = CacheService.getScriptCache(); chave = g + '|' + memGer_(c, g) + '|' + k; } catch (e) { return fn(); }
+  try {
+    const n = num_(c.get(chave));
+    if (n) {
+      const ks = []; for (let i = 0; i < n; i++) ks.push(chave + '|' + i);
+      const m = c.getAll(ks);
+      if (ks.every(x => m[x] != null)) { TEMPO_.cache += 'm'; return memLer_(ks.map(x => m[x]).join('')); }
+    }
+  } catch (e) { /* lê a planilha */ }
+  const v = fn();
+  try {
+    const s = memJson_(v), o = {}, P = 90000, n = Math.ceil(s.length / P);
+    if (n && n <= 20) {
+      for (let i = 0; i < n; i++) o[chave + '|' + i] = s.slice(i * P, (i + 1) * P);
+      o[chave] = String(n);
+      c.putAll(o, ttl || MEM_TTL_);
+    }
+  } catch (e) { /* sem memória: na próxima lê de novo */ }
+  return v;
+}
 function obraTab_(ctx, nome) { return tabela_(ctx.ss, nome, SCHEMA_OBRA[nome]); }
 
 function tabela_(ss, nome, cols) {
@@ -150,6 +187,13 @@ function tabela_(ss, nome, cols) {
 }
 
 function Tabela_(sh, head) { this.sh = sh; this.head = head; this._rows = null; }
+/* gravou: invalida o que estava guardado na memória do Google sobre esta aba */
+Tabela_.prototype.mudou_ = function () {
+  if (this.auth) authMudou_();
+  if (this.grupo) memMudou_(this.grupo);
+  const n = this.sh.getName();
+  if (n !== 'Log' && n !== 'Aparelhos') memMudou_('notif');
+};
 Tabela_.prototype.all = function () {
   if (this._rows) return this._rows;
   const h = this.head, rows = [];
@@ -175,12 +219,12 @@ Tabela_.prototype.insertMany = function (lista) {
   const all = this.all(), ini = this.sh.getLastRow() + 1;
   this.sh.getRange(ini, 1, lista.length, this.head.length).setValues(lista.map(o => this.linha_(o)));
   lista.forEach((o, i) => { o._l = ini + i; all.push(o); });
-  if (this.auth) authMudou_();
+  this.mudou_();
   return lista;
 };
 Tabela_.prototype.update = function (o) {
   this.sh.getRange(o._l, 1, 1, this.head.length).setValues([this.linha_(o)]);
-  if (this.auth) authMudou_();
+  this.mudou_();
 };
 /* regrava a aba inteira de uma vez (uma chamada só, em vez de apagar linha por linha) */
 Tabela_.prototype.substituir = function (lista) {
@@ -191,13 +235,13 @@ Tabela_.prototype.substituir = function (lista) {
   }
   lista.forEach((o, i) => { o._l = i + 2; });
   this._rows = lista.slice();
-  if (this.auth) authMudou_();
+  this.mudou_();
 };
 Tabela_.prototype.removeWhere = function (fn) {
   const linhas = this.all().filter(fn).map(o => o._l).sort((a, b) => b - a);
   linhas.forEach(l => this.sh.deleteRow(l));
   this._rows = null;
-  if (linhas.length && this.auth) authMudou_();
+  if (linhas.length) this.mudou_();
   return linhas.length;
 };
 Tabela_.prototype.proxCodigo = function (campo, prefixo, digitos) {
