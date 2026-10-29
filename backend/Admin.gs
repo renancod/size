@@ -41,7 +41,7 @@ function adminDados_(q, ctx) {
   garantirBackup_();
   return {
     backup: backupInfo_(),
-    usuarios: central_('Usuarios').all().map(pub_),
+    usuarios: central_('Usuarios').all().filter(u => !u.cliente_id).map(pub_),   // os do portal ficam na tela Clientes
     acessos: central_('Acessos').all().map(a => {
       const o = pub_(a);
       o.permissoes = String(a.permissoes || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -70,6 +70,7 @@ function adminUsuarioSalvar_(q, ctx) {
   if (!nome || !login) throw new Error('Preencha nome e usuário (login).');
   if (!/^[a-z0-9._@-]{3,}$/.test(login)) throw new Error('Login: só letras minúsculas, números, ponto, hífen ou @ (mín. 3).');
   let u = d.id ? U.all().find(x => String(x.id) === String(d.id)) : null;
+  if (u && u.cliente_id) throw new Error('Este usuário é do portal do cliente: altere em Clientes.');
   if (U.all().some(x => x !== u && norm_(x.login) === login)) throw new Error('Já existe um usuário com esse login.');
   const novo = !u;
   if (novo) {

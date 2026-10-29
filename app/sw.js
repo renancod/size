@@ -1,6 +1,6 @@
 // Cache do app para abrir rápido e funcionar com sinal fraco na obra (os dados sempre vêm da API).
-const CACHE = 'size-v51';
-const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './ctr.js', './ctr-doc.js', './orc.js', './relobra.js', './base.js', './prop.js', './crono.js', './sinapi.js', './empresa.js','./push.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './logo.png', './fornecedor.html', './forn.js'];
+const CACHE = 'size-v52';
+const ARQUIVOS = ['./', './index.html', './style.css', './config.js', './app.js', './exec.js', './relatorio.js', './fvs.js', './med.js', './ctr.js', './ctr-doc.js', './orc.js', './relobra.js', './base.js', './prop.js', './crono.js', './sinapi.js', './empresa.js', './clientes.js', './portal.js','./push.js', './sw-registro.js', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './logo.png', './fornecedor.html', './forn.js'];
 
 // cache: 'reload' / 'no-cache': nunca usar a cópia do navegador (o GitHub Pages manda guardar 10 min),
 // senão uma versão nova do app pode abrir com o style.css ou um .js antigos

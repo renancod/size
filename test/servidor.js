@@ -202,7 +202,8 @@ http.createServer((req, res) => {
   }
   const u = decodeURIComponent(req.url.split('?')[0]);
   if (u === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("const API_URL = '/api'; const FIREBASE_CFG = { projectId: 'demo', apiKey: '', messagingSenderId: '', appId: '', vapid: '' };"); }
-  const f = path.join(raiz, u === '/' ? 'index.html' : u);
+  let f = path.join(raiz, u === '/' ? 'index.html' : u);
+  if (f.startsWith(raiz) && fs.existsSync(f) && fs.statSync(f).isDirectory()) f = path.join(f, 'index.html');   // pasta = index.html, como o GitHub Pages (portal do cliente c/<slug>/)
   if (!f.startsWith(raiz) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': TIPOS[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
   fs.createReadStream(f).pipe(res);

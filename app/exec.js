@@ -600,6 +600,7 @@ function desenharDiario() {
     <div class="barra-acoes"><div class="acoes">
       ${DIA.editavel ? `<button class="btn sec" id="dSalvar">Salvar rascunho</button>${!d || d.status === 'Rascunho' ? '<button class="btn" id="dEnviar">' + ic('send') + ' Enviar diário</button>' : '<button class="btn" id="dEnviar">Salvar alterações</button>'}` : ''}
       ${eng && d && d.status === 'Enviado' ? '<button class="btn navy" id="dRev">' + ic('check') + ' Marcar revisado</button>' : ''}
+      ${eng && d && d.status !== 'Rascunho' ? `<button class="btn sec" id="dCli" title="Portal do cliente: serviços, clima e fotos deste dia (nunca ocorrências e observações)">${ic('eye')} ${d.cliente === 'Sim' ? 'Cliente vê este diário · recolher' : 'Mostrar ao cliente'}</button>` : ''}
       ${d ? `<button class="btn sec" id="dRdo">${ic('printer')} RDO (PDF)</button>` : ''}</div></div>`;
   desenharClima();
   ligarDiario();
@@ -653,6 +654,10 @@ function ligarDiario() {
   if ($('#dEnviar')) $('#dEnviar').onclick = () => enviarDiario(true);
   if ($('#dRev')) $('#dRev').onclick = async () => { try { toast((await api('exec_revisar', { data: DIA.data })).msg); esquecerDia(DIA.data); await carregarExec(true); vDiario(DIA.data); } catch (e) { toast(e.message, 1); } };
   if ($('#dRdo')) $('#dRdo').onclick = () => imprimirRdo(DIA.data);
+  if ($('#dCli')) $('#dCli').onclick = async () => {
+    const mostrar = !/recolher/.test($('#dCli').textContent);
+    try { toast((await api('exec_cliente', { data: DIA.data, mostrar })).msg); esquecerDia(DIA.data); vDiario(DIA.data); } catch (e) { toast(e.message, 1); }
+  };
 }
 function redesenharEtapas() {
   $('#dEtapas').innerHTML = DIA.etapas.map(blocoEtapa).join('');

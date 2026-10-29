@@ -4,7 +4,10 @@
  */
 const SCHEMA_CENTRAL = {
   Config: ['chave', 'valor', 'descricao'],
-  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos'],
+  // cliente_id preenchido = usuário do portal do cliente (só vê a obra desse cliente, só leitura)
+  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id'],
+  // portal do cliente: uma linha por cliente/obra; modulos = o que ele vê; slug = endereço próprio (c/<slug>/) com ícone e nome do empreendimento
+  Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em'],
   Acessos: ['usuario_id', 'usuario', 'obra_id', 'obra', 'perfil', 'permissoes'],
   Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro', 'lat', 'lng', 'feriados'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
@@ -48,7 +51,9 @@ const SCHEMA_OBRA = {
   EtapaItens: ['id', 'etapa', 'ordem', 'servico_cod', 'servico', 'grupo', 'unidade', 'qtd_prevista', 'inicio', 'termino', 'qtd_original', 'inicio_original', 'termino_original', 'ativo', 'contrato_item', 'orc_item'],
   Equipes: ['codigo', 'nome', 'pessoas', 'encarregado', 'ativa', 'empresa', 'responsavel', 'telefone', 'email', 'documento', 'endereco'],
   Diarios: ['numero', 'data', 'status', 'condicao', 'aditivo', 'responsavel_id', 'responsavel', 'chuva_manha', 'chuva_tarde', 'chuva_trabalho', 'chuva_dia',
-    'tmin', 'tmax', 'vento', 'sugestao', 'ocorrencias', 'obs', 'enviado_por', 'enviado_em', 'revisado_por', 'revisado_em', 'clima_final', 'clima_json', 'criado_em', 'atualizado_em'],
+    'tmin', 'tmax', 'vento', 'sugestao', 'ocorrencias', 'obs', 'enviado_por', 'enviado_em', 'revisado_por', 'revisado_em', 'clima_final', 'clima_json', 'criado_em', 'atualizado_em',
+    // cliente = Sim: o engenheiro liberou este dia para o portal do cliente (serviços, clima e fotos; nunca ocorrências e observações)
+    'cliente', 'cliente_por', 'cliente_em'],
   Producao: ['id', 'diario', 'data', 'etapa', 'item_id', 'servico', 'unidade', 'qtd', 'obs', 'usuario_id', 'usuario', 'lancado_em', 'atualizado_em', 'cliente_id'],
   EquipesDia: ['diario', 'data', 'etapa', 'equipe', 'pessoas', 'usuario'],
   FotosExec: ['id', 'diario', 'data', 'etapa', 'legenda', 'tirada_em', 'lat', 'lng', 'usuario', 'nome', 'file_id', 'mini_id', 'enviada_em', 'cliente_id'],
@@ -94,7 +99,7 @@ function central_(nome) {
 /* Memória do Google (CacheService) para o login e o acesso à obra: cada chamada do app conferia o usuário e as
  * permissões lendo as abas Usuarios, Obras e Acessos. Qualquer gravação nessas abas pelo sistema troca a "geração"
  * e invalida tudo na hora; mudança feita à mão na planilha vale em até AUTH_TTL_ segundos. */
-const AUTH_TABS_ = ['Usuarios', 'Obras', 'Acessos', 'Perfis'], AUTH_TTL_ = 300;
+const AUTH_TABS_ = ['Usuarios', 'Obras', 'Acessos', 'Perfis', 'Clientes'], AUTH_TTL_ = 300;
 function authGer_() {
   const c = CacheService.getScriptCache();
   let g = c.get('auth_ger');

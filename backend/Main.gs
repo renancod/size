@@ -175,6 +175,23 @@ const ROTAS = {
   sinapi_para_base: { base: 'Gerir', lock: true, fn: sinapiParaBase_ },
   sinapi_insumo_para_base: { base: 'Gerir', lock: true, fn: sinapiInsumoParaBase_ },
 
+  // portal do cliente (só leitura; cli: abre a obra do cliente e confere o módulo liberado)
+  cli_inicio: { cli: true, fn: cliInicio_ },
+  cli_cronograma: { cli: 'cronograma', fn: cliCronograma_ },
+  cli_diarios: { cli: 'diario', fn: cliDiarios_ },
+  cli_diario: { cli: 'diario', fn: cliDiario_ },
+  cli_foto: { cli: 'diario', fn: cliFoto_ },
+  cli_fvs: { cli: 'fvs', fn: cliFvs_ },
+  cli_fvs_pdf: { cli: 'fvs', fn: cliFvsPdf_ },
+  cli_financeiro: { cli: 'financeiro', fn: cliFinanceiro_ },
+  cli_med_pdf: { cli: 'financeiro', fn: cliMedPdf_ },
+  // cadastro dos clientes do portal (administrador)
+  cli_admin: { admin: true, fn: cliAdmin_ },
+  cli_salvar: { admin: true, lock: true, fn: cliSalvar_ },
+  cli_usuario_salvar: { admin: true, lock: true, fn: cliUsuarioSalvar_ },
+  cli_publicar: { admin: true, lock: true, fn: cliPublicar_ },
+  cli_github: { admin: true, lock: true, fn: cliGithub_ },
+  exec_cliente: { obra: true, perm: 'exec_planejar', lock: true, fn: execCliente_ },
   admin_dados: { admin: true, fn: adminDados_ },
   admin_usuario_salvar: { admin: true, lock: true, fn: adminUsuarioSalvar_ },
   admin_senha: { admin: true, lock: true, fn: adminSenha_ },
@@ -196,6 +213,12 @@ function rota_(q) {
   const t0 = Date.now();
   const ctx = { u: usuarioDoToken_(q.token) };
   ctx.admin = sim_(ctx.u.admin);
+  // usuário do portal do cliente: só as rotas do portal (cli) e as da própria conta; nunca é administrador
+  if (ctx.u.cliente_id) {
+    ctx.admin = false;
+    if (!r.cli && CLI_GERAIS_.indexOf(q.acao) < 0) throw new Error('Acesso de cliente: esta área não está disponível.');
+  }
+  if (r.cli) cliCtx_(q, ctx);
   if (r.admin && !ctx.admin) throw new Error('Apenas administradores.');
   if (r.base) exigirBase_(ctx, r.base);
   if (r.obra) abrirObra_(ctx, q.obra);
@@ -345,6 +368,7 @@ function login_(q) {
   return Object.assign({ token: token_(u) }, sessaoDe_(u));
 }
 function sessaoDe_(u) {
+  if (u.cliente_id) return cliSessao_(u);
   const admin = sim_(u.admin);
   const obras = central_('Obras').all()
     .filter(o => sim_(o.ativa) || admin)

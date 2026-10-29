@@ -4,6 +4,12 @@
  * O id de cada aviso muda quando o pedido muda de etapa, então cada trâmite gera um aviso novo.
  */
 function notificacoes_(q, ctx) {
+  // portal do cliente: novidades da obra dele (diário liberado, medição aprovada/paga, FVS aprovada)
+  if (ctx.u.cliente_id) {
+    const ci = cliNotif_(ctx);
+    if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, ci);
+    return { itens: ci, agora: fmtVal_(new Date()) };
+  }
   const itens = [], limiteMeus = Date.now() - 10 * 864e5, hojeStr = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
   const fd = d => d instanceof Date ? Utilities.formatDate(d, tz_(), 'dd/MM') : '';
   // obra desativada não gera aviso para ninguém (nem admin): o sino e o push vêm daqui

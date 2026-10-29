@@ -15,7 +15,8 @@ const PUSH_ETAPAS = {
   entrega: 'Previsão de entrega', pagar: 'Pagamentos', nf: 'Aguardando nota fiscal', pago: 'Pagamento concluído', meu: 'Seu pedido',
   exec_aviso: 'Aviso do engenheiro', exec_diario: 'Diário de obra', exec_alerta: 'Alerta de produção', exec_revisar: 'Diário para revisar',
   fvs_aprovar: 'FVS para aprovar', fvs_devolvida: 'FVS devolvida', fvs_verificar: 'FVS para verificar',
-  medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida', sinapi: 'SINAPI do mês novo'
+  medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida', sinapi: 'SINAPI do mês novo',
+  cli_diario: 'Diário de obra', cli_med: 'Medição', cli_fvs: 'Qualidade'
 };
 
 function pushConta_() {
@@ -75,7 +76,7 @@ function pushLerVistos_(ap) {
   if (!ap.vistos) return null; // nunca inicializado: o primeiro ciclo só registra o que já existe
   try { return JSON.parse(ap.vistos); } catch (e) { return null; }
 }
-function pushAbrir_(i) { return './?obra=' + encodeURIComponent(i.obra) + (i.rota || '#/pedido/' + encodeURIComponent(i.numero)); }
+function pushAbrir_(i) { if (i.url) return i.url; return './?obra=' + encodeURIComponent(i.obra) + (i.rota || '#/pedido/' + encodeURIComponent(i.numero)); }
 function pushMensagem_(i, token, varias) {
   return {
     token: token, titulo: (i.numero ? i.numero + ' · ' : '') + (PUSH_ETAPAS[i.etapa] || i.etapa),

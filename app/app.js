@@ -9,10 +9,12 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const enc = encodeURIComponent;
+// endereço próprio do cliente (c/<slug>/) é o mesmo site do app da Size: guarda tudo com prefixo, para um login não derrubar o outro
+const LSP = window.CLIENTE && window.CLIENTE.slug ? 'c:' + window.CLIENTE.slug + ':' : '';
 const LS = {
-  get: k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
-  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* modo privado */ } },
-  del: k => { try { localStorage.removeItem(k); } catch (e) { /* modo privado */ } }
+  get: k => { try { return localStorage.getItem(LSP + k) || ''; } catch (e) { return ''; } },
+  set: (k, v) => { try { localStorage.setItem(LSP + k, v); } catch (e) { /* modo privado */ } },
+  del: k => { try { localStorage.removeItem(LSP + k); } catch (e) { /* modo privado */ } }
 };
 const norm = s => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const fd = s => { if (!s) return ''; const a = String(s).slice(0, 10).split('-'); return a.length === 3 ? `${a[2]}/${a[1]}/${a[0]}` : String(s); };
@@ -293,6 +295,7 @@ const NAV_GERAL = [
   { sep: 'Administração', ok: admin },
   { h: '#/admin/usuarios', t: 'Usuários e acessos', i: 'users', ok: admin },
   { h: '#/admin/obras', t: 'Obras', i: 'building', ok: admin },
+  { h: '#/admin/clientes', t: 'Portal do cliente', i: 'eye', ok: admin },
   { h: '#/admin/config', t: 'Configurações', i: 'sliders', ok: admin }
 ];
 /* pendências do usuário no módulo Compras (soma do que ele pode agir) */
@@ -434,6 +437,7 @@ function snapGuardar() {
 }
 async function rotear() {
   if (!S.sess) return;
+  if (S.sess.cliente) return portalRotear();
   const h = location.hash || '#/inicio', id = ++rotaN;
   snapGuardar();
   rotaAtual = { k: snapChave(h) };
@@ -474,6 +478,7 @@ function semObra() {
 
 /* ---------- login ---------- */
 function telaLogin(msg) {
+  if (window.CLIENTE && typeof portalLogin === 'function') return portalLogin(msg);   // endereço próprio do cliente: login com a marca dele
   $('#raiz').innerHTML = `<div class="login"><form class="card" id="f">
     <img class="logo" src="logo.png" alt="Size Engenharia"><div class="sistema">Sistema de gestão</div>
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
@@ -504,8 +509,9 @@ function sair(msg) {
   telaLogin(typeof msg === 'string' ? msg : '');
 }
 function telaTrocarSenha() {
+  if (S.sess.cliente && typeof pcTema === 'function') pcTema(S.sess.cliente.cor);
   $('#raiz').innerHTML = `<div class="login"><form class="card" id="f">
-    <div class="marca"><img src="icon-192.png" alt=""><div><b>Defina sua senha</b><small>${esc(S.sess.usuario.nome)}</small></div></div>
+    <div class="marca"><img src="${S.sess.cliente && S.sess.cliente.publicado ? 'c/' + esc(S.sess.cliente.slug) + '/icon-192.png' : window.CLIENTE ? 'c/' + esc(window.CLIENTE.slug) + '/icon-192.png' : 'icon-192.png'}" alt=""><div><b>Defina sua senha</b><small>${esc(S.sess.usuario.nome)}</small></div></div>
     <div class="aviso info">Você entrou com uma senha provisória. Crie a sua para continuar.</div>
     <label>Senha provisória<input name="atual" type="password" autocomplete="current-password" required></label>
     <label>Nova senha (mín. 10 caracteres)<input name="nova" type="password" minlength="10" autocomplete="new-password" required></label>
@@ -523,6 +529,8 @@ function telaTrocarSenha() {
 
 async function iniciar() {
   if (S.sess.usuario.trocar_senha) return telaTrocarSenha();
+  if (S.sess.cliente) return portalIniciar();   // usuário do portal do cliente (portal.js)
+  if (window.CLIENTE) return sair('Este endereço é do portal do cliente. A equipe da Size entra pelo app da Size.');
   // Início da empresa por padrão; entra direto na obra quando: o link é de uma tela da obra (notificação, atalho),
   // está sem sinal (o diário funciona offline) ou a pessoa só tem uma obra e nada fora dela
   const ativas = S.sess.obras.filter(o => o.ativa), atual = S.sess.obras.find(o => o.id === S.obraId);
