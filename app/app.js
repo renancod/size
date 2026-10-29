@@ -140,6 +140,7 @@ const AVISO_INATIVA = '<div class="aviso warn">Obra <b>desativada</b>: dá para 
 
 async function api(acao, d = {}) {
   let r;
+  const t0 = performance.now();
   try {
     r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: S.token, obra: S.obraId, ...d }) });
   } catch (e) { const x = new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.'); x.rede = true; throw x; }
@@ -150,12 +151,28 @@ async function api(acao, d = {}) {
     const x = new Error(navigator.onLine === false ? 'Sem conexão com o servidor.' : 'A API não respondeu corretamente. Confira a URL em config.js e a implantação do Apps Script (acesso "Qualquer pessoa").');
     x.rede = navigator.onLine === false; throw x;
   }
+  tempoApi(acao, t0, j.t, t.length);
   if (!j.ok) {
     if (/^Sess[aã]o/.test(j.erro || '')) { sair(j.erro); }
     throw new Error(j.erro || 'Erro na API');
   }
   return j.dados;
 }
+/* ---------- diagnóstico de lentidão: tempo de cada chamada e de cada tela (fica só neste aparelho) ----------
+ * chamada: total (rede + Google acordar + servidor), servidor (srv), login/acesso (auth), abas e linhas lidas.
+ * tela: do clique até aparecer, quantas chamadas e se foram uma atrás da outra (soma ≈ total). Vê em Configurações → Velocidade. */
+const TEMPOS = { api: [], telas: [], ativa: null };
+try { Object.assign(TEMPOS, JSON.parse(LS.get('cs_tempos') || '{}')); TEMPOS.ativa = null; } catch (e) { /* começa vazio */ }
+function tempoApi(acao, t0, t, bytes) {
+  const ms = Math.round(performance.now() - t0), x = { a: acao, ms, srv: t ? t.ms : null, auth: t ? t.auth : null, abas: t ? t.abas : null, lin: t ? t.linhas : null, kb: Math.round(bytes / 1024), em: Date.now() };
+  TEMPOS.api.push(x);
+  if (TEMPOS.ativa) { TEMPOS.ativa.n++; TEMPOS.ativa.soma += ms; }
+  tempoGuardar();
+}
+const tempoGuardar = (() => { let tm; return () => { clearTimeout(tm); tm = setTimeout(() => { TEMPOS.api = TEMPOS.api.slice(-400); TEMPOS.telas = TEMPOS.telas.slice(-200); LS.set('cs_tempos', JSON.stringify({ api: TEMPOS.api, telas: TEMPOS.telas })); }, 1500); }; })();
+/* nome da tela sem os códigos (#/orc/orcamento/PR-1234/proposta → #/orc/orcamento/…/proposta) para agrupar */
+const telaNome = h => h.split('?')[0].replace(/\/[A-Z]{1,4}-?[0-9a-f]{3,}[^/]*/gi, '/…').replace(/\/\d+(?=\/|$)/g, '/…');
+
 async function pedidos(forcar) {
   if (!S.ped || forcar) { const r = await api('pedidos_listar'); S.ped = r.pedidos; S.todos = r.todos; contadores(); }
   return S.ped;
@@ -399,13 +416,27 @@ const multiObra = () => admin() || !!baseNivel() || (S.sess?.obras || []).filter
 /* ---------- rotas ---------- */
 const ROTAS = [
   [/^#\/painel$/, vHome], [/^#\/compras$/, vInicio], [/^#\/novo$/, vNovo], [/^#\/pedidos(?:\?(.*))?$/, vPedidos], [/^#\/pedido\/(.+)$/, vPedido],
-  [/^#\/estoque$/, vEstoque], [/^#\/financeiro(?:\?(.*))?$/, vFinanceiro], [/^#\/cad\/(\w+)$/, vCad], [/^#\/conta$/, vConta],
+  [/^#\/estoque$/, vEstoque], [/^#\/financeiro(?:\?(.*))?$/, vFinanceiro], [/^#\/cad\/(\w+)$/, vCad], [/^#\/conta$/, vConta], [/^#\/conta\/velocidade$/, vVelocidade],
   [/^#\/admin\/usuarios$/, vUsuarios], [/^#\/admin\/obras$/, vObras], [/^#\/admin\/config$/, vConfig]
 ];
 let rotaN = 0;
+/* Tela instantânea: ao sair de uma tela, guarda como ela estava (só na memória, até 20 telas). Ao voltar, mostra essa
+ * cópia na hora, apagada e sem clique, enquanto a versão nova chega do servidor; nada é aprovado ou salvo em cima dela. */
+const SNAP = new Map();
+let rotaAtual = null;
+const snapChave = h => (S.obraId || '') + '|' + h;
+function snapGuardar() {
+  const v = $('#view');
+  if (!rotaAtual || !v || v.classList.contains('vel') || v.querySelector(':scope > .carregando, :scope > .aviso.erro')) return;
+  SNAP.delete(rotaAtual.k);
+  SNAP.set(rotaAtual.k, { html: v.innerHTML, titulo: $('#titulo').textContent });
+  while (SNAP.size > 20) SNAP.delete(SNAP.keys().next().value);
+}
 async function rotear() {
   if (!S.sess) return;
   const h = location.hash || '#/inicio', id = ++rotaN;
+  snapGuardar();
+  rotaAtual = { k: snapChave(h) };
   marcarMenu();
   fecharModal();
   if (!S.dados && !rotaEmpresa(h)) {
@@ -418,10 +449,18 @@ async function rotear() {
   for (const [re, fn] of ROTAS) {
     const m = h.match(re);
     if (!m) continue;
-    carregandoView();
+    const sn = SNAP.get(rotaAtual.k), v = $('#view');
+    if (sn) { v.innerHTML = sn.html; v.classList.add('vel'); titulo(sn.titulo); window.scrollTo(0, 0); } else { v.classList.remove('vel'); carregandoView(); }
+    const tm = TEMPOS.ativa = { t: telaNome(h), ini: performance.now(), n: 0, soma: 0, snap: !!sn };
     try { await fn(...m.slice(1).map(x => x && decodeURIComponent(x))); }
     catch (e) { if (id === rotaN && S.token) view(`<div class="aviso erro">${esc(e.message)}</div><button class="btn sec" data-acao="rotear">Tentar de novo</button>`); }
-    window.scrollTo(0, 0);
+    if (id === rotaN) {
+      v.classList.remove('vel');
+      TEMPOS.ativa = null;
+      TEMPOS.telas.push({ t: tm.t, ms: Math.round(performance.now() - tm.ini), n: tm.n, soma: Math.round(tm.soma), snap: tm.snap, em: Date.now() });
+      tempoGuardar();
+    }
+    if (!sn) window.scrollTo(0, 0);
     return;
   }
   location.hash = '#/inicio';
@@ -458,6 +497,7 @@ function sair(msg) {
   if (S.token && LS.get('cs_fcm')) api('push_remover', { fcm: LS.get('cs_fcm') }).catch(() => { });
   LS.del('cs_fcm_reg'); LS.del('cs_fcm_u');
   S.token = ''; S.sess = null; S.dados = null; S.ped = null; S.adm = null;
+  SNAP.clear(); rotaAtual = null;
   clearInterval(NOTIF.timer);
   LS.del('cs_token'); LS.del('cs_sess');
   fecharModal();
@@ -1291,6 +1331,26 @@ function mCad(tipo, o) {
 }
 
 /* ---------- minha conta ---------- */
+/* diagnóstico de velocidade: média e pior tempo por tela e por chamada, com o que pesa (servidor, login, abas lidas, rede) */
+function vVelocidade() {
+  titulo('Velocidade do app');
+  const md = l => l.length ? Math.round(l.reduce((s, x) => s + x, 0) / l.length) : 0, sg = ms => (ms / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' s';
+  const grupo = (lista, k) => { const g = {}; lista.forEach(x => { (g[x[k]] = g[x[k]] || []).push(x); }); return Object.entries(g).sort((a, b) => md(b[1].map(x => x.ms)) - md(a[1].map(x => x.ms))); };
+  const telas = grupo(TEMPOS.telas.filter(x => !x.snap), 't'), chamadas = grupo(TEMPOS.api, 'a');
+  const rel = () => ['Velocidade do app · ' + new Date().toLocaleString('pt-BR'), '', 'TELAS (primeira abertura): tela | vezes | média | pior | chamadas | em fila'].concat(
+    telas.map(([t, l]) => [t, l.length, sg(md(l.map(x => x.ms))), sg(Math.max(...l.map(x => x.ms))), md(l.map(x => x.n)), l.some(x => x.n > 1 && x.soma >= x.ms * 0.9) ? 'sim' : 'não'].join(' | ')),
+    ['', 'CHAMADAS: ação | vezes | média | pior | servidor | login | abas | linhas | KB'],
+    chamadas.map(([a, l]) => [a, l.length, sg(md(l.map(x => x.ms))), sg(Math.max(...l.map(x => x.ms))), sg(md(l.map(x => x.srv || 0))), sg(md(l.map(x => x.auth || 0))), md(l.map(x => x.abas || 0)), md(l.map(x => x.lin || 0)), md(l.map(x => x.kb))].join(' | '))).join('\n');
+  view(`<div class="card"><h3>${ic('chart')} Velocidade do app</h3><p class="muted" style="margin:0">Medido neste aparelho desde ${TEMPOS.api.length ? new Date(TEMPOS.api[0].em).toLocaleString('pt-BR') : 'agora'}. <b>Servidor</b> é o tempo dentro do Google; o resto do total é internet e o Google "acordar". <b>Em fila</b>: a tela esperou uma chamada terminar para fazer a próxima.</p>
+      <div class="acoes" style="margin-top:10px"><button class="btn sec peq" id="velCop">${ic('copy')} Copiar relatório</button><button class="btn sec peq" id="velLimpa">Limpar medições</button></div></div>
+    <div class="card"><h3>Telas <small>primeira abertura (sem a cópia instantânea)</small></h3><div class="rolar"><table class="tab"><thead><tr><th>Tela</th><th class="n">Vezes</th><th class="n">Média</th><th class="n">Pior</th><th class="n">Chamadas</th><th>Em fila</th></tr></thead><tbody>
+      ${telas.map(([t, l]) => `<tr><td><code>${esc(t)}</code></td><td class="n">${l.length}</td><td class="n"><b>${sg(md(l.map(x => x.ms)))}</b></td><td class="n">${sg(Math.max(...l.map(x => x.ms)))}</td><td class="n">${md(l.map(x => x.n))}</td><td>${l.some(x => x.n > 1 && x.soma >= x.ms * 0.9) ? 'sim' : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Use o app normalmente e volte aqui.</td></tr>'}</tbody></table></div></div>
+    <div class="card"><h3>Chamadas ao servidor</h3><div class="rolar"><table class="tab"><thead><tr><th>Ação</th><th class="n">Vezes</th><th class="n">Média</th><th class="n">Pior</th><th class="n">Servidor</th><th class="n">Login</th><th class="n">Abas</th><th class="n">Linhas</th><th class="n">KB</th></tr></thead><tbody>
+      ${chamadas.map(([a, l]) => `<tr><td><code>${esc(a)}</code></td><td class="n">${l.length}</td><td class="n"><b>${sg(md(l.map(x => x.ms)))}</b></td><td class="n">${sg(Math.max(...l.map(x => x.ms)))}</td><td class="n">${sg(md(l.map(x => x.srv || 0)))}</td><td class="n">${sg(md(l.map(x => x.auth || 0)))}</td><td class="n">${md(l.map(x => x.abas || 0))}</td><td class="n">${nf(md(l.map(x => x.lin || 0)))}</td><td class="n">${md(l.map(x => x.kb))}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">Nenhuma chamada medida ainda.</td></tr>'}</tbody></table></div></div>`);
+  $('#velCop').onclick = async () => { try { await navigator.clipboard.writeText(rel()); toast('Relatório copiado. Cole na conversa.'); } catch (e) { toast('Não consegui copiar.', 1); } };
+  $('#velLimpa').onclick = () => { TEMPOS.api = []; TEMPOS.telas = []; LS.del('cs_tempos'); vVelocidade(); };
+}
+
 async function vConta() {
   titulo('Minha conta');
   const u = S.sess.usuario;
@@ -1298,6 +1358,7 @@ async function vConta() {
     <dt>Obra atual</dt><dd>${esc(obraAtual()?.nome || '—')}</dd><dt>Permissões</dt><dd>${u.admin ? 'Administrador (tudo)' : (S.dados?.permissoes || []).map(p => esc(S.sess.permissoes[p] || p)).join(' · ') || '—'}</dd></dl></div>
     <form class="card grid" id="f"><h3>Trocar senha</h3><label>Senha atual<input name="atual" type="password" autocomplete="current-password" required></label>
     <label>Nova senha (mín. 10 caracteres)<input name="nova" type="password" minlength="10" autocomplete="new-password" required></label><button class="btn">Salvar nova senha</button></form>
+    <a class="btn sec full" href="#/conta/velocidade">${ic('chart')} Velocidade do app (diagnóstico)</a>
     <button class="btn perigo full" id="sair2">${ic('logout')} Sair</button>`);
   $('#sair2').onclick = () => sair();
   $('#f').onsubmit = async e => {

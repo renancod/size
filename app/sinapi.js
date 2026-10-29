@@ -224,8 +224,7 @@ const sinMesAnt = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMo
 async function vSinapi() {
   titulo('SINAPI · Caixa');
   if (!baseNivel()) return bpSem();
-  await bpCarregar();
-  const I = SIN.info = await api('sinapi_info'), g = I.nivel === 'Gerir';
+  const I = SIN.info = (await Promise.all([bpCarregar(), api('sinapi_info')]))[1], g = I.nivel === 'Gerir';
   const reg = k => `<button type="button" class="chip ${SIN.reg === k ? 'on' : ''}" data-reg="${k}">${SIN_REG[k]}</button>`;
   bpTela('sinapi', `<div class="bp-hero sin-hero"><div class="bp-hero-t"><span class="bp-selo">${ic('grid2')} Referência oficial · Caixa / IBGE</span><h2>SINAPI ${esc(I.uf)}${I.mes ? ' · ' + esc(I.mes_txt) : ''}</h2>
       <p>${I.mes ? `<b>${nf(I.composicoes)}</b> composições · <b>${nf(I.insumos)}</b> insumos · importado em ${esc(I.importado_em)}${I.importado_por ? ' por ' + esc(I.importado_por) : ''}${I.resumo ? '<br>' + esc(I.resumo) : ''}` : 'Ainda não importado. Importe o mês para usar composições e insumos do SINAPI nos orçamentos.'}</p></div>

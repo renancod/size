@@ -96,3 +96,22 @@ test('backup: copia central e obras para a pasta Backups, não duplica no mesmo 
   const tk = t.call('login', { login: 'joao', senha: 'Joao-Senha-26' }).token;
   falha(() => t.call('admin_backup', { token: tk }), /administradores/);
 });
+test('memória do login: segunda chamada não relê usuários e acessos; desativar ou tirar o acesso vale na hora', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const ac = [{ obra_id: obra, perfil: 'Estoque', permissoes: ['estoque_ver'] }];
+  t.adm('admin_usuario_salvar', { usuario: { nome: 'Joca', login: 'joca', ativo: true }, senha: 'Obra#Teste26', acessos: ac });
+  const tk = t.call('login', { login: 'joca', senha: 'Obra#Teste26' }).token;
+  const id = t.adm('admin_dados').usuarios.find(u => u.login === 'joca').id;
+  const chamar = (acao, d) => t.G.chamar(Object.assign({ acao, token: tk, obra }, d || {}));
+  chamar('estoque_saldo');
+  const r = chamar('estoque_saldo');
+  assert.ok(r.ok && r.t && r.t.ms >= 0);
+  assert.match(r.t.cache, /a/);                                           // usuário e obra vieram da memória
+  // tirar o acesso à obra: a próxima chamada já recusa
+  t.adm('admin_usuario_salvar', { usuario: { id, nome: 'Joca', login: 'joca', ativo: true }, acessos: [] });
+  assert.match(chamar('estoque_saldo').erro, /não tem acesso à obra/);
+  // desativar: a sessão cai na hora
+  t.adm('admin_usuario_salvar', { usuario: { id, nome: 'Joca', login: 'joca', ativo: false }, acessos: ac });
+  assert.match(chamar('estoque_saldo').erro, /usuário desativado/);
+});

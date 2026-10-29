@@ -266,8 +266,7 @@ window.addEventListener('beforeunload', e => { if (CR.ed && CR.ed.sujo && $('#cr
 /* ---------- orçamento de cliente ---------- */
 async function vPropCrono(id) {
   if (!baseNivel()) return bpSem();
-  await bpCarregar();
-  const d = PP.d = await api('prop_detalhe', { id }), p = d.proposta, C = d.cronograma;
+  const d = PP.d = (await Promise.all([bpCarregar(), api('prop_detalhe', { id })]))[1], p = d.proposta, C = d.cronograma;
   titulo('Cronograma · ' + p.rotulo);
   const edita = d.nivel === 'Gerir' && !p.obra_id && !['Revisado', 'Cancelado'].includes(p.status);
   CR.ed = { tipo: 'prop', id, edita, sujo: false, bdi: C.com_bdi !== false, gestao: C.com_gestao !== false,

@@ -40,8 +40,8 @@ const ppPct = v => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDig
 async function vPropLista(qs) {
   titulo('Orçamentos de clientes');
   if (!baseNivel()) return bpSem();
-  await bpCarregar();
-  const L = (await api('prop_listar')).propostas, p = new URLSearchParams(qs || ''), F = PP.fl;
+  // base e lista ao mesmo tempo (uma não espera a outra)
+  const L = (await Promise.all([bpCarregar(), api('prop_listar')]))[1].propostas, p = new URLSearchParams(qs || ''), F = PP.fl;
   if (p.has('s')) F.s = p.get('s');
   const conta = s => L.filter(x => (s ? x.status === s : x.status !== 'Revisado')).length;
   bpTela('props', `<div class="cab"><h2>Orçamentos de clientes</h2><span class="contagem" id="ppN"></span>${bpGere() ? `<span class="acoes"><a class="btn sec peq" href="#/orc/orcamento/importar">${ic('upload')} Importar orçamento</a><a class="btn peq bp-ac" href="#/orc/orcamento/novo">${ic('plus')} Novo orçamento</a></span>` : ''}</div>
@@ -70,9 +70,9 @@ async function vPropLista(qs) {
 /* ---------- orçamento: editor (rascunho) ou leitura ---------- */
 async function vProp(id) {
   if (!baseNivel()) return bpSem();
-  await bpCarregar();
   let d = null;
-  if (id) d = PP.d = await api('prop_detalhe', { id });
+  if (id) d = PP.d = (await Promise.all([bpCarregar(), api('prop_detalhe', { id })]))[1];
+  else await bpCarregar();
   if (!id && !bpGere()) return bpSem('Gerir');
   const p = d ? d.proposta : { cliente: '', empreendimento: '', status: 'Rascunho', bdi_pct: 0, bdi_base: 'servicos', gestao_pct: 0, gestao_base: 'total', validade_dias: 30, data_base: hoje(), rotulo: 'novo' };
   titulo(id ? p.rotulo + ' · ' + p.empreendimento : 'Novo orçamento');

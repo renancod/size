@@ -85,7 +85,37 @@ function centralSS_() {
   if (!id) throw new Error('Sistema não configurado: rode setup() no editor do Apps Script.');
   return (_central = SpreadsheetApp.openById(id));
 }
-function central_(nome) { return tabela_(centralSS_(), nome, SCHEMA_CENTRAL[nome]); }
+function central_(nome) {
+  const t = tabela_(centralSS_(), nome, SCHEMA_CENTRAL[nome]);
+  if (AUTH_TABS_.indexOf(nome) >= 0) t.auth = true;
+  return t;
+}
+
+/* Memória do Google (CacheService) para o login e o acesso à obra: cada chamada do app conferia o usuário e as
+ * permissões lendo as abas Usuarios, Obras e Acessos. Qualquer gravação nessas abas pelo sistema troca a "geração"
+ * e invalida tudo na hora; mudança feita à mão na planilha vale em até AUTH_TTL_ segundos. */
+const AUTH_TABS_ = ['Usuarios', 'Obras', 'Acessos', 'Perfis'], AUTH_TTL_ = 300;
+function authGer_() {
+  const c = CacheService.getScriptCache();
+  let g = c.get('auth_ger');
+  if (!g) { g = Utilities.getUuid().slice(0, 8); c.put('auth_ger', g, 21600); }
+  return g;
+}
+function authCache_(k) {
+  try {
+    const v = CacheService.getScriptCache().get(authGer_() + '|' + k);
+    if (!v) return null;
+    TEMPO_.cache += 'a';
+    return JSON.parse(v, (key, x) => (x && typeof x === 'object' && x.$d ? new Date(x.$d) : x));
+  } catch (e) { return null; }
+}
+function authGuardar_(k, v) {
+  try {
+    const s = JSON.stringify(v, function (key, x) { return this[key] instanceof Date ? { $d: this[key].toISOString() } : x; });
+    if (s.length < 90000) CacheService.getScriptCache().put(authGer_() + '|' + k, s, AUTH_TTL_);
+  } catch (e) { /* sem memória: lê a planilha */ }
+}
+function authMudou_() { try { CacheService.getScriptCache().put('auth_ger', Utilities.getUuid().slice(0, 8), 21600); } catch (e) { /* vence sozinho */ } }
 function obraTab_(ctx, nome) { return tabela_(ctx.ss, nome, SCHEMA_OBRA[nome]); }
 
 function tabela_(ss, nome, cols) {
@@ -93,28 +123,35 @@ function tabela_(ss, nome, cols) {
   if (_tabs[k]) return _tabs[k];
   let sh = ss.getSheetByName(nome);
   if (!sh) { sh = ss.insertSheet(nome); sh.setFrozenRows(1); }
-  const n = sh.getLastColumn();
-  const head = n ? sh.getRange(1, 1, 1, n).getValues()[0].map(h => String(h).trim()) : [];
+  // cabeçalho e dados numa leitura só (cada ida ao Google Planilhas custa ~0,1–0,3 s)
+  const v = sh.getDataRange().getValues();
+  const head = (v[0] || []).map(h => String(h).trim());
   while (head.length && !head[head.length - 1]) head.pop();
   const falta = cols.filter(c => head.indexOf(c) < 0);
   if (falta.length) {
     sh.getRange(1, head.length + 1, 1, falta.length).setValues([falta]).setFontWeight('bold');
     falta.forEach(c => head.push(c));
   }
-  return (_tabs[k] = new Tabela_(sh, head));
+  TEMPO_.abas++;
+  const t = new Tabela_(sh, head);
+  t._dados = v;
+  return (_tabs[k] = t);
 }
 
 function Tabela_(sh, head) { this.sh = sh; this.head = head; this._rows = null; }
 Tabela_.prototype.all = function () {
   if (this._rows) return this._rows;
-  const n = this.sh.getLastRow(), h = this.head, rows = [];
-  const v = n > 1 ? this.sh.getRange(2, 1, n - 1, h.length).getValues() : [];
+  const h = this.head, rows = [];
+  // dados lidos junto com o cabeçalho; depois de removeWhere (linhas mudaram) lê de novo
+  const v = this._dados ? this._dados.slice(1) : (n => n > 1 ? this.sh.getRange(2, 1, n - 1, h.length).getValues() : [])(this.sh.getLastRow());
+  this._dados = null;
   v.forEach((r, i) => {
-    if (r.every(x => x === '')) return;
+    if (h.every((c, j) => j >= r.length || r[j] === '')) return;
     const o = { _l: i + 2 };
-    h.forEach((c, j) => { o[c] = r[j]; });
+    h.forEach((c, j) => { o[c] = j < r.length ? r[j] : ''; });
     rows.push(o);
   });
+  TEMPO_.linhas += rows.length;
   return (this._rows = rows);
 };
 /* texto que o Google Planilhas trocaria por data ou número (código de item "1.1.1" vira 01/01/2001, "2.10" vira 2,1, "015/2026" vira data,
@@ -127,10 +164,12 @@ Tabela_.prototype.insertMany = function (lista) {
   const all = this.all(), ini = this.sh.getLastRow() + 1;
   this.sh.getRange(ini, 1, lista.length, this.head.length).setValues(lista.map(o => this.linha_(o)));
   lista.forEach((o, i) => { o._l = ini + i; all.push(o); });
+  if (this.auth) authMudou_();
   return lista;
 };
 Tabela_.prototype.update = function (o) {
   this.sh.getRange(o._l, 1, 1, this.head.length).setValues([this.linha_(o)]);
+  if (this.auth) authMudou_();
 };
 /* regrava a aba inteira de uma vez (uma chamada só, em vez de apagar linha por linha) */
 Tabela_.prototype.substituir = function (lista) {
@@ -141,11 +180,13 @@ Tabela_.prototype.substituir = function (lista) {
   }
   lista.forEach((o, i) => { o._l = i + 2; });
   this._rows = lista.slice();
+  if (this.auth) authMudou_();
 };
 Tabela_.prototype.removeWhere = function (fn) {
   const linhas = this.all().filter(fn).map(o => o._l).sort((a, b) => b - a);
   linhas.forEach(l => this.sh.deleteRow(l));
   this._rows = null;
+  if (linhas.length && this.auth) authMudou_();
   return linhas.length;
 };
 Tabela_.prototype.proxCodigo = function (campo, prefixo, digitos) {

@@ -17,6 +17,7 @@ function doGet() {
 
 function doPost(e) {
   let out;
+  Object.assign(TEMPO_, { ini: Date.now(), auth: 0, abas: 0, linhas: 0, cache: '' });
   try {
     const q = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     try { migrar_(); } catch (x) { /* lançamento único nunca derruba a chamada */ }
@@ -24,8 +25,11 @@ function doPost(e) {
   } catch (err) {
     out = { ok: false, erro: err && err.message ? err.message : String(err) };
   }
+  // tempos para o diagnóstico de lentidão do app: total no servidor, login/acesso, abas lidas
+  out.t = { ms: Date.now() - TEMPO_.ini, auth: TEMPO_.auth, abas: TEMPO_.abas, linhas: TEMPO_.linhas, cache: TEMPO_.cache };
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
+const TEMPO_ = { ini: 0, auth: 0, abas: 0, linhas: 0, cache: '' };
 
 /* ---------- rotas ----------
  * pub: sem login · admin: só administradores · obra: precisa de q.obra · perm: permissão (ou lista: basta uma)
@@ -189,12 +193,14 @@ function rota_(q) {
   const r = ROTAS[q.acao];
   if (!r) throw new Error('Ação desconhecida: ' + q.acao);
   if (r.pub) return r.fn(q);
+  const t0 = Date.now();
   const ctx = { u: usuarioDoToken_(q.token) };
   ctx.admin = sim_(ctx.u.admin);
   if (r.admin && !ctx.admin) throw new Error('Apenas administradores.');
   if (r.base) exigirBase_(ctx, r.base);
   if (r.obra) abrirObra_(ctx, q.obra);
   if (r.perm) exigir_(ctx, r.perm);
+  TEMPO_.auth = Date.now() - t0;
   if (!r.lock) return r.fn(q, ctx);
   const L = LockService.getScriptLock();
   L.waitLock(30000);
@@ -254,9 +260,16 @@ function exigir_(ctx, p) {
   if (!pode_(ctx, p)) throw new Error('Você não tem permissão para isso nesta obra (' + [].concat(p).map(x => PERMISSOES[x] || x).join(' / ') + ').');
 }
 function abrirObra_(ctx, obraId) {
-  const o = central_('Obras').all().find(x => String(x.id) === String(obraId));
-  if (!o) throw new Error('Escolha uma obra.');
-  const perms = permsDe_(ctx.u, o.id);
+  // obra e permissões guardadas na memória do Google (authCache_): sem ler Obras e Acessos a cada chamada
+  const k = 'ao|' + ctx.u.id + '|' + obraId;
+  let c = authCache_(k);
+  if (!c) {
+    const o = central_('Obras').all().find(x => String(x.id) === String(obraId));
+    if (!o) throw new Error('Escolha uma obra.');
+    c = { o: o, perms: permsDe_(ctx.u, o.id) };
+    authGuardar_(k, c);
+  }
+  const o = c.o, perms = c.perms;
   if (!perms) throw new Error('Você não tem acesso à obra ' + o.nome + '.');
   if (!sim_(o.ativa) && !ctx.admin) throw new Error('A obra ' + o.nome + ' está desativada.');
   ctx.obra = o;
@@ -288,7 +301,9 @@ function usuarioDoToken_(t) {
   if (a.length !== 2 || assinar_(a[0]) !== a[1]) throw new Error('Sessão inválida. Entre novamente.');
   const d = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(a[0])).getDataAsString());
   if (d.e < Date.now()) throw new Error('Sessão expirada. Entre novamente.');
-  const u = central_('Usuarios').all().find(x => String(x.id) === d.u);
+  const k = 'au|' + d.u;
+  let u = authCache_(k);
+  if (!u) { u = central_('Usuarios').all().find(x => String(x.id) === d.u); if (u) authGuardar_(k, u); }
   if (!u || !sim_(u.ativo)) throw new Error('Sessão inválida: usuário desativado.');
   // tokens antigos (sem "v") continuam valendo até vencer; os novos acompanham a senha
   if (d.v && d.v !== versaoSenha_(u)) throw new Error('Sessão encerrada: a senha foi alterada. Entre novamente.');

@@ -167,6 +167,8 @@ function sinapiImportar_(q, ctx) {
   }
   if (etapa === 'fim') {
     const novos = {};
+    // os lotes gravaram direto nas abas "_novo_": esquece o que já tinha sido lido delas
+    Object.keys(_tabs).forEach(t => { if (t.indexOf(ss.getId() + '|') === 0) delete _tabs[t]; });
     Object.keys(SIN_LOTE_TAB_).forEach(k => { novos[k] = tabela_(ss, '_novo_' + SIN_LOTE_TAB_[k], SIN_SCHEMA_[SIN_LOTE_TAB_[k]]).all(); });
     if (!novos.insumos.length || !novos.composicoes.length) throw new Error('O arquivo não trouxe insumos ou composições do ' + cfg.uf + '.');
     // o que mudou de preço nos insumos (fica no histórico)
