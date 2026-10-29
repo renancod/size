@@ -201,6 +201,12 @@ async function pcInicio() {
   const E = pcEmps();
   if (E.length === 1) return pcObra(E[0].id);
   const d = await api('cli_inicio'), C = Object.assign({}, pcCli(), d.cliente), orcs = pcOrcCard(d.orcamentos || []);
+  if (!d.empreendimentos && C.ve_orcamentos === false) {
+    // acesso só de obra (ex.: engenheiro) e o cliente ainda sem obra: nada de orçamentos
+    view(pcHero(C, 'Olá, ' + (S.sess.usuario.nome || '').split(' ')[0], 'Acompanhamento de obras da Size Engenharia para ' + esc(C.nome) + '.', '', C.capa || (window.CLIENTE || {}).capa || '')
+      + `<div class="pc-grade"><section class="pc-card"><div class="pc-k">${ic('building')} Obras</div><div>Assim que a obra começar, você acompanha por aqui o andamento, o cronograma, o diário com as fotos e a qualidade (FVS).</div></section></div>`);
+    return;
+  }
   if (!d.empreendimentos) {
     view(pcHero(C, 'Olá, ' + (S.sess.usuario.nome || '').split(' ')[0], 'Acompanhe aqui os orçamentos da Size Engenharia para ' + esc(C.nome) + '.', '', C.capa || (window.CLIENTE || {}).capa || '')
       + `<div class="pc-grade">${orcs || '<section class="pc-card"><div class="pc-k">Orçamentos</div><div>Assim que a Size enviar um orçamento, ele aparece aqui para você analisar, comentar e aceitar.</div></section>'}

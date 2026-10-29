@@ -182,7 +182,8 @@ const CL_PERFIS = {
   financeiro: ['Financeiro', 'Orçamentos e o financeiro das obras', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'financeiro'] }]
 };
 function clUsuario(c, u) {
-  const A = CL.d, E = c.empreendimentos || [], P = JSON.parse(JSON.stringify(u && u.portal ? u.portal : CL_PERFIS.tudo[2]));
+  // acesso novo começa como Engenheiro / fiscal: orçamentos e financeiro só para quem o senhor liberar
+  const A = CL.d, E = c.empreendimentos || [], P = JSON.parse(JSON.stringify(u && u.portal ? u.portal : CL_PERFIS.tecnico[2]));
   if (!P.modulos) P.modulos = Object.keys(A.modulos);
   modal(u ? 'Acesso de ' + esc(u.nome) : 'Novo acesso · ' + esc(c.nome), `<div class="grid">
     <label>Nome<input id="cuNome" value="${esc(u ? u.nome : '')}" required placeholder="ex.: Eng. Paulo Lima"></label>
