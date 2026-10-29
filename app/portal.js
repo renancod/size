@@ -253,12 +253,14 @@ async function pcOrc(id) {
   const marca = c => D.novos.includes(c) ? '<span class="pc-chip ok">novo</span>' : D.alterados.includes(c) ? '<span class="pc-chip warn">alterado</span>' : '';
   const coms = o.comentarios;
   view(`<a class="linkbtn" href="#/c/orcamentos">${ic('back')} Orçamentos</a>
+    ${o.foto ? `<section class="pc-hero pc-orc-foto" id="pcOrcFoto"><div class="pc-hero-t"><small>${esc(o.cliente || '')}</small><h1>${esc(o.empreendimento || '')}</h1><span>${esc(o.local || '')}${o.tipo ? ' · ' + esc(o.tipo) + ' pela Size Engenharia' : ''}</span></div></section>` : ''}
     <section class="pc-card pc-orc-cab"><div><small>${esc(o.cliente || '')}</small><h2>${esc(o.empreendimento || '')}</h2><div class="pc-lin" style="justify-content:flex-start;gap:8px"><b>${esc(o.rotulo)}</b>${pcStOrc(o)}${o.local ? `<small>${esc(o.local)}</small>` : ''}</div></div>
       <div class="pc-orc-tot"><small>Valor total</small><b>${pcRs(o.total)}</b><small>data-base ${pcData(o.data_base)}${o.validade_ate ? ' · válido até ' + pcData(o.validade_ate) : ''}</small></div></section>
     ${o.resumo ? `<section class="pc-card pc-resumo">${[['Custo direto', o.resumo.custo, `material ${pcRs(o.resumo.v_mat)} · MO/serv. ${pcRs(o.resumo.v_serv)}`], ['BDI ' + pcPct(o.resumo.bdi_pct), o.resumo.bdi, 'sobre ' + o.resumo.bdi_base],
       ['Administração ' + pcPct(o.resumo.gestao_pct), o.resumo.gestao, 'sobre ' + o.resumo.gestao_base], ['Preço de venda', o.total, '']].map(([t, v, s]) => `<div><small>${esc(t)}</small><b>${pcRs(v)}</b>${s ? `<small>${esc(s)}</small>` : ''}</div>`).join('')}</section>` : ''}
     ${o.revisoes.length > 1 ? `<div class="pc-revs">${o.revisoes.map(r => `<a class="pc-chip ${r.id === o.id ? 'on' : ''}" href="#/c/orcamento/${esc(r.id)}">${esc(r.rotulo)}</a>`).join('')}</div>` : ''}
-    ${o.aceite ? `<div class="aviso ok">${ic('check')} Aceito por <b>${esc(o.aceite.nome)}</b> em ${esc(o.aceite.em)}. A Size entra em contato para os próximos passos.</div>` : ''}
+    ${o.obra_id ? `<a class="aviso ok pc-lnk" href="#/c/obra/${enc(o.obra_id)}">${ic('building')} <span>Este orçamento virou obra. <b>Acompanhar a obra</b></span> ${ic('chevron')}</a>`
+      : o.aceite ? `<div class="aviso ok">${ic('check')} Aceito por <b>${esc(o.aceite.nome)}</b> em ${esc(o.aceite.em)}. A Size entra em contato para os próximos passos.</div>` : ''}
     ${o.diferencas && (D.novos.length || D.alterados.length || D.retirados.length) ? `<div class="aviso info"><b>O que mudou desde ${esc(D.de)}:</b> ${[D.novos.length && D.novos.length + ' novo' + (D.novos.length > 1 ? 's' : ''), D.alterados.length && D.alterados.length + ' alterado' + (D.alterados.length > 1 ? 's' : ''), D.retirados.length && D.retirados.length + ' retirado' + (D.retirados.length > 1 ? 's' : '') + ' (' + D.retirados.map(esc).join(', ') + ')'].filter(Boolean).join(' · ')}</div>` : ''}
     <div class="pc-orc-grade"><div>
     ${o.etapas.map(e => `<section class="pc-card pc-et-orc"><div class="pc-lin"><b>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.descricao)}</b><b>${pcRs(e.preco)}</b></div>
@@ -284,6 +286,8 @@ async function pcOrc(id) {
     });
   };
   $$('[data-com]').forEach(b => { b.onclick = () => comentar(b.dataset.com); });
+  // foto do empreendimento no topo (chega depois da tela)
+  if (o.foto) api('cli_orc_foto', { id: o.id }).then(r => { const el = $('#pcOrcFoto'); if (el && r.b64) { el.style.setProperty('--capa', `url('data:image/jpeg;base64,${r.b64}')`); el.classList.add('com-capa'); } }).catch(() => {});
   // insumos da composição: a janela abre na hora e a lista entra quando o servidor responder
   $$('[data-ins]').forEach(b => { b.onclick = async () => {
     const it = o.etapas.flatMap(e => e.itens).find(i => i.codigo === b.dataset.ins);

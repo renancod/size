@@ -203,3 +203,35 @@ test('vários empreendimentos: cartões no início, cada obra com o seu tipo, fo
   // a sessão traz a lista para o menu
   assert.equal(t.cliente('sessao').cliente.empreendimentos.length, 2);
 });
+
+test('do orçamento à obra: tipo e foto no orçamento, o cliente vê a foto e o Gerar obra já libera a obra no portal', () => {
+  const G = criarGAS();
+  G.setup();
+  const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
+  const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
+  const tk = call('login', { login: 'admin', senha }).token, adm = (acao, d = {}) => call(acao, { token: tk, ...d });
+  const cli = adm('cli_salvar', { cliente: { nome: 'Dunas', empresa: 'Mar Azul', cor: '#2B4C7E', slug: 'dunas' } }).id;
+  adm('cli_usuario_salvar', { cliente_id: cli, usuario: { nome: 'Maria', login: 'maria' }, senha: 'Cliente#2026x' });
+  const sc = call('login', { login: 'maria', senha: 'Cliente#2026x' }), cliente = (acao, d = {}) => call(acao, { token: sc.token, ...d });
+  const id = adm('prop_salvar', { proposta: { cliente: 'Mar Azul', empreendimento: 'Residencial Dunas', local: 'Xangri-lá/RS', bdi_pct: 20 }, itens: [
+    { tipo: 'E', descricao: 'Pavimentação' }, { descricao: 'Base de brita', unidade: 'm3', qtd: 10, unit_mat: 100, unit_mo: 50 }] }).id;
+  adm('prop_portal', { id, cliente_id: cli, modo: 'fechado', tipo: 'global' });
+  adm('prop_foto', { id, arquivo: FOTO });
+  assert.ok(adm('prop_foto_ver', { id }).b64);
+  adm('prop_status', { id, op: 'enviar' });
+  const o = cliente('cli_orcamento', { id });
+  assert.equal(o.foto, true);
+  assert.equal(o.tipo, 'Execução');
+  assert.ok(cliente('cli_orc_foto', { id }).b64);
+  cliente('cli_orc_aceitar', { id, nome: 'Maria da Silva', concordo: true });
+  const r = adm('prop_gerar_obra', { id, nome: 'Residencial Dunas', sigla: 'RD', endereco: 'Xangri-lá/RS', portal: true });
+  assert.match(r.msg, /Dunas já acompanha a obra/);
+  const s = cliente('sessao').cliente;
+  assert.deepEqual(s.empreendimentos.map(e => [e.id, e.tipo]), [[r.obra_id, 'Execução']]);
+  assert.ok(cliente('cli_emp_foto', { obra: r.obra_id }).b64);                       // a foto do orçamento virou a foto do cartão
+  assert.match(cliente('cli_inicio').orcamentos[0].obra_id, new RegExp(r.obra_id));   // o orçamento aparece no painel da obra
+  assert.ok(cliente('notificacoes').itens.some(i => i.etapa === 'cli_obra' && /começou/.test(i.texto)));
+  // sem marcar o portal, a obra não entra para o cliente
+  const id2 = adm('prop_copiar', { id, novo: true }).id;
+  assert.equal(adm('prop_detalhe', { id: id2 }).proposta.foto_id, '');
+});

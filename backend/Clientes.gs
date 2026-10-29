@@ -24,7 +24,7 @@ function cliEmps_(c) {
   if (!Array.isArray(L)) L = c.obra_id ? [{ obra: String(c.obra_id), modelo: c.modelo, modulos: cliModulos_(c) }] : [];
   return L.filter(e => e && e.obra).map(e => {
     const modelo = CLI_MODELOS_[e.modelo] ? e.modelo : 'personalizado';
-    return { obra: String(e.obra), modelo: modelo, modulos: modelo === 'personalizado' ? cliMods_(e.modulos) : CLI_MODELOS_[modelo].slice(), foto: e.foto || '' };
+    return { obra: String(e.obra), modelo: modelo, modulos: modelo === 'personalizado' ? cliMods_(e.modulos) : CLI_MODELOS_[modelo].slice(), foto: e.foto || '', desde: e.desde || '', orcamento: e.orcamento || '' };
   });
 }
 function cliAchar_(id) {
@@ -269,6 +269,8 @@ function cliNotif_(ctx) {
     try { cliAbrirObra_(cx, e); } catch (x) { return; }
     const mods = e.modulos, op = cliEmps_(c).length > 1 ? cx.obra.id + '|' : '';   // id antigo (uma obra só) continua igual
     o = cx.obra;
+    // obra gerada a partir do orçamento dele: "começou"
+    if (e.desde && novo(new Date(e.desde + 'T12:00:00'))) add(op + 'ob|' + e.desde, 'cli_obra', 'Sua obra ' + o.nome + ' começou', 'acompanhe o andamento por aqui', '#/c/obra/' + encodeURIComponent(o.id), new Date(e.desde + 'T12:00:00'));
     if (mods.indexOf('diario') >= 0) cliDiariosLib_(cx).filter(d => novo(d.cliente_em)).forEach(d => add(op + 'd|' + d._dia, 'cli_diario', 'Diário de ' + fmtBr_(d._dia) + ' disponível', d.condicao, '#/c/diario/' + d._dia, d.cliente_em));
     if (mods.indexOf('financeiro') >= 0) obraTab_(cx, 'Medicoes').all().filter(m => (m.status === MED_ST_.ok && novo(m.aprovado_em)) || (m.status === MED_ST_.paga && novo(m.pago_em)))
       .forEach(m => add(op + 'm|' + m.id + '|' + m.status, 'cli_med', 'Medição ' + (m.numero || '') + ' · ' + (m.empreiteiro_nome || ''), m.status === MED_ST_.paga ? 'paga' : 'aprovada', '#/c/financeiro', m.status === MED_ST_.paga ? m.pago_em : m.aprovado_em));
@@ -324,7 +326,7 @@ function cliSalvar_(q, ctx) {
   if (novo) c = { id: T.proxCodigo('id', 'CL', 3), criado_em: new Date(), criado_por: ctx.u.nome, ativo: 'Sim' };
   // a foto de cada empreendimento continua (ela é trocada por cli_emp_foto_salvar)
   const antes = novo ? [] : cliEmps_(c);
-  novosE.forEach(e => { e.foto = (antes.find(x => x.obra === e.obra) || {}).foto || ''; });
+  novosE.forEach(e => { const a = antes.find(x => x.obra === e.obra) || {}; e.foto = a.foto || ''; e.desde = a.desde || ''; e.orcamento = a.orcamento || ''; });
   c.nome = nome; c.empresa = String(d.empresa || '').trim(); c.cor = cor.toUpperCase();
   c.emps_json = JSON.stringify(novosE);
   // colunas antigas = primeiro empreendimento (leitura de quem ainda usa uma obra só)
@@ -504,7 +506,8 @@ function cliOrcPub_(p) {
     prazo_txt: p.prazo_txt || '', pagamento_txt: p.pagamento_txt || '', texto_cliente: p.texto_cliente || '', total: calc.total.preco,
     resumo: aberto ? { custo: calc.total.custo, v_mat: calc.total.v_mat, v_serv: calc.total.v_serv, bdi: calc.total.bdi, gestao: calc.total.gestao,
       bdi_pct: num_(p.bdi_pct), gestao_pct: num_(p.gestao_pct), bdi_base: p.bdi_base === 'total' ? 'custo total' : 'mão de obra e serviços', gestao_base: p.gestao_base === 'total' ? 'custo total' : 'mão de obra e serviços' } : null,
-    etapas: et, cronograma: crono && crono.length ? crono : null, contrato: p.contrato_id ? p.contrato_nome || 'contrato.pdf' : '', aceite: propAceite_(p)
+    etapas: et, cronograma: crono && crono.length ? crono : null, contrato: p.contrato_id ? p.contrato_nome || 'contrato.pdf' : '', aceite: propAceite_(p),
+    foto: !!p.foto_id, tipo: CLI_TIPOS_[p.portal_tipo] || ''
   };
 }
 /* o que mudou entre duas revisões enviadas (para o cliente ver o resultado da negociação) */
@@ -525,6 +528,8 @@ function cliOrcamento_(q, ctx) {
   o.pode_comentar = p.status === 'Enviado';
   o.pode_aceitar = p.status === 'Enviado' && !p.aceite_json;
   o.empresa = String(config_().EMPRESA || 'Size Engenharia');
+  // virou obra que ele acompanha: atalho para o painel da obra
+  if (p.obra_id && cliEmps_(ctx.cli).some(e => e.obra === String(p.obra_id))) o.obra_id = String(p.obra_id);
   return o;
 }
 function cliOrcComentar_(q, ctx) {
@@ -582,10 +587,39 @@ function propPortal_(q, ctx) {
   if (q.cliente_id && !central_('Clientes').all().some(c => String(c.id) === String(q.cliente_id))) throw new Error('Cliente não encontrado.');
   p.cliente_id = q.cliente_id ? String(q.cliente_id) : '';
   p.portal_modo = q.modo === 'fechado' ? 'fechado' : 'aberto';
+  // o que a Size vai fazer quando virar obra (define o que o cliente acompanha: Gerenciamento com financeiro, Execução sem)
+  if (q.tipo !== undefined) p.portal_tipo = CLI_MODELOS_[q.tipo] ? q.tipo : '';
   p.atualizado_em = new Date(); p.atualizado_por = ctx.u.nome;
-  propHist_(p, ctx, 'Portal do cliente', p.cliente_id ? 'cliente ' + p.cliente_id + ' · ' + (p.portal_modo === 'fechado' ? 'só total por etapa' : 'preço por item') : 'retirado do portal');
+  propHist_(p, ctx, 'Portal do cliente', p.cliente_id ? 'cliente ' + p.cliente_id + ' · ' + (p.portal_modo === 'fechado' ? 'só total por etapa' : 'preço por item') + (p.portal_tipo ? ' · ' + CLI_TIPOS_[p.portal_tipo] : '') : 'retirado do portal');
   T.update(p);
   return { msg: p.cliente_id ? (p.status === 'Rascunho' ? 'Ligado ao cliente. Ele vê quando você enviar o orçamento.' : 'O cliente já vê este orçamento no portal.') : 'Retirado do portal do cliente.' };
+}
+/* foto do empreendimento no orçamento: o cliente vê no topo do orçamento e ela vira a foto do cartão da obra
+ * (vale para todas as revisões deste número: a revisão nova copia o foto_id) */
+function propFoto_(q, ctx) {
+  const T = central_('Propostas'), p = propAchar_(q.id);
+  if (q.remover) p.foto_id = '';
+  else p.foto_id = cliArquivoSalvar_({ b64: (q.arquivo || {}).b64, mime: 'image/jpeg', nome: 'foto.jpg' }, cliPasta_(String(p.numero)), 'Foto ' + propRotulo_(p)).id;
+  propHist_(p, ctx, 'Foto do empreendimento', q.remover ? 'retirada' : 'escolhida');
+  T.update(p);
+  return { msg: q.remover ? 'Foto retirada.' : 'Foto do empreendimento salva.' };
+}
+function propFotoB64_(id) { return { mime: 'image/jpeg', b64: id ? Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes()) : '' }; }
+function propFotoVer_(q, ctx) { return propFotoB64_(propAchar_(q.id).foto_id); }
+function cliOrcFoto_(q, ctx) { return propFotoB64_(cliPropAchar_(ctx, q.id).foto_id); }
+/* Gerar obra: o empreendimento novo entra no portal do cliente do orçamento, com o tipo e a foto do orçamento */
+function propObraPortal_(p, o, tipo) {
+  const T = central_('Clientes'), c = T.all().find(x => String(x.id) === String(p.cliente_id));
+  if (!c) return '';
+  const E = cliEmps_(c);
+  if (E.some(e => e.obra === String(o.id))) return c.nome;
+  const modelo = CLI_MODELOS_[tipo] ? tipo : CLI_MODELOS_[p.portal_tipo] ? p.portal_tipo : 'gestao';
+  E.push({ obra: String(o.id), modelo: modelo, modulos: CLI_MODELOS_[modelo].slice(), foto: p.foto_id || '', desde: Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'), orcamento: propRotulo_(p) });
+  c.emps_json = JSON.stringify(E);
+  if (!c.obra_id) { c.obra_id = String(o.id); c.modelo = modelo; c.modulos = CLI_MODELOS_[modelo].join(','); }
+  c.atualizado_em = new Date();
+  T.update(c);
+  return c.nome;
 }
 function propContrato_(q, ctx) {
   const T = central_('Propostas'), p = propAchar_(q.id);

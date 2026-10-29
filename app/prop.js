@@ -142,10 +142,19 @@ function ppLigarAcoes(d) {
 function ppPortalHtml(d) {
   const p = d.proposta, g = d.nivel === 'Gerir', a = p.aceite, C = d.comentarios || [], abertos = C.filter(c => c.status === 'aberto').length;
   if (!g && !p.cliente_id) return '';
+  const cli = (d.clientes || []).find(c => String(c.id) === String(p.cliente_id));
+  // trilha do orçamento no portal: ligado → enviado → aceito → obra
+  const passos = [['Ligado ao cliente', !!p.cliente_id], ['Enviado', ['Enviado', 'Aprovado', 'Revisado'].includes(p.status)], ['Aceito', !!a || p.status === 'Aprovado'], ['Virou obra', !!d.obra]];
+  const atual = passos.findIndex(x => !x[1]);
   return `<div class="card" id="ppPortal"><div class="bp-h"><h3>${ic('eye')} Portal do cliente ${abertos ? `<span class="bp-flag">${abertos} ${abertos > 1 ? 'considerações' : 'consideração'} para responder</span>` : ''}</h3></div>
-    ${a ? `<div class="aviso ok">${ic('check')} <b>Aceito pelo cliente no app</b> em ${esc(a.em)} por <b>${esc(a.nome)}</b>${a.doc ? ' (' + esc(a.doc) + ')' : ''} · ${esc(a.revisao)} · ${bpM(a.total)}${a.arquivo_id ? ` · <button type="button" class="linkbtn" id="ppAceArq">${ic('download')} contrato assinado enviado</button>` : ''}${p.status === 'Aprovado' && !d.obra ? '<br>Próximo passo: <b>Gerar obra</b> e liberar o acompanhamento em Administração → Portal do cliente.' : ''}</div>` : ''}
+    ${p.cliente_id ? `<ol class="pp-trilha">${passos.map(([t, ok], i) => `<li class="${ok ? 'ok' : i === atual ? 'agora' : ''}"><span>${ok ? ic('check') : i + 1}</span>${t}</li>`).join('')}</ol>` : ''}
+    ${a ? `<div class="aviso ok">${ic('check')} <b>Aceito pelo cliente no app</b> em ${esc(a.em)} por <b>${esc(a.nome)}</b>${a.doc ? ' (' + esc(a.doc) + ')' : ''} · ${esc(a.revisao)} · ${bpM(a.total)}${a.arquivo_id ? ` · <button type="button" class="linkbtn" id="ppAceArq">${ic('download')} contrato assinado enviado</button>` : ''}${p.status === 'Aprovado' && !d.obra ? `<br>Próximo passo: <b>Gerar obra</b>. ${cli ? esc(cli.nome) + ' passa a acompanhar a obra pelo portal na mesma hora.' : ''}` : ''}</div>` : ''}
     ${g ? `<div class="g2"><label>Cliente que vê este orçamento<select id="ppCli"><option value="">— ninguém (não aparece no portal) —</option>${(d.clientes || []).map(c => `<option value="${esc(c.id)}" ${String(c.id) === String(p.cliente_id) ? 'selected' : ''}>${esc(c.nome)}${c.empresa ? ' · ' + esc(c.empresa) : ''}</option>`).join('')}</select></label>
-      <label>O que ele vê<select id="ppModo"><option value="aberto" ${p.portal_modo !== 'fechado' ? 'selected' : ''}>Aberto: preços, custo, BDI, administração e insumos</option><option value="fechado" ${p.portal_modo === 'fechado' ? 'selected' : ''}>Fechado: só o total de cada etapa</option></select></label></div>
+      <label>O que ele vê no orçamento<select id="ppModo"><option value="aberto" ${p.portal_modo !== 'fechado' ? 'selected' : ''}>Aberto: preços, custo, BDI, administração e insumos</option><option value="fechado" ${p.portal_modo === 'fechado' ? 'selected' : ''}>Fechado: só o total de cada etapa</option></select></label></div>
+      <div class="pp-obra-cfg"><div class="pp-foto" id="ppFoto">${p.foto_id ? '<span class="spin"></span>' : ic('camera')}</div><div class="grid">
+        <label>Quando virar obra, a Size faz<select id="ppTipo"><option value="gestao" ${p.portal_tipo !== 'global' ? 'selected' : ''}>Gerenciamento: o cliente acompanha tudo, inclusive o financeiro</option><option value="global" ${p.portal_tipo === 'global' ? 'selected' : ''}>Execução: o cliente acompanha a obra, sem o financeiro</option></select></label>
+        <div class="acoes"><label class="btn sec peq" style="cursor:pointer">${ic('camera')} ${p.foto_id ? 'Trocar foto do empreendimento' : 'Foto do empreendimento'}<input type="file" id="ppFotoSel" accept="image/*" hidden></label>${p.foto_id ? '<button type="button" class="btn sec peq" id="ppFotoRem">Retirar foto</button>' : ''}</div>
+        <small class="mute">A foto (perspectiva, fachada, terreno) aparece no topo do orçamento para o cliente e vira a foto do cartão da obra.</small></div></div>
       <small class="mute">${!(d.clientes || []).length ? 'Cadastre o cliente em Administração → Portal do cliente. ' : ''}O cliente só vê as revisões <b>enviadas</b> (nunca rascunho). <b>Aberto</b> mostra a planilha completa (custo de material e mão de obra, BDI, administração e os insumos de cada composição); <b>fechado</b> mostra só o total de cada etapa.</small>
       <div class="acoes" style="margin-top:8px"><button type="button" class="btn sec peq" id="ppCliSalvar">${ic('check')} Salvar portal</button>
         ${p.contrato_id ? `<button type="button" class="btn sec peq" id="ppCtrRem">Remover contrato (${esc(p.contrato_nome)})</button>` : `<label class="btn sec peq" style="cursor:pointer">${ic('download')} Anexar contrato (PDF)<input type="file" id="ppCtr" accept="application/pdf" hidden></label>`}</div>` : ''}
@@ -156,7 +165,18 @@ function ppPortalHtml(d) {
 function ppPortalLigar(d) {
   const p = d.proposta, re = () => vProp(p.id);
   const passo = async (fn, b) => { if (b) b.disabled = true; try { await fn(); } catch (e) { toast(e.message, 1); if (b) b.disabled = false; } };
-  if ($('#ppCliSalvar')) $('#ppCliSalvar').onclick = e => passo(async () => { toast((await api('prop_portal', { id: p.id, cliente_id: $('#ppCli').value, modo: $('#ppModo').value })).msg); re(); }, e.target);
+  if ($('#ppCliSalvar')) $('#ppCliSalvar').onclick = e => passo(async () => { toast((await api('prop_portal', { id: p.id, cliente_id: $('#ppCli').value, modo: $('#ppModo').value, tipo: $('#ppTipo').value })).msg); re(); }, e.target);
+  // foto do empreendimento: reduzida aqui (até 1280 px) antes de subir
+  if ($('#ppFotoSel')) $('#ppFotoSel').onchange = e => passo(async () => {
+    const f = e.target.files[0]; if (!f) return;
+    const im = await new Promise((ok, no) => { const x = new Image(); x.onload = () => ok(x); x.onerror = () => no(new Error('Não consegui abrir essa imagem.')); x.src = URL.createObjectURL(f); });
+    const s = Math.min(1, 1280 / Math.max(im.naturalWidth, im.naturalHeight)), k = document.createElement('canvas');
+    k.width = Math.round(im.naturalWidth * s); k.height = Math.round(im.naturalHeight * s);
+    k.getContext('2d').drawImage(im, 0, 0, k.width, k.height);
+    toast((await api('prop_foto', { id: p.id, arquivo: { b64: k.toDataURL('image/jpeg', 0.82) } })).msg); re();
+  });
+  if ($('#ppFotoRem')) $('#ppFotoRem').onclick = e => passo(async () => { toast((await api('prop_foto', { id: p.id, remover: true })).msg); re(); }, e.target);
+  if (p.foto_id && $('#ppFoto')) api('prop_foto_ver', { id: p.id }).then(r => { const el = $('#ppFoto'); if (el && r.b64) { el.style.backgroundImage = `url('data:image/jpeg;base64,${r.b64}')`; el.innerHTML = ''; } }).catch(() => {});
   if ($('#ppCtr')) $('#ppCtr').onchange = e => passo(async () => {
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 10e6) throw new Error('Arquivo grande demais (máx. 10 MB).');
@@ -551,15 +571,18 @@ function ppInsumos(l, c) {
 
 /* ---------- gerar a obra ---------- */
 function ppGerarObra(d) {
-  const p = d.proposta, sig = norm(p.empreendimento).toUpperCase().replace(/[^A-Z ]/g, '').split(/\s+/).filter(w => w.length > 2).map(w => w[0]).join('').slice(0, 4) || 'OB';
+  const p = d.proposta, cli = p.cliente_id ? (d.clientes || []).find(c => String(c.id) === String(p.cliente_id)) : null, sig = norm(p.empreendimento).toUpperCase().replace(/[^A-Z ]/g, '').split(/\s+/).filter(w => w.length > 2).map(w => w[0]).join('').slice(0, 4) || 'OB';
   modal(`${ic('building')} Gerar obra a partir de ${esc(p.rotulo)}`, `<p><small>Cria a obra com a planilha e a pasta no Drive. Cada etapa vira uma <b>frente geral</b> do Orçamento da obra, com os serviços (quantidade, material, mão de obra e preço de venda) e os <b>materiais</b> das composições. Depois é só liberar o acesso das pessoas.</small></p>
     <div class="bp-g3"><label class="bp-span2">Nome da obra<input name="nome" required value="${esc(p.empreendimento)}"></label><label>Sigla (2 a 5 letras)<input name="sigla" required maxlength="5" value="${esc(sig)}" style="text-transform:uppercase"></label></div>
     <label>Endereço<input name="endereco" value="${esc(p.local || '')}"></label>
-    <h3 style="margin:8px 0 0">Localização <small>(busque o endereço ou toque no mapa)</small></h3>${mapaLocalHtml('', '')}
-    <div class="aviso info">${plural(d.etapas.filter(e => e.itens).length, 'frente geral', 'frentes gerais')} · ${plural(d.total.itens, 'serviço', 'serviços')} · preço de venda ${bpM(d.total.preco)}</div>`, {
+    <div class="aviso info">${plural(d.etapas.filter(e => e.itens).length, 'frente geral', 'frentes gerais')} · ${plural(d.total.itens, 'serviço', 'serviços')} · preço de venda ${bpM(d.total.preco)}</div>
+    ${cli ? `<div class="pp-gera-portal"><label class="chk"><input type="checkbox" name="portal" checked> <span><b>Liberar o acompanhamento para ${esc(cli.nome)}</b><small>A obra entra no portal do cliente na hora e ele recebe o aviso “Sua obra começou”.</small></span></label>
+      <label>O que a Size faz<select name="tipo"><option value="gestao" ${p.portal_tipo !== 'global' ? 'selected' : ''}>Gerenciamento: acompanha tudo, inclusive o financeiro</option><option value="global" ${p.portal_tipo === 'global' ? 'selected' : ''}>Execução: acompanha a obra, sem o financeiro</option></select></label>
+      <small class="mute">${p.foto_id ? 'A foto do empreendimento do orçamento vira a foto do cartão da obra.' : 'Sem foto no orçamento: o cartão usa a foto do último diário liberado (dá para escolher outra no cadastro do cliente).'} Os módulos podem ser ajustados depois em Administração → Portal do cliente.</small></div>` : ''}
+    <h3 style="margin:8px 0 0">Localização <small>(busque o endereço ou toque no mapa)</small></h3>${mapaLocalHtml('', '')}`, {
     ok: 'Criar a obra', larga: true,
     onOk: async f => {
-      const r = await api('prop_gerar_obra', { id: p.id, nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, lat: f.lat.value, lng: f.lng.value });
+      const r = await api('prop_gerar_obra', { id: p.id, nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, lat: f.lat.value, lng: f.lng.value, portal: !!(f.portal && f.portal.checked), tipo: f.tipo ? f.tipo.value : '' });
       toast(r.msg);
       await recarregarSessao();
       await trocarObra(r.obra_id);

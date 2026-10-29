@@ -243,7 +243,7 @@ function propCopiar_(q, ctx) {
     motivo: '', obra_id: '', historico_json: '', aceite_json: '', criado_em: new Date(), criado_por: ctx.u.nome, atualizado_em: new Date(), atualizado_por: ctx.u.nome, enviado_em: '', decidido_em: ''
   });
   delete c._l;
-  if (!rev) { c.empreendimento = String(p.empreendimento) + ' (cópia)'; c.cliente_id = ''; c.contrato_id = ''; c.contrato_nome = ''; }
+  if (!rev) { c.empreendimento = String(p.empreendimento) + ' (cópia)'; c.cliente_id = ''; c.contrato_id = ''; c.contrato_nome = ''; c.foto_id = ''; c.portal_tipo = ''; }
   propHist_(c, ctx, rev ? 'Revisão criada' : 'Copiado', 'a partir de ' + propRotulo_(p));
   T.insert(c);
   I.insertMany(propItens_(p.id).map(x => { const o = Object.assign({}, x, { proposta: c.id }); delete o._l; return o; }));
@@ -343,7 +343,10 @@ function propGerarObra_(q, ctx) {
   propHist_(p, ctx, 'Obra gerada', o.id + ' · ' + o.nome);
   T.update(p);
   log_(ctx, 'proposta_obra', propRotulo_(p) + ' → ' + o.id + ' ' + o.nome);
-  return { msg: 'Obra ' + o.nome + ' criada com ' + plural_(etapas.length, 'frente geral', 'frentes gerais') + ', ' + plural_(nServ, 'serviço', 'serviços') + ' e ' + plural_(nMat, 'material', 'materiais') + ' no orçamento da obra.', obra_id: String(o.id) };
+  // portal do cliente: a obra entra como empreendimento do cliente do orçamento (com o tipo e a foto do orçamento)
+  const cli = q.portal && p.cliente_id ? propObraPortal_(p, o, q.tipo) : '';
+  return { msg: 'Obra ' + o.nome + ' criada com ' + plural_(etapas.length, 'frente geral', 'frentes gerais') + ', ' + plural_(nServ, 'serviço', 'serviços') + ' e ' + plural_(nMat, 'material', 'materiais') + ' no orçamento da obra.'
+    + (cli ? ' ' + cli + ' já acompanha a obra pelo portal.' : ''), obra_id: String(o.id), portal: cli };
 }
 
 /* ---------- painel da empresa (tela Início, fora de obra) ---------- */

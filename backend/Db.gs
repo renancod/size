@@ -30,7 +30,7 @@ const SCHEMA_CENTRAL = {
     'criado_em', 'criado_por', 'atualizado_em', 'atualizado_por', 'enviado_em', 'decidido_em', 'cronograma_json', 'sinapi_regime',
     // portal do cliente: cliente que vê este orçamento (quando enviado), modo aberto (preço por item) ou fechado (só total por etapa),
     // contrato anexado pela Size e o aceite do cliente pelo app (nome, data, arquivo assinado)
-    'cliente_id', 'portal_modo', 'contrato_id', 'contrato_nome', 'aceite_json'],
+    'cliente_id', 'portal_modo', 'contrato_id', 'contrato_nome', 'aceite_json', 'portal_tipo', 'foto_id'],
   // considerações do cliente no orçamento (por item ou geral) e a resposta da Size
   PropostaComentarios: ['id', 'proposta', 'numero', 'item', 'item_desc', 'tipo', 'texto', 'autor_tipo', 'autor', 'em', 'status', 'resposta', 'respondido_por', 'respondido_em'],
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
