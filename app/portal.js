@@ -65,7 +65,7 @@ function pcAnel(exec, prev, n) {
 /* assinatura da Size: o app tem a marca do empreendimento, mas é uma plataforma da Size */
 const pcAssina = cl => `<div class="pc-size ${cl || ''}"><img src="logo.png" alt="Size Engenharia"><span>Plataforma <b>Size Engenharia</b></span></div>`;
 const pcRs = v => brl(v);
-const pcIcone = C => C.slug && (C.publicado || window.CLIENTE) ? 'c/' + esc(C.slug) + '/icon-192.png' : 'icon-192.png';
+const pcIcone = C => C.slug && (C.publicado || window.CLIENTE) ? 'c/' + esc(C.slug) + '/icon-192.png' + (C.v || (window.CLIENTE || {}).v ? '?v=' + esc(C.v || window.CLIENTE.v) : '') : 'icon-192.png';
 /* logo da empresa do cliente (quando publicada); sem ela, o ícone do app */
 const pcLogo = (C, cl) => C.logo ? `<img class="pc-logo ${cl || ''}" src="${esc(C.logo)}" alt="${esc(C.nome || '')}">` : `<img src="${pcIcone(C)}" alt="">`;
 
@@ -75,7 +75,7 @@ function portalLogin(msg) {
   pcTema(C.cor);
   document.title = C.nome || 'Acompanhamento da obra';
   $('#raiz').innerHTML = `<div class="pc-login" ${C.capa ? `style="background-image:url('${esc(C.capa)}')"` : ''}><form class="card" id="f">
-    <div class="pc-login-h ${C.logo ? 'com-logo' : ''}">${C.logo ? `<img class="pc-logo" src="${esc(C.logo)}" alt="${esc(C.nome || '')}">` : `<img src="c/${esc(C.slug)}/icon-192.png" alt="">`}<div><b>${esc(C.nome || '')}</b><small>Acompanhamento de obras e orçamentos</small></div></div>
+    <div class="pc-login-h ${C.logo ? 'com-logo' : ''}">${C.logo ? `<img class="pc-logo" src="${esc(C.logo)}" alt="${esc(C.nome || '')}">` : `<img src="${pcIcone(C)}" alt="">`}<div><b>${esc(C.nome || '')}</b><small>Acompanhamento de obras e orçamentos</small></div></div>
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>

@@ -269,3 +269,13 @@ test('cada acesso vê o que foi liberado: obras escolhidas, sem orçamentos ou s
   const A = t.adm('cli_admin').clientes[0].usuarios.find(u => u.login === 'paulo.eng').portal;
   assert.deepEqual([A.obras, A.orcamentos, A.modulos], [[obra2], false, ['cronograma', 'diario', 'fvs']]);
 });
+
+test('endereço do cliente: ícone, logo e fundo com versão (o navegador não fica com a imagem antiga)', () => {
+  const G = criarGAS();
+  const a = G.rodar(`cliArquivos_({ id: 'CL001', slug: 'x', nome: 'X', cor: '#1D6F5F', _capa: true, _logo: true, _v: 'abc' })`);
+  assert.match(a['index.html'], /icon-192\.png\?v=abc/);
+  assert.match(a['index.html'], /manifest\.json\?v=abc/);
+  assert.match(a['manifest.json'], /icon-512\.png\?v=abc/);
+  assert.match(a['cliente.js'], /logo\.png\?v=abc/);
+  assert.match(a['cliente.js'], /capa\.jpg\?v=abc/);
+});

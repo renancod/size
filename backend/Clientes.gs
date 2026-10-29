@@ -53,12 +53,13 @@ function cliObra_(id) {
 }
 function cliPub_(c, u) {
   const E = cliEmpsU_(c, u), A = cliAcesso_(u), obras = E.length ? central_('Obras').all() : [], pre = c.slug && c.publicado_em ? 'c/' + c.slug + '/' : '';
+  const v = c.publicado_em instanceof Date ? c.publicado_em.getTime().toString(36) : String(c.publicado_em || '').replace(/\W/g, ''), q = v ? '?v=' + v : '';
   const emps = E.map(e => { const o = obras.find(x => String(x.id) === String(e.obra)) || {}; return { id: e.obra, nome: o.nome || e.obra, sigla: o.sigla || '', endereco: o.endereco || '', modelo: e.modelo, tipo: CLI_TIPOS_[e.modelo], modulos: e.modulos }; });
   return {
     id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', empreendimentos: emps,
     // compatibilidade (app antigo aberto no celular): o primeiro empreendimento
     obra: emps.length > 0, modulos: emps.length ? emps[0].modulos : [], obra_nome: emps.length ? emps[0].nome : '',
-    publicado: !!c.publicado_em, capa: pre && sim_(c.capa) ? pre + 'capa.jpg' : '', logo: pre && sim_(c.logo) ? pre + 'logo.png' : '', orcamentos: A.orcamentos ? cliPropostas_(c.id).length : 0, ve_orcamentos: A.orcamentos
+    publicado: !!c.publicado_em, capa: pre && sim_(c.capa) ? pre + 'capa.jpg' + q : '', logo: pre && sim_(c.logo) ? pre + 'logo.png' + q : '', v: v, orcamentos: A.orcamentos ? cliPropostas_(c.id).length : 0, ve_orcamentos: A.orcamentos
   };
 }
 
@@ -421,24 +422,26 @@ function cliGh_(metodo, caminho, corpo) {
 const CLI_CSP_ = "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com https://firebaseinstallations.googleapis.com; frame-src blob: data:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'";
 function cliArquivos_(c) {
   const h = s => String(s).replace(/[&<>"]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[x]), p = 'c/' + c.slug + '/';
+  // versão das imagens: muda a cada publicação para o navegador (aba, ícone do celular) não ficar com a antiga
+  const v = c._v || Date.now().toString(36);
   const curto = String(c.nome).length <= 12 ? String(c.nome) : String(c.nome).split(/\s+/)[0].slice(0, 12);
   const index = '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<base href="../../">\n'
     + '<meta http-equiv="Content-Security-Policy" content="' + CLI_CSP_ + '">\n'
     + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<title>' + h(c.nome) + '</title>\n'
     + '<meta name="theme-color" content="' + h(c.cor) + '">\n<meta name="mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-capable" content="yes">\n'
     + '<meta name="apple-mobile-web-app-status-bar-style" content="default">\n<meta name="apple-mobile-web-app-title" content="' + h(curto) + '">\n<meta name="format-detection" content="telephone=no">\n'
-    + '<link rel="manifest" href="' + p + 'manifest.json">\n<link rel="icon" type="image/png" sizes="192x192" href="' + p + 'icon-192.png">\n'
-    + '<link rel="apple-touch-icon" sizes="180x180" href="' + p + 'icon-180.png">\n<link rel="stylesheet" href="style.css">\n</head>\n<body class="portal">\n'
+    + '<link rel="manifest" href="' + p + 'manifest.json?v=' + v + '">\n<link rel="icon" type="image/png" sizes="192x192" href="' + p + 'icon-192.png?v=' + v + '">\n'
+    + '<link rel="apple-touch-icon" sizes="180x180" href="' + p + 'icon-180.png?v=' + v + '">\n<link rel="stylesheet" href="style.css">\n</head>\n<body class="portal">\n'
     + '<div id="raiz"><div class="carregando tela"><span class="spin"></span></div></div>\n<div id="modal" class="modal"></div>\n<div id="toast" class="toast"></div>\n'
     + ['cliente.js'].map(f => '<script src="' + p + f + '"></script>\n').join('')
     + ['config.js', 'app.js', 'portal.js', 'push.js', 'sw-registro.js'].map(f => '<script src="' + f + '"></script>\n').join('') + '</body>\n</html>\n';
   const manifest = {
     id: './', name: c.nome + ' · Size Engenharia', short_name: curto, description: 'Acompanhamento da obra ' + c.nome + ' — plataforma Size Engenharia', lang: 'pt-BR', start_url: './', scope: './', display: 'standalone',
     orientation: 'any', background_color: '#FFFFFF', theme_color: c.cor,
-    icons: [{ src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }]
+    icons: [{ src: 'icon-192.png?v=' + v, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: 'icon-512.png?v=' + v, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: 'icon-maskable-512.png?v=' + v, sizes: '512x512', type: 'image/png', purpose: 'maskable' }]
   };
-  const cfg = { id: String(c.id), slug: c.slug, nome: c.nome, empresa: c.empresa || '', cor: c.cor, capa: c._capa ? p + 'capa.jpg' : '', logo: c._logo ? p + 'logo.png' : '' };
+  const cfg = { id: String(c.id), slug: c.slug, nome: c.nome, empresa: c.empresa || '', cor: c.cor, capa: c._capa ? p + 'capa.jpg?v=' + v : '', logo: c._logo ? p + 'logo.png?v=' + v : '', v: v };
   return { 'index.html': index, 'manifest.json': JSON.stringify(manifest, null, 2), 'cliente.js': '// gerado pelo cadastro de clientes do sistema (não editar à mão)\nwindow.CLIENTE = ' + JSON.stringify(cfg) + ';\n' };
 }
 /* q.imagens (base64, recortadas no navegador): logo nova = 'logo.png' + os 4 ícones; 'capa.jpg' = fundo do login.
