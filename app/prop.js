@@ -90,7 +90,7 @@ async function vProp(id) {
   if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d));
   else {
     bpTela('props', cab + ppLeitura(d));
-    $$('[data-ver-cod]').forEach(b => { b.onclick = () => { const i = d.itens.find(x => x.codigo === b.dataset.verCod); if (i) i.fonte ? sinVerComposicao(i.comp_cod, d.proposta.sinapi_regime, i.qtd) : ppInsumos(i, i); }; });
+    ppLigarVer(d);
   }
   ppLigarAcoes(d);
   if (edita) ppEditorLigar();
@@ -487,6 +487,17 @@ function ppBusca() {
 /* ---------- insumos de um item do orçamento (só consulta) ----------
  * abre a composição da base até os insumos: coeficiente, preço, custo por unidade e quanto vai para a quantidade do item.
  * l = linha do orçamento (comp_cod, qtd, custos congelados); c = a mesma linha já calculada (custo_unit) */
+/* descrição do item com composição (leitura, proposta e planilha interna): abre os insumos (base da Size ou SINAPI) */
+function ppLigarVer(d) {
+  $$('[data-ver-cod]').forEach(b => {
+    b.onclick = async () => {
+      const i = d.itens.find(x => x.codigo === b.dataset.verCod);
+      if (!i) return;
+      try { if (i.fonte) await sinVerComposicao(i.comp_cod, d.proposta.sinapi_regime, i.qtd); else { await bpCarregar(); ppInsumos(i, i); } }
+      catch (e) { toast(e.message, 1); }
+    };
+  });
+}
 function ppInsumos(l, c) {
   const comp = BP.C[l.comp_cod], q = bpPn(l.qtd) || 0, congelado = c.custo_unit != null ? c.custo_unit : bpPn(l.unit_mat) + bpPn(l.unit_mo) + bpPn(l.unit_eq) + bpPn(l.unit_sv);
   if (!comp) return modal('Insumos', `<div class="aviso warn">A composição <code>${esc(l.comp_cod)}</code> não está mais na base de preços. O orçamento continua com o custo congelado de ${bpM(congelado)}/${esc(l.unidade)}.</div>`, { semRodape: true });
@@ -548,6 +559,7 @@ async function vPropDoc(id, qs) {
       ${interna ? '' : `<footer class="pp-doc-ass"><div><span></span>${esc(d.empresa)}</div><div><span></span>De acordo: ${esc(p.cliente)}</div></footer>`}</div>
       ${ppCronoDoc(d.cronograma) /* anexo: na impressão começa em página própria, deitada */}
     </article>`);
+  ppLigarVer(d);
   $('#ppPrint').onclick = () => window.print();
   $('#ppXls').onclick = async () => { const b = $('#ppXls'); b.disabled = true; try { await ppExcel(d); } catch (e) { toast(e.message, 1); } b.disabled = false; };
 }
