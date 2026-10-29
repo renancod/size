@@ -137,6 +137,9 @@ test('negociação: cliente sem obra vê só o orçamento enviado, comenta, rece
   assert.match(bruto('cli_orcamento', { id }).erro, /não disponível/);
   adm('prop_portal', { id: id1, cliente_id: '', modo: 'aberto' });                    // tirou o cliente da revisão nova: a velha não volta
   assert.deepEqual(cliente('cli_orcamentos').orcamentos, []);
+  adm('prop_status', { id: id1, op: 'enviar' });                                      // nem quando a nova é enviada sem cliente
+  assert.deepEqual(cliente('cli_orcamentos').orcamentos, []);
+  adm('prop_status', { id: id1, op: 'reabrir' });
   adm('prop_salvar', { proposta: { id: id1, cliente: 'Mar Azul', empreendimento: 'Dunas', bdi_pct: 20, bdi_base: 'total' }, itens: [
     { tipo: 'E', descricao: 'Pavimentação' }, { descricao: 'Base de brita', unidade: 'm3', qtd: 10, unit_mat: 100, unit_mo: 50 }, { descricao: 'Meio-fio', unidade: 'm', qtd: 30, unit_mat: 10, unit_mo: 5 }] });
   adm('prop_portal', { id: id1, cliente_id: cli, modo: 'aberto' });

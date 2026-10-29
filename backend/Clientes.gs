@@ -358,11 +358,12 @@ const CLI_ORC_ST_ = ['Enviado', 'Aprovado', 'Revisado', 'Perdido'];
 const CLI_ORC_TIPOS_ = { duvida: 'Dúvida', incluir: 'Incluir item', retirar: 'Retirar item', quantidade: 'Mudar quantidade', geral: 'Consideração' };
 function propAceite_(p) { try { return p.aceite_json ? JSON.parse(p.aceite_json) : null; } catch (e) { return null; } }
 /* o orçamento some do portal quando a revisão mais nova volta para a Size (rascunho, nova revisão em
- * andamento ou cancelado): o cliente não fica vendo a versão antiga enquanto ela é refeita */
+ * andamento ou cancelado) ou foi tirada deste cliente: ele não fica vendo a versão antiga */
 function cliPropostas_(cid) {
   const todas = central_('Propostas').all(), ult = {};   // a revisão mais nova conta mesmo sem o cliente ligado nela
   todas.forEach(p => { const k = String(p.numero); if (!ult[k] || num_(p.revisao) > num_(ult[k].revisao)) ult[k] = p; });
-  return todas.filter(p => String(p.cliente_id) === String(cid) && CLI_ORC_ST_.indexOf(p.status) >= 0 && CLI_ORC_ST_.indexOf(ult[String(p.numero)].status) >= 0);
+  return todas.filter(p => { const u = ult[String(p.numero)];   // e a mais nova precisa estar ligada a este cliente
+    return String(p.cliente_id) === String(cid) && CLI_ORC_ST_.indexOf(p.status) >= 0 && CLI_ORC_ST_.indexOf(u.status) >= 0 && String(u.cliente_id) === String(cid); });
 }
 function cliPropAchar_(ctx, id) {
   const p = cliPropostas_(ctx.cli.id).find(x => String(x.id) === String(id));
