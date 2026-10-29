@@ -13,7 +13,7 @@ async function vClientes() {
     ${A.github ? '' : `<form class="card grid" id="clGh"><h3>${ic('download')} Publicação do endereço do cliente</h3>
       <p class="mute" style="margin:0">Para o sistema publicar o endereço próprio de cada cliente, ele precisa de uma chave do GitHub com permissão de escrita no repositório do app. Faça isso uma vez só:
       no GitHub, Settings → Developer settings → Fine-grained tokens → Generate new token, repositório <b>renancod/size</b>, permissão <b>Contents: Read and write</b>. Cole a chave abaixo: ela fica guardada só no servidor.</p>
-      <div class="g2"><label>Chave (token)<input name="token" type="password" autocomplete="off" required></label><label>Repositório<input name="repo" value="renancod/size" required></label></div>
+      <div class="g2"><label>Chave (token)<input name="chave" type="password" autocomplete="off" required></label><label>Repositório<input name="repo" value="renancod/size" required></label></div>
       <button class="btn">Guardar chave</button></form>`}
     <div class="cl-lista">${A.clientes.map(c => `<a class="card cl-item" href="#/admin/cliente/${enc(c.id)}" style="text-decoration:none;color:inherit">
       <span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>
@@ -21,7 +21,8 @@ async function vClientes() {
       ${ic('chevron')}</a>`).join('') || '<div class="card vazio"><p>Nenhum cliente ainda.</p></div>'}</div>`);
   if ($('#clGh')) $('#clGh').onsubmit = async e => {
     e.preventDefault();
-    try { toast((await api('cli_github', { token: e.target.token.value, repo: e.target.repo.value })).msg); vClientes(); } catch (x) { toast(x.message, 1); }
+    // "chave", nunca "token": token é o login do app na chamada (sobrescrever derrubava a sessão)
+    try { toast((await api('cli_github', { chave: e.target.chave.value, repo: e.target.repo.value })).msg); vClientes(); } catch (x) { toast(x.message, 1); }
   };
 }
 

@@ -84,6 +84,10 @@ test('administrador: lista, endereço único e publicação exige a chave do Git
   assert.throws(() => t.adm('cli_salvar', { cliente: { nome: 'Outro', obra_id: t.obra, modelo: 'global', cor: '#000000', slug: 'ava-residence' } }), /outro cliente/);
   const img = 'data:image/png;base64,' + Buffer.from('png').toString('base64');
   assert.throws(() => t.adm('cli_publicar', { id: t.cli, imagens: { 'icon-192.png': img, 'icon-512.png': img, 'icon-maskable-512.png': img, 'icon-180.png': img } }), /chave do GitHub/);
+  // guardar a chave do GitHub não troca o login do administrador (o campo é "chave", não "token")
+  t.G.UrlFetchApp.fetch = () => ({ getResponseCode: () => 200, getContentText: () => '{}' });
+  assert.match(t.adm('cli_github', { chave: 'github_pat_' + 'x'.repeat(40), repo: 'renancod/size' }).msg, /guardada/);
+  assert.equal(t.adm('cli_admin').github, true);
   // o administrador pré-visualiza o portal do cliente
   assert.ok(t.adm('cli_inicio', { cliente: t.cli }).andamento);
 });

@@ -252,7 +252,7 @@ function cliUsuarioSalvar_(q, ctx) {
 
 /* ---------- endereço próprio do cliente: c/<slug>/ com ícone, nome e cor, publicado no repositório do app ---------- */
 function cliGithub_(q, ctx) {
-  const tok = String(q.token || '').trim(), repo = String(q.repo || 'renancod/size').trim();
+  const tok = String(q.chave || '').trim(), repo = String(q.repo || 'renancod/size').trim();
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Repositório inválido (dono/nome).');
   if (tok.length < 20) throw new Error('Cole a chave (token) do GitHub.');
   const r = UrlFetchApp.fetch('https://api.github.com/repos/' + repo, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' }, muteHttpExceptions: true });
