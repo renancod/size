@@ -64,6 +64,24 @@ function setup() {
   Logger.log('Pasta no Drive: ' + raizPasta_().getUrl());
 }
 
+/* Esqueceu a senha de administrador: rode esta função no editor do Apps Script (Executar). Ela gera uma senha provisória
+ * para cada administrador ativo, libera o bloqueio por tentativas erradas e mostra login + senha no Registro de execução.
+ * Só quem abre o editor (a conta Google dona do script) vê a senha; no primeiro acesso o app pede uma senha nova. */
+function senhaProvisoriaAdmin() {
+  const U = central_('Usuarios'), cache = CacheService.getScriptCache();
+  const admins = U.all().filter(u => sim_(u.admin) && sim_(u.ativo) && !u.cliente_id);
+  if (!admins.length) { Logger.log('Nenhum administrador ativo encontrado na aba Usuarios.'); return; }
+  admins.forEach(u => {
+    const senha = 'Size-' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+    definirSenha_(u, senha);
+    u.trocar_senha = 'Sim';
+    U.update(u);
+    [u.login, u.email].filter(Boolean).forEach(l => cache.remove('lf|' + norm_(l).slice(0, 80)));
+    Logger.log('USUÁRIO: ' + u.login + '   SENHA PROVISÓRIA: ' + senha + '   (o app pede uma senha nova no primeiro acesso)');
+  });
+  log_({ u: { nome: 'Editor do Apps Script' } }, 'senha_provisoria_admin', admins.map(u => u.login).join(', '));
+}
+
 function limparAbaPadrao_(ss) {
   ss.getSheets().forEach(sh => {
     if (ss.getSheets().length > 1 && /^(Sheet1|Página1|Planilha1|Folha1)$/.test(sh.getName()) && sh.getLastRow() === 0) ss.deleteSheet(sh);
