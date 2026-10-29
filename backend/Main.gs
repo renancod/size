@@ -183,6 +183,8 @@ const ROTAS = {
   cli_orc_aceitar: { cli: 'orc', lock: true, fn: cliOrcAceitar_ },
   cli_orc_arquivo: { cli: 'orc', fn: cliOrcArquivo_ },
   cli_orc_insumos: { cli: 'orc', fn: cliOrcInsumos_ },
+  cli_rel_andamento: { cli: 'cronograma', fn: cliRelAndamento_ },
+  cli_rdo: { cli: 'diario', fn: cliRdo_ },
   prop_portal: { base: 'Gerir', lock: true, fn: propPortal_ },
   prop_contrato: { base: 'Gerir', lock: true, fn: propContrato_ },
   prop_responder: { base: 'Gerir', lock: true, fn: propResponder_ },

@@ -67,6 +67,16 @@ test('diário: só aparece depois que o engenheiro libera, sem ocorrências; fot
   assert.equal(d.fotos[0].legenda, 'Base compactada');
   assert.ok(!JSON.stringify(d).includes('Briga'));
   assert.ok(t.cliente('cli_foto', { id: foto }).b64);
+  // relatórios: RDO do dia e andamento do período, sem ocorrências internas
+  const rdo = t.cliente('cli_rdo', { data: dia(0) });
+  assert.equal(rdo.servicos[0].dia, 40);
+  assert.equal(rdo.fotos.length, 1);
+  assert.ok(!JSON.stringify(rdo).includes('Briga'));
+  const rel = t.cliente('cli_rel_andamento', { de: dia(-7), ate: dia(0) });
+  assert.ok(rel.geral && Array.isArray(rel.curva));
+  assert.deepEqual(rel.ocorrencias, []);
+  assert.equal(rel.fotos.length, 1);
+  assert.ok(!JSON.stringify(rel).includes('Briga'));
   const n = t.cliente('notificacoes').itens;
   assert.equal(n.length, 1);
   assert.match(n[0].url, /^\.\/(c\/ava-residence\/)?#\/c\/diario\//);

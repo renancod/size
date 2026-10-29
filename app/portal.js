@@ -7,6 +7,7 @@ Object.assign(IC, {
   sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
   pdf: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6M9 18h4'
 });
+if (!IC.chart) IC.chart = 'M3 3v18h18M7 16l4-4 3 3 6-6';
 const PC = { fotos: new Map() };
 /* no endereço próprio (c/<slug>/) a página usa <base href="../../"> para achar os arquivos do app; com isso um link "#/c/…"
  * iria para a raiz do site (o app da Size). Os links de tela trocam só o "#" do endereço atual. */
@@ -87,7 +88,8 @@ function portalIniciar() {
   document.title = C.nome;
   const ob = !!C.obra, orc = !ob || C.orcamentos > 0;
   const nav = [['#/c', 'Início', 'home', true], ['#/c/orcamentos', 'Orçamentos', 'file', orc], ['#/c/cronograma', 'Cronograma', 'cal', ob && pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', ob && pcTem('diario')],
-    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
+    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')],
+    ['#/c/relatorios', 'Relatórios', 'pdf', ob && (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro'))], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
   // celular: topo + menu embaixo; computador: menu à esquerda com a marca (o mesmo <nav>, arrumado pelo CSS)
   $('#raiz').innerHTML = `<div class="pc-shell ${nav.length > 5 ? 'muitos' : ''}">
     <header class="pc-top"><img src="${pcIcone(C)}" alt=""><div><b>${esc(C.nome)}</b><small id="titulo">${esc(C.obra_nome || '')}</small></div><span class="pc-selo">por Size Engenharia</span></header>
@@ -102,9 +104,11 @@ function portalIniciar() {
 async function portalRotear() {
   if (!$('.pc-shell')) return;
   const h = location.hash || '#/c', id = ++rotaN;
-  $$('.pc-nav a').forEach(a => a.classList.toggle('on', a.dataset.h === '#/c' ? h === '#/c' : h.indexOf(a.dataset.h.replace(/s$/, '')) === 0));
+  const hn = /^#\/c\/rel\//.test(h) ? '#/c/relatorios' : h;
+  $$('.pc-nav a').forEach(a => a.classList.toggle('on', a.dataset.h === '#/c' ? hn === '#/c' : hn.indexOf(a.dataset.h.replace(/s$/, '')) === 0));
   fecharModal();
-  const R = [[/^#\/c$/, pcInicio], [/^#\/c\/orcamentos$/, pcOrcs], [/^#\/c\/orcamento\/([\w-]+)$/, pcOrc], [/^#\/c\/cronograma$/, pcCrono], [/^#\/c\/diario$/, pcDiarios], [/^#\/c\/diario\/(\d{4}-\d{2}-\d{2})$/, pcDiario],
+  const R = [[/^#\/c$/, pcInicio], [/^#\/c\/relatorios$/, pcRels], [/^#\/c\/rel\/andamento\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})$/, pcRelAnd],
+    [/^#\/c\/rel\/rdo\/(\d{4}-\d{2}-\d{2})$/, pcRelRdo], [/^#\/c\/rel\/financeiro$/, pcRelFin], [/^#\/c\/orcamentos$/, pcOrcs], [/^#\/c\/orcamento\/([\w-]+)$/, pcOrc], [/^#\/c\/cronograma$/, pcCrono], [/^#\/c\/diario$/, pcDiarios], [/^#\/c\/diario\/(\d{4}-\d{2}-\d{2})$/, pcDiario],
     [/^#\/c\/qualidade$/, pcFvs], [/^#\/c\/financeiro$/, pcFin], [/^#\/c\/conta$/, pcConta]];
   const r = R.find(([re]) => re.test(h));
   if (!r) { location.hash = '#/c'; return; }
@@ -279,7 +283,7 @@ async function pcDiarios() {
 async function pcDiario(data) {
   pcTit('Diário de ' + pcData(data));
   const d = await api('cli_diario', { data });
-  view(`<a class="linkbtn" href="#/c/diario">${ic('back')} Todos os dias</a>
+  view(`<div class="pc-lin"><a class="linkbtn" href="#/c/diario">${ic('back')} Todos os dias</a><a class="btn sec peq" href="#/c/rel/rdo/${d.data}">${ic('pdf')} RDO (PDF)</a></div>
     <section class="pc-card"><div class="pc-k">${pcData(d.data)} · diário nº ${d.numero}</div>
       <div class="pc-lin"><span>${ic('sun')} ${esc(d.condicao || '—')}</span><small>${d.tmax !== '' && d.tmax != null ? nf(d.tmin) + '° a ' + nf(d.tmax) + '°' : ''}</small></div>
       ${d.chuva_manha || d.chuva_tarde ? `<small>Manhã: ${esc(d.chuva_manha || '—')} · Tarde: ${esc(d.chuva_tarde || '—')}</small>` : ''}
@@ -331,4 +335,84 @@ function pcConta() {
     e.preventDefault();
     try { const r = await api('trocarSenha', { atual: e.target.atual.value, nova: e.target.nova.value }); if (r.token) { S.token = r.token; LS.set('cs_token', r.token); } toast(r.msg); e.target.reset(); } catch (x) { toast(x.message, 1); }
   };
+}
+
+/* ---------- relatórios: folhas para imprimir / salvar em PDF (cabeçalho Size + empreendimento, rodapé com a plataforma) ---------- */
+const pcHoje = () => new Date().toLocaleDateString('sv-SE');
+const pcMais = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv-SE'); };
+async function pcRels() {
+  pcTit('Relatórios');
+  const h = pcHoje(), m0 = h.slice(0, 8) + '01', ma = pcMais(m0, -1), mi = ma.slice(0, 8) + '01';
+  const per = [['Últimos 7 dias', pcMais(h, -6), h], ['Este mês', m0, h], ['Mês passado', mi, ma], ['Últimos 90 dias', pcMais(h, -89), h]];
+  const L = pcTem('diario') ? (await api('cli_diarios')).diarios : [];
+  view(`<h2 class="pc-h">Relatórios</h2><div class="pc-grade">
+    ${pcTem('cronograma') ? `<section class="pc-card"><div class="pc-k">${ic('chart')} Andamento da obra</div><p class="mute" style="margin:0 0 8px">Executado × previsto, curva de avanço, etapas, prazos, clima e fotos do período.</p>
+      <div class="pc-acao">${per.map(([t, a, b]) => `<a class="btn sec" href="#/c/rel/andamento/${a}/${b}">${esc(t)} <small>${pcData(a).slice(0, 5)} a ${pcData(b).slice(0, 5)}</small></a>`).join('')}
+      <div class="g2"><label>De<input type="date" id="pcDe" value="${m0}"></label><label>Até<input type="date" id="pcAte" value="${h}"></label></div><button type="button" class="btn" id="pcRelOk">${ic('pdf')} Gerar período escolhido</button></div></section>` : ''}
+    ${pcTem('diario') ? `<section class="pc-card"><div class="pc-k">${ic('camera')} Diário de obra (RDO)</div>${L.slice(0, 12).map(d => `<div class="pc-lin"><span><b>${pcData(d.data)}</b> <small>${esc(d.condicao || '')}</small></span><a class="btn sec peq" href="#/c/rel/rdo/${d.data}">${ic('pdf')} RDO</a></div>`).join('') || '<div class="mute">Nenhum diário liberado ainda.</div>'}${L.length > 12 ? `<a class="linkbtn" href="#/c/diario">ver todos os dias</a>` : ''}</section>` : ''}
+    ${pcTem('financeiro') ? `<section class="pc-card"><div class="pc-k">${ic('money')} Resumo financeiro</div><p class="mute" style="margin:0 0 8px">Contratos (contratado, medido, pago e saldo) e medições aprovadas e pagas.</p><a class="btn" href="#/c/rel/financeiro">${ic('pdf')} Gerar resumo</a></section>` : ''}
+  </div>`);
+  if ($('#pcRelOk')) $('#pcRelOk').onclick = () => { const a = $('#pcDe').value, b = $('#pcAte').value; if (!a || !b || b < a) return toast('Escolha o período.', 1); location.hash = `#/c/rel/andamento/${a}/${b}`; };
+}
+/* a folha: barra (voltar / imprimir) + documento */
+function pcDoc(titulo, sub, corpo, nomeArq) {
+  const C = pcCli();
+  view(`<div class="pc-doc-bar"><a class="linkbtn" href="#/c/relatorios">${ic('back')} Relatórios</a><button type="button" class="btn" id="pcDocImp">${ic('download')} Imprimir / salvar PDF</button><small class="mute">no celular: compartilhar → imprimir → salvar como PDF</small></div>
+    <article class="pc-doc"><header class="pc-doc-h"><img class="sz" src="logo.png" alt="Size Engenharia"><div><b>${esc(titulo)}</b><span>${esc(C.obra_nome || C.nome)}${sub ? ' · ' + sub : ''}</span></div><img class="emp" src="${pcIcone(C)}" alt=""></header>
+    ${corpo}
+    <footer class="pc-doc-f"><span>Emitido pela plataforma Size Engenharia em ${new Date().toLocaleString('pt-BR')}</span><span>${esc(C.nome)}</span></footer></article>`);
+  $('#pcDocImp').onclick = () => { const t = document.title; document.title = nomeArq; window.print(); setTimeout(() => { document.title = t; }, 1500); };
+}
+const pcKpi = (v, t, cl) => `<div class="pc-kpi ${cl || ''}"><b>${v}</b><span>${t}</span></div>`;
+/* curva S simples (SVG): previsto tracejado, realizado cheio e projeção */
+function pcCurvaS(cv) {
+  if (!cv || cv.length < 2) return '<p class="mute">Ainda não há etapas com datas para montar a curva.</p>';
+  const W = 640, H = 200, x = i => 30 + i * (W - 40) / (cv.length - 1), y = p => H - 20 - Math.min(100, Math.max(0, p || 0)) / 100 * (H - 34);
+  const linha = (k, cl) => { const pts = cv.map((c, i) => c[k] == null || c[k] === '' ? null : `${x(i).toFixed(1)},${y(c[k]).toFixed(1)}`).filter(Boolean); return pts.length > 1 ? `<polyline class="${cl}" points="${pts.join(' ')}"/>` : ''; };
+  const grade = [0, 25, 50, 75, 100].map(p => `<line x1="30" x2="${W - 10}" y1="${y(p)}" y2="${y(p)}" class="g"/><text x="2" y="${y(p) + 4}">${p}%</text>`).join('');
+  const rot = [0, Math.floor(cv.length / 2), cv.length - 1].map(i => `<text x="${x(i) - 14}" y="${H - 4}">${pcData(cv[i].data).slice(0, 5)}</text>`).join('');
+  return `<svg class="pc-curvas" viewBox="0 0 ${W} ${H}" role="img" aria-label="Curva de avanço">${grade}${linha('previsto', 'prev')}${linha('projetado', 'proj')}${linha('realizado', 'real')}${rot}</svg>
+    <div class="pc-leg"><span class="prev">previsto</span><span>realizado</span><span class="proj">projetado (ritmo atual)</span></div>`;
+}
+async function pcRelAnd(de, ate) {
+  pcTit('Relatório de andamento');
+  const r = await api('cli_rel_andamento', { de, ate }), G = r.geral, P = r.periodo;
+  const fr = r.frentes.map(f => `<div class="pc-doc-b"><div class="pc-lin"><b>${esc(f.nome)}</b><b>${pcPct(f.pct)}</b></div>${pcBarra(f.pct_prev, f.pct)}
+    <table class="pc-tab"><thead><tr><th>Serviço</th><th class="n">Previsto</th><th class="n">Executado</th><th class="n">No período</th><th class="n">%</th></tr></thead><tbody>
+    ${f.itens.map(i => `<tr><td>${esc(i.servico)}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td><td class="n">${nf(i.executado)}</td><td class="n">${i.periodo ? nf(i.periodo) : '—'}</td><td class="n">${pcPct(i.pct)}</td></tr>`).join('')}</tbody></table></div>`).join('');
+  const ets = r.etapas.map(e => { const t = e.itens.map(i => i.termino).filter(Boolean).sort().pop(), p = e.itens.map(i => i.projecao).filter(Boolean).sort().pop(); return `<tr><td>${esc(e.nome)}</td><td>${pcSit(e.situacao)}</td><td class="n">${t ? pcData(t) : '—'}</td><td class="n">${p && e.situacao !== 'concluido' ? pcData(p) : '—'}</td></tr>`; }).join('');
+  pcDoc('Relatório de andamento da obra', `${pcData(r.de)} a ${pcData(r.ate)}`, `
+    <div class="pc-kpis">${pcKpi(pcPct(G.pct), 'executado até ' + pcData(r.ate))}${pcKpi('+' + pcPct(G.avanco).replace('%', ' p.p.'), 'avanço no período')}${pcKpi(G.pct_prev > 0 ? pcPct(G.pct_prev) : '—', 'previsto até ' + pcData(r.ate))}
+      ${pcKpi(G.termino ? pcData(G.termino) : '—', 'término previsto')}${pcKpi(G.projecao ? pcData(G.projecao) : '—', 'término projetado', G.atraso > 0 ? 'risco' : '')}${pcKpi(G.atraso > 0 ? G.atraso + ' dias úteis' : 'No prazo', G.atraso > 0 ? 'de atraso projetado' : 'pelo ritmo atual', G.atraso > 0 ? 'risco' : '')}</div>
+    <h3 class="pc-doc-s">Curva de avanço físico</h3>${pcCurvaS(r.curva)}
+    ${fr ? `<h3 class="pc-doc-s">Avanço por frente</h3>${fr}` : ''}
+    ${ets ? `<h3 class="pc-doc-s">Prazos</h3><table class="pc-tab"><thead><tr><th>Etapa</th><th>Situação</th><th class="n">Término previsto</th><th class="n">Projetado</th></tr></thead><tbody>${ets}</tbody></table>` : ''}
+    <h3 class="pc-doc-s">Produção e clima no período</h3><div class="pc-kpis">${pcKpi(P.uteis, 'dias úteis')}${pcKpi(P.trabalhados, 'dias com produção')}${pcKpi(P.parados, 'parados por chuva' + (P.chuva_mm ? ' · ' + nf(P.chuva_mm) + ' mm' : ''))}${pcKpi(P.efetivo || '—', 'efetivo médio (pessoas/dia)')}</div>
+    ${r.fotos.length ? `<h3 class="pc-doc-s">Registro fotográfico</h3><div class="pc-doc-fotos">${r.fotos.map(f => `<figure><img src="data:image/jpeg;base64,${f.b64}" alt=""><figcaption><b>${pcData(f.data)}</b>${f.etapa ? ' · ' + esc(f.etapa) : ''}${f.legenda ? '<br>' + esc(f.legenda) : ''}</figcaption></figure>`).join('')}</div>` : ''}
+    <p class="pc-doc-nota">Avanço físico ${G.usa_orcamento ? 'ponderado pelo valor dos serviços' : 'pela média dos serviços das etapas'}. Projeção pelo ritmo dos últimos dias trabalhados.</p>
+    <div class="pc-doc-ass"><div><span></span>Responsável técnico · Size Engenharia</div><div><span></span>Contratante (ciente)</div></div>`, `Andamento ${pcCli().nome} ${r.de} a ${r.ate}`);
+}
+async function pcRelRdo(data) {
+  pcTit('RDO');
+  const r = await api('cli_rdo', { data }), d = r.diario, c = d.clima, n = 'RDO ' + String(d.numero).padStart(3, '0');
+  const per = (t, p) => p ? `<div><b>${t}</b><span>${esc(p.desc || '')}</span><small>${nf(p.mm)} mm${p.tmax !== '' && p.tmax != null ? ' · ' + Math.round(p.tmin) + '–' + Math.round(p.tmax) + '°C' : ''}</small></div>` : '';
+  const pes = r.equipes.reduce((t, e) => t + e.pessoas, 0);
+  pcDoc('Relatório diário de obra', `${n} · ${pcData(r.data)}`, `
+    <h3 class="pc-doc-s">Condições do dia</h3><div class="pc-kpis">${c ? per('Manhã', c.manha) + per('Tarde', c.tarde) : ''}${pcKpi(esc(d.condicao || '—'), 'condição de trabalho')}${pcKpi(pes || '—', 'pessoas trabalhando')}</div>
+    ${r.equipes.length ? `<h3 class="pc-doc-s">Efetivo</h3><table class="pc-tab"><thead><tr><th>Etapa</th><th>Equipe</th><th class="n">Pessoas</th></tr></thead><tbody>${r.equipes.map(e => `<tr><td>${esc(e.etapa)}</td><td>${esc(e.equipe)}</td><td class="n">${e.pessoas}</td></tr>`).join('')}</tbody></table>` : ''}
+    <h3 class="pc-doc-s">Serviços executados</h3>${r.servicos.length ? `<table class="pc-tab"><thead><tr><th>Etapa</th><th>Serviço</th><th class="n">No dia</th><th class="n">Acumulado</th><th class="n">Previsto</th><th class="n">%</th></tr></thead><tbody>
+      ${r.servicos.map(s => `<tr><td>${esc(s.etapa)}</td><td>${esc(s.servico)}</td><td class="n"><b>${nf(s.dia)}</b> ${esc(s.unidade || '')}</td><td class="n">${nf(s.acumulado)}</td><td class="n">${nf(s.previsto)}</td><td class="n">${s.pct === '' ? '—' : pcPct(s.pct)}</td></tr>`).join('')}</tbody></table>` : '<p class="mute">Nenhum serviço lançado.</p>'}
+    ${r.fotos.length ? `<h3 class="pc-doc-s">Registro fotográfico</h3><div class="pc-doc-fotos">${r.fotos.map(f => `<figure><img src="data:image/jpeg;base64,${f.b64}" alt=""><figcaption>${esc(f.legenda || '')}</figcaption></figure>`).join('')}</div>` : ''}
+    <div class="pc-doc-ass"><div><span></span>${esc(d.responsavel || 'Encarregado')}<small>responsável pelo diário</small></div><div><span></span>${esc(d.revisado_por || '')}<small>engenheiro responsável</small></div></div>`, `${n} ${pcCli().nome} ${r.data}`);
+}
+async function pcRelFin() {
+  pcTit('Resumo financeiro');
+  const d = await api('cli_financeiro'), T = d.total;
+  pcDoc('Resumo financeiro da obra', 'posição em ' + pcData(pcHoje()), `
+    <div class="pc-kpis">${pcKpi(pcRs(T.contratado), 'contratado')}${pcKpi(pcRs(T.medido), 'medido')}${pcKpi(pcRs(T.pago), 'pago')}${pcKpi(pcRs(T.saldo), 'saldo a medir')}</div>
+    <h3 class="pc-doc-s">Contratos</h3>${d.contratos.length ? `<table class="pc-tab"><thead><tr><th>Contrato</th><th class="n">Contratado</th><th class="n">Medido</th><th class="n">Pago</th><th class="n">Saldo</th></tr></thead><tbody>
+      ${d.contratos.map(c => `<tr><td><b>${esc(c.numero || '')}</b> ${esc(c.empreiteiro)}${c.objeto ? `<br><small>${esc(c.objeto)}</small>` : ''}</td><td class="n">${pcRs(c.contratado)}</td><td class="n">${pcRs(c.medido)}<small> ${pcPct(c.pct_med)}</small></td><td class="n">${pcRs(c.pago)}</td><td class="n">${pcRs(c.saldo)}</td></tr>`).join('')}</tbody></table>` : '<p class="mute">Nenhum contrato ainda.</p>'}
+    <h3 class="pc-doc-s">Medições aprovadas e pagas</h3>${d.medicoes.length ? `<table class="pc-tab"><thead><tr><th>Medição</th><th>Período</th><th>Situação</th><th class="n">Valor</th></tr></thead><tbody>
+      ${d.medicoes.map(m => `<tr><td><b>${esc(m.numero || '')}</b> ${esc(m.empreiteiro)}</td><td>${pcData(m.de)} a ${pcData(m.ate)}</td><td>${m.status === 'Paga' ? 'paga ' + pcData(m.pago_em) : 'aprovada ' + pcData(m.aprovado_em)}</td><td class="n">${pcRs(m.valor)}</td></tr>`).join('')}</tbody></table>` : '<p class="mute">Nenhuma medição aprovada ainda.</p>'}
+    <p class="pc-doc-nota">Valores das medições pelos preços dos contratos com as empreiteiras.</p>`, `Financeiro ${pcCli().nome} ${pcHoje()}`);
 }

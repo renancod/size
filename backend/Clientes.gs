@@ -558,3 +558,35 @@ function cliOrcInsumos_(q, ctx) {
   r.soma = propR2_(r.insumos.reduce((t, i) => t + i.custo, 0));
   return r;
 }
+
+/* ---------- relatórios do cliente (folhas para imprimir / salvar PDF no portal) ----------
+ * Andamento: o relatório "andamento" da obra (sem R$), sem as ocorrências e com fotos só dos dias liberados.
+ * RDO: o diário do dia liberado, sem ocorrências, observações nem avisos internos. */
+function cliRelAndamento_(q, ctx) {
+  const r = obraRelatorio_({ modelo: 'andamento', de: q.de, ate: q.ate, fotos: false }, ctx);
+  const lib = {};
+  cliDiariosLib_(ctx).forEach(d => { lib[d._dia] = 1; });
+  const et = {};
+  obraTab_(ctx, 'Etapas').all().forEach(e => { et[String(e.codigo)] = e.nome; });
+  r.fotos = obraTab_(ctx, 'FotosExec').all().filter(f => { const d = ymd_(f.data); return lib[d] && d >= r.de && d <= r.ate; })
+    .sort((a, b) => String(b.data).localeCompare(String(a.data))).slice(0, 8).map(f => {
+      let b64 = '';
+      try { b64 = Utilities.base64Encode(DriveApp.getFileById(f.mini_id || f.file_id).getBlob().getBytes()); } catch (e) { /* foto apagada */ }
+      return { b64: b64, legenda: f.legenda || '', data: ymd_(f.data), etapa: et[String(f.etapa)] || '' };
+    }).filter(f => f.b64);
+  r.ocorrencias = [];
+  r.emissor = 'Size Engenharia';
+  r.cliente = cliPub_(ctx.cli, ctx.obra);
+  return r;
+}
+function cliRdo_(q, ctx) {
+  const dia = ymd_(q.data);
+  if (!cliDiariosLib_(ctx).some(d => d._dia === dia)) throw new Error('Diário não disponível.');
+  const r = execRdo_({ data: dia }, ctx), d = r.diario;
+  r.diario = { numero: d.numero, data: d.data, status: d.status, condicao: d.condicao, responsavel: d.responsavel, revisado_por: d.revisado_por, revisado_em: d.revisado_em, clima: d.clima };
+  r.servicos.forEach(s => { delete s.obs; });
+  r.avisos = [];
+  r.fotos = r.fotos.filter(f => f.b64).map(f => ({ b64: f.b64, legenda: f.legenda || '', tirada_em: f.tirada_em }));
+  r.cliente = cliPub_(ctx.cli, ctx.obra);
+  return r;
+}
