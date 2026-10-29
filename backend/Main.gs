@@ -205,6 +205,7 @@ const ROTAS = {
   cli_salvar: { admin: true, lock: true, fn: cliSalvar_ },
   cli_usuario_salvar: { admin: true, lock: true, fn: cliUsuarioSalvar_ },
   cli_emp_foto_salvar: { admin: true, lock: true, fn: cliEmpFotoSalvar_ },
+  cli_usuario_excluir: { admin: true, lock: true, fn: cliUsuarioExcluir_ },
   cli_publicar: { admin: true, fn: cliPublicar_ },   // trava só no fim (as idas ao GitHub demoram)
   cli_github: { admin: true, lock: true, fn: cliGithub_ },
   exec_cliente: { obra: true, perm: 'exec_planejar', lock: true, fn: execCliente_ },

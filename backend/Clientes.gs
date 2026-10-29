@@ -27,6 +27,19 @@ function cliEmps_(c) {
     return { obra: String(e.obra), modelo: modelo, modulos: modelo === 'personalizado' ? cliMods_(e.modulos) : CLI_MODELOS_[modelo].slice(), foto: e.foto || '', desde: e.desde || '', orcamento: e.orcamento || '' };
   });
 }
+/* o que cada login do cliente vê (Usuarios.portal_json): obras = 'todas' (inclusive as que vierem) ou a lista; orcamentos;
+ * modulos = áreas que esta pessoa vê, dentro do que cada obra libera (ex.: engenheiro sem financeiro). Vazio = tudo.
+ * Administrador pré-visualizando (sem cliente_id) vê tudo. */
+function cliAcesso_(u) {
+  let a = {};
+  try { a = u && u.cliente_id && u.portal_json ? JSON.parse(u.portal_json) || {} : {}; } catch (e) { a = {}; }
+  return { obras: Array.isArray(a.obras) ? a.obras.map(String) : 'todas', orcamentos: a.orcamentos !== false, modulos: Array.isArray(a.modulos) ? cliMods_(a.modulos) : null };
+}
+function cliEmpsU_(c, u) {
+  const A = cliAcesso_(u);
+  return cliEmps_(c).filter(e => A.obras === 'todas' || A.obras.indexOf(e.obra) >= 0)
+    .map(e => Object.assign({}, e, { modulos: A.modulos ? e.modulos.filter(m => A.modulos.indexOf(m) >= 0) : e.modulos }));
+}
 function cliAchar_(id) {
   const k = 'cl|' + id;
   let c = authCache_(k);
@@ -38,14 +51,14 @@ function cliObra_(id) {
   if (!o || !o.planilha_id) throw new Error('A obra deste acesso não foi encontrada. Fale com a Size.');
   return o;
 }
-function cliPub_(c) {
-  const E = cliEmps_(c), obras = E.length ? central_('Obras').all() : [], pre = c.slug && c.publicado_em ? 'c/' + c.slug + '/' : '';
+function cliPub_(c, u) {
+  const E = cliEmpsU_(c, u), A = cliAcesso_(u), obras = E.length ? central_('Obras').all() : [], pre = c.slug && c.publicado_em ? 'c/' + c.slug + '/' : '';
   const emps = E.map(e => { const o = obras.find(x => String(x.id) === String(e.obra)) || {}; return { id: e.obra, nome: o.nome || e.obra, sigla: o.sigla || '', endereco: o.endereco || '', modelo: e.modelo, tipo: CLI_TIPOS_[e.modelo], modulos: e.modulos }; });
   return {
     id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', empreendimentos: emps,
     // compatibilidade (app antigo aberto no celular): o primeiro empreendimento
     obra: emps.length > 0, modulos: emps.length ? emps[0].modulos : [], obra_nome: emps.length ? emps[0].nome : '',
-    publicado: !!c.publicado_em, capa: pre && sim_(c.capa) ? pre + 'capa.jpg' : '', logo: pre && sim_(c.logo) ? pre + 'logo.png' : '', orcamentos: cliPropostas_(c.id).length
+    publicado: !!c.publicado_em, capa: pre && sim_(c.capa) ? pre + 'capa.jpg' : '', logo: pre && sim_(c.logo) ? pre + 'logo.png' : '', orcamentos: A.orcamentos ? cliPropostas_(c.id).length : 0, ve_orcamentos: A.orcamentos
   };
 }
 
@@ -58,8 +71,11 @@ function cliCtx_(q, ctx) {
   if (!c || (!sim_(c.ativo) && !ctx.admin)) throw new Error('O acesso deste cliente está desativado. Fale com a Size.');
   const mod = ROTAS[q.acao].cli;
   ctx.cli = c; ctx.perms = [];
-  if (mod === 'orc') return;   // orçamentos: valem com ou sem obra
-  const E = cliEmps_(c);
+  if (mod === 'orc') {   // orçamentos: valem com ou sem obra (o Início é de todos)
+    if (q.acao !== 'cli_inicio' && !cliAcesso_(ctx.u).orcamentos) throw new Error('Os orçamentos não estão liberados para o seu acesso.');
+    return;
+  }
+  const E = cliEmpsU_(c, ctx.u);
   if (!E.length) throw new Error('O acompanhamento da obra ainda não foi liberado.');
   const e = q.obra ? E.find(x => x.obra === String(q.obra)) : E[0];
   if (!e) throw new Error('Este empreendimento não está liberado para você.');
@@ -77,7 +93,7 @@ function cliSessao_(u) {
   return {
     empresa: String(config_().EMPRESA || 'Size Engenharia'),
     usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: false, trocar_senha: sim_(u.trocar_senha), orcamentos: '' },
-    obras: [], permissoes: {}, cliente: cliPub_(c)
+    obras: [], permissoes: {}, cliente: cliPub_(c, u)
   };
 }
 
@@ -215,7 +231,7 @@ function cliMedPdf_(q, ctx) {
 /* sem q.obra e com mais de um empreendimento: um cartão por empreendimento (andamento guardado 10 min por obra);
  * com q.obra (ou um só empreendimento): o painel daquela obra */
 function cliInicio_(q, ctx) {
-  const orcs = cliOrcResumo_(ctx.cli.id), E = cliEmps_(ctx.cli), cli = cliPub_(ctx.cli);
+  const orcs = cliAcesso_(ctx.u).orcamentos ? cliOrcResumo_(ctx.cli.id) : [], E = cliEmpsU_(ctx.cli, ctx.u), cli = cliPub_(ctx.cli, ctx.u);
   if (!E.length) return { cliente: cli, obra: null, orcamentos: orcs };
   const e = q.obra ? E.find(x => x.obra === String(q.obra)) : E.length === 1 ? E[0] : null;
   if (q.obra && !e) throw new Error('Este empreendimento não está liberado para você.');
@@ -258,13 +274,15 @@ function cliNotif_(ctx) {
   let o = null;   // empreendimento da vez (a rota leva ?o= para o portal abrir nele)
   const add = (id, etapa, texto, resumo, rota, quando) => { if (o) rota += '?o=' + encodeURIComponent(o.id);
     itens.push({ id: 'cli|' + id, obra: o ? String(o.id) : '', obra_nome: o ? o.nome : c.nome, numero: '', etapa: etapa, texto: texto, resumo: resumo || '', situacao: '', prioridade: '', quando: fmtVal_(quando), rota: rota, url: base + rota }); };
-  // orçamentos: revisão nova enviada e resposta da Size às considerações
-  cliPropostas_(c.id).filter(p => p.status === 'Enviado' && novo(p.enviado_em)).forEach(p => add('o|' + p.id, 'cli_orc', 'Orçamento ' + propRotulo_(p) + ' disponível', p.empreendimento, '#/c/orcamento/' + p.id, p.enviado_em));
-  const meus = {};
-  cliPropostas_(c.id).forEach(p => { meus[String(p.numero)] = p; });
-  central_('PropostaComentarios').all().filter(x => x.status === 'respondido' && meus[String(x.numero)] && novo(x.respondido_em))
-    .forEach(x => add('r|' + x.id, 'cli_orc', 'Resposta da Size no orçamento ' + x.numero, String(x.resposta).slice(0, 80), '#/c/orcamento/' + x.proposta, x.respondido_em));
-  cliEmps_(c).forEach(e => {
+  // orçamentos: revisão nova enviada e resposta da Size às considerações (só para quem vê orçamentos)
+  if (cliAcesso_(ctx.u).orcamentos) {
+    cliPropostas_(c.id).filter(p => p.status === 'Enviado' && novo(p.enviado_em)).forEach(p => add('o|' + p.id, 'cli_orc', 'Orçamento ' + propRotulo_(p) + ' disponível', p.empreendimento, '#/c/orcamento/' + p.id, p.enviado_em));
+    const meus = {};
+    cliPropostas_(c.id).forEach(p => { meus[String(p.numero)] = p; });
+    central_('PropostaComentarios').all().filter(x => x.status === 'respondido' && meus[String(x.numero)] && novo(x.respondido_em))
+      .forEach(x => add('r|' + x.id, 'cli_orc', 'Resposta da Size no orçamento ' + x.numero, String(x.resposta).slice(0, 80), '#/c/orcamento/' + x.proposta, x.respondido_em));
+  }
+  cliEmpsU_(c, ctx.u).forEach(e => {
     const cx = { u: ctx.u, admin: false, perms: [] };
     try { cliAbrirObra_(cx, e); } catch (x) { return; }
     const mods = e.modulos, op = cliEmps_(c).length > 1 ? cx.obra.id + '|' : '';   // id antigo (uma obra só) continua igual
@@ -297,7 +315,7 @@ function cliAdmin_(q, ctx) {
       empreendimentos: E.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos, foto: !!e.foto, nome: (obras.find(o => String(o.id) === e.obra) || {}).nome || e.obra })),
       ativo: sim_(c.ativo), estagio: !sim_(c.ativo) ? 'Inativo' : E.length ? 'Obra' : 'Negociação', orcamentos: cliOrcResumo_(c.id), logo: sim_(c.logo), capa: sim_(c.capa),
       url: c.slug && c.publicado_em ? cliUrl_(c.slug) : '',
-      usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso) }))
+      usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso), portal: cliAcesso_(u) }))
     }); }),
     obras: obras.map(o => ({ id: String(o.id), nome: o.nome, ativa: sim_(o.ativa) })),
     modulos: CLI_MODULOS_, modelos: CLI_MODELOS_, tipos: CLI_TIPOS_, github: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'), app_url: cliUrl_('')
@@ -354,9 +372,29 @@ function cliUsuarioSalvar_(q, ctx) {
   if (novo || q.senha) { definirSenha_(u, q.senha); u.trocar_senha = 'Sim'; }
   u.nome = nome; u.login = login; u.email = String(d.email || '').trim(); u.telefone = String(d.telefone || '').trim();
   u.ativo = d.ativo === false ? 'Não' : 'Sim';
+  // o que esta pessoa vê: obras (todas ou só algumas do cliente), orçamentos e áreas
+  if (q.portal) {
+    const E = cliEmps_(c).map(e => e.obra), P = q.portal;
+    const obras = P.obras === 'todas' || !Array.isArray(P.obras) ? 'todas' : P.obras.map(String).filter(x => E.indexOf(x) >= 0);
+    if (Array.isArray(obras) && !obras.length && P.orcamentos === false) throw new Error('Marque pelo menos uma obra ou os orçamentos: senão esta pessoa não vê nada.');
+    const mods = Array.isArray(P.modulos) ? cliMods_(P.modulos) : null;
+    u.portal_json = obras === 'todas' && P.orcamentos !== false && (!mods || mods.length === Object.keys(CLI_MODULOS_).length) ? ''
+      : JSON.stringify({ obras: obras, orcamentos: P.orcamentos !== false, modulos: mods && mods.length < Object.keys(CLI_MODULOS_).length ? mods : null });
+  }
   if (novo) U.insert(u); else U.update(u);
   log_(ctx, 'cliente_usuario', c.id + ' · ' + login);
   return { msg: novo ? 'Acesso criado. Envie o link, o usuário e a senha provisória ao cliente.' : q.senha ? 'Senha provisória definida.' : 'Acesso salvo.', id: u.id };
+}
+
+/* excluir um login do cliente (teste ou criado por engano): some do sistema e dos avisos no celular; considerações e
+ * aceites que ele fez continuam no orçamento com o nome dele */
+function cliUsuarioExcluir_(q, ctx) {
+  const U = central_('Usuarios'), u = U.all().find(x => String(x.id) === String(q.id));
+  if (!u || !u.cliente_id || String(u.cliente_id) !== String(q.cliente_id)) throw new Error('Este acesso não é deste cliente.');
+  U.removeWhere(x => String(x.id) === String(u.id));
+  central_('Aparelhos').removeWhere(a => String(a.usuario_id) === String(u.id));
+  log_(ctx, 'cliente_usuario_excluir', q.cliente_id + ' · ' + u.login);
+  return { msg: 'Acesso ' + u.login + ' excluído.' };
 }
 
 /* ---------- endereço próprio do cliente: c/<slug>/ com ícone, nome e cor, publicado no repositório do app ---------- */
@@ -529,7 +567,7 @@ function cliOrcamento_(q, ctx) {
   o.pode_aceitar = p.status === 'Enviado' && !p.aceite_json;
   o.empresa = String(config_().EMPRESA || 'Size Engenharia');
   // virou obra que ele acompanha: atalho para o painel da obra
-  if (p.obra_id && cliEmps_(ctx.cli).some(e => e.obra === String(p.obra_id))) o.obra_id = String(p.obra_id);
+  if (p.obra_id && cliEmpsU_(ctx.cli, ctx.u).some(e => e.obra === String(p.obra_id))) o.obra_id = String(p.obra_id);
   return o;
 }
 function cliOrcComentar_(q, ctx) {
@@ -702,7 +740,7 @@ function cliRelAndamento_(q, ctx) {
     }).filter(f => f.b64);
   r.ocorrencias = [];
   r.emissor = 'Size Engenharia';
-  r.cliente = cliPub_(ctx.cli, ctx.obra);
+  r.cliente = cliPub_(ctx.cli, ctx.u);
   return r;
 }
 function cliRdo_(q, ctx) {
@@ -713,6 +751,6 @@ function cliRdo_(q, ctx) {
   r.servicos.forEach(s => { delete s.obs; });
   r.avisos = [];
   r.fotos = r.fotos.filter(f => f.b64).map(f => ({ b64: f.b64, legenda: f.legenda || '', tirada_em: f.tirada_em }));
-  r.cliente = cliPub_(ctx.cli, ctx.obra);
+  r.cliente = cliPub_(ctx.cli, ctx.u);
   return r;
 }

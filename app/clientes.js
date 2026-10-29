@@ -2,6 +2,8 @@
  * do cartão, cor), logins de cada cliente e publicação do endereço próprio (c/<slug>/) com a logo, o ícone e o fundo do login.
  * Os ícones são recortados aqui no navegador (canvas) a partir da logo e enviados ao servidor, que publica no GitHub Pages. */
 const CL = { d: null, img: null, fundo: null };
+if (!IC.copy) IC.copy = 'M9 9h11v11H9zM5 15H4V4h11v1';
+if (!IC.mail) IC.mail = 'M4 4h16v16H4zM4 6l8 7 8-7';
 const CL_CORES = ['#1D6F5F', '#2B4C7E', '#8A5A2B', '#5B3E8C', '#9C2F3E', '#2E3440', '#0F6E8C', '#6B7A1F'];
 const clSlug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
@@ -56,8 +58,10 @@ async function vCliente(id) {
       ${c.url ? `<div class="aviso info">Endereço do cliente: <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a> <button type="button" class="linkbtn" id="clCop">copiar</button></div>` : novo ? '' : '<div class="aviso warn">Endereço ainda não publicado: escolha a logo e toque em Publicar endereço. Enquanto isso, o cliente já pode entrar pelo app da Size (com a cor dele).</div>'}
     </form>
     ${novo ? '' : `<div class="card"><div class="bp-h"><h3>${ic('users')} Acessos do cliente</h3><button type="button" class="btn sec peq" id="clNovoU">${ic('plus')} Novo acesso</button></div>
-      ${c.usuarios.map(u => `<div class="lin-sel" style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)"><span><b>${esc(u.nome)}</b> ${u.ativo ? '' : '<span class="bp-flag">desativado</span>'}<br><small>${esc(u.login)}${u.email ? ' · ' + esc(u.email) : ''}${u.ultimo_acesso ? ' · último acesso ' + esc(u.ultimo_acesso) : ' · ainda não entrou'}</small></span>
-        <button type="button" class="btn sec peq" data-u="${esc(u.id)}">Editar</button></div>`).join('') || '<p class="mute">Nenhum acesso ainda. Crie um login para cada pessoa do cliente (dono, fiscal…).</p>'}</div>`}`);
+      ${!c.ativo ? `<div class="aviso warn">O acesso deste cliente está <b>encerrado</b>: nenhum destes logins consegue entrar. <button type="button" class="btn peq" id="clReativar">Reativar acesso</button></div>` : ''}
+      ${c.usuarios.map(u => `<div class="cl-u"><span><b>${esc(u.nome)}</b> ${u.ativo ? '' : '<span class="bp-flag">desativado</span>'}<br><small>${esc(u.login)}${u.email ? ' · ' + esc(u.email) : ''}${u.ultimo_acesso ? ' · último acesso ' + esc(u.ultimo_acesso) : ' · ainda não entrou'}</small>
+        <span class="cl-u-ve">${clVeResumo(c, u.portal).map(x => `<span class="pc-chip">${esc(x)}</span>`).join('')}</span></span>
+        <span class="acoes"><button type="button" class="btn sec peq" data-share="${esc(u.id)}" title="Mandar o link e o usuário">${ic('send')} Compartilhar</button><button type="button" class="btn sec peq" data-u="${esc(u.id)}">Editar</button></span></div>`).join('') || '<p class="mute">Nenhum acesso ainda. Crie um login para cada pessoa do cliente (dono, engenheiro, fiscal…) e escolha o que cada um vê.</p>'}</div>`}`);
 
   // empreendimentos: obra, tipo (Gerenciamento / Execução / escolher os módulos) e a foto do cartão
   const emps = () => {
@@ -156,22 +160,102 @@ async function vCliente(id) {
     E.ativo = !E.ativo;
     try { toast((await salvar()).msg); vCliente(c.id); } catch (x) { E.ativo = !E.ativo; toast(x.message, 1); }
   };
+  if ($('#clReativar')) $('#clReativar').onclick = () => $('#clAtivo').click();
   if ($('#clNovoU')) $('#clNovoU').onclick = () => clUsuario(c, null);
   $$('[data-u]').forEach(b => { b.onclick = () => clUsuario(c, c.usuarios.find(u => u.id === b.dataset.u)); });
+  $$('[data-share]').forEach(b => { b.onclick = () => clCompartilhar(c, c.usuarios.find(u => u.id === b.dataset.share), ''); });
 }
 
-/* login de uma pessoa do cliente: novo (com senha provisória) ou edição (nova senha opcional) */
+/* resumo do que um login vê (chips na lista de acessos) */
+function clVeResumo(c, P) {
+  P = P || { obras: 'todas', orcamentos: true, modulos: null };
+  const nomes = (c.empreendimentos || []).filter(e => P.obras === 'todas' || P.obras.includes(e.obra)).map(e => e.nome);
+  const r = [P.obras === 'todas' ? (c.empreendimentos.length ? 'todas as obras' : 'obras quando houver') : nomes.length ? nomes.join(', ') : 'nenhuma obra'];
+  if (P.orcamentos) r.push('orçamentos');
+  if (P.modulos) { const fora = Object.keys(CL.d.modulos).filter(m => !P.modulos.includes(m)); if (fora.length) r.push('sem ' + fora.map(m => ({ cronograma: 'cronograma', diario: 'diário', fvs: 'FVS', financeiro: 'financeiro' })[m]).join(', ')); }
+  return r;
+}
+/* login de uma pessoa do cliente: novo (com senha provisória) ou edição (nova senha opcional) e o que ela vê */
+const CL_PERFIS = {
+  tudo: ['Dono / diretoria', 'Todas as obras, orçamentos e todas as áreas', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'diario', 'fvs', 'financeiro'] }],
+  tecnico: ['Engenheiro / fiscal', 'Acompanha as obras (cronograma, diário e FVS), sem orçamentos e sem financeiro', { obras: 'todas', orcamentos: false, modulos: ['cronograma', 'diario', 'fvs'] }],
+  financeiro: ['Financeiro', 'Orçamentos e o financeiro das obras', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'financeiro'] }]
+};
 function clUsuario(c, u) {
+  const A = CL.d, E = c.empreendimentos || [], P = JSON.parse(JSON.stringify(u && u.portal ? u.portal : CL_PERFIS.tudo[2]));
+  if (!P.modulos) P.modulos = Object.keys(A.modulos);
   modal(u ? 'Acesso de ' + esc(u.nome) : 'Novo acesso · ' + esc(c.nome), `<div class="grid">
-    <label>Nome<input id="cuNome" value="${esc(u ? u.nome : '')}" required></label>
-    <div class="g2"><label>Usuário (login)<input id="cuLogin" autocapitalize="none" value="${esc(u ? u.login : '')}" required></label><label>E-mail<input id="cuEmail" type="email" value="${esc(u ? u.email : '')}"></label></div>
+    <label>Nome<input id="cuNome" value="${esc(u ? u.nome : '')}" required placeholder="ex.: Eng. Paulo Lima"></label>
+    <div class="g2"><label>Usuário (login)<input id="cuLogin" autocapitalize="none" value="${esc(u ? u.login : '')}" required placeholder="ex.: paulo.eng"></label><label>E-mail<input id="cuEmail" type="email" value="${esc(u ? u.email : '')}"></label></div>
     <label>${u ? 'Nova senha provisória <small>(deixe em branco para manter)</small>' : 'Senha provisória <small>(mín. 10; ele troca no primeiro acesso)</small>'}<input id="cuSenha" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="10"></label>
-    ${u ? `<label class="chk"><input type="checkbox" id="cuAtivo" ${u.ativo ? 'checked' : ''}> Acesso ativo</label>` : ''}</div>`, {
-    ok: 'Salvar', onOk: async () => {
-      const r = await api('cli_usuario_salvar', { cliente_id: c.id, usuario: { id: u ? u.id : '', nome: $('#cuNome').value, login: $('#cuLogin').value, email: $('#cuEmail').value, ativo: u ? $('#cuAtivo').checked : true }, senha: $('#cuSenha').value });
-      toast(r.msg); CL.d = null; vCliente(c.id);
+    <div class="cl-ve"><h4>${ic('eye')} O que esta pessoa vê</h4>
+      <div class="cl-perfis">${Object.entries(CL_PERFIS).map(([k, [t, d]]) => `<button type="button" data-perfil="${k}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('')}</div>
+      <div class="cl-ve-g"><div><label>Obras</label>
+        <label class="chk"><input type="radio" name="cuOb" value="todas" ${P.obras === 'todas' ? 'checked' : ''}> Todas as obras do cliente <small>(inclusive as próximas)</small></label>
+        <label class="chk"><input type="radio" name="cuOb" value="algumas" ${P.obras !== 'todas' ? 'checked' : ''} ${E.length ? '' : 'disabled'}> Só estas:</label>
+        <div class="cl-ve-obras">${E.map(e => `<label class="chk"><input type="checkbox" data-cuob="${esc(e.obra)}" ${P.obras === 'todas' || P.obras.includes(e.obra) ? 'checked' : ''}> ${esc(e.nome)} <small>${esc(A.tipos[e.modelo] || '')}</small></label>`).join('') || '<small class="mute">O cliente ainda não tem obras; as próximas entram conforme a opção acima.</small>'}</div></div>
+      <div><label>Áreas <small>(dentro do que cada obra libera)</small></label>
+        <label class="chk"><input type="checkbox" checked disabled> Andamento da obra</label>
+        ${Object.entries(A.modulos).map(([k, t]) => `<label class="chk"><input type="checkbox" data-cumod="${k}" ${P.modulos.includes(k) ? 'checked' : ''}> ${esc(t)}</label>`).join('')}
+        <label class="chk" style="margin-top:6px"><input type="checkbox" id="cuOrc" ${P.orcamentos ? 'checked' : ''}> Orçamentos <small>(ver, comentar e aceitar)</small></label></div></div></div>
+    ${u ? `<label class="chk"><input type="checkbox" id="cuAtivo" ${u.ativo ? 'checked' : ''}> Acesso ativo <small>(desmarcado: não entra, mas o login fica guardado)</small></label>
+      <div class="cl-excluir"><button type="button" class="btn perigo peq" id="cuExcluir">${ic('x')} Excluir este acesso</button><small class="mute">Para login de teste ou criado por engano. As considerações e aceites que ele fez continuam no orçamento.</small></div>` : ''}</div>`, {
+    ok: u ? 'Salvar' : 'Criar acesso', larga: true, onOk: async () => {
+      const algumas = $('[name=cuOb]:checked').value === 'algumas';
+      const portal = { obras: algumas ? $$('[data-cuob]').filter(x => x.checked).map(x => x.dataset.cuob) : 'todas', orcamentos: $('#cuOrc').checked, modulos: $$('[data-cumod]').filter(x => x.checked).map(x => x.dataset.cumod) };
+      const senha = $('#cuSenha').value, dados = { id: u ? u.id : '', nome: $('#cuNome').value, login: $('#cuLogin').value.trim().toLowerCase(), email: $('#cuEmail').value, ativo: u ? $('#cuAtivo').checked : true };
+      const r = await api('cli_usuario_salvar', { cliente_id: c.id, usuario: dados, senha, portal });
+      CL.d = null;
+      // acesso novo (ou senha nova): já abre a mensagem pronta para mandar
+      if (!u || senha) { await vCliente(c.id); const c2 = CL.d.clientes.find(x => x.id === c.id); clCompartilhar(c2, c2.usuarios.find(x => x.login === dados.login), senha); return false; }
+      else { toast(r.msg); vCliente(c.id); }
     }
   });
+  const marcarPerfil = k => {
+    const p = CL_PERFIS[k][2];
+    $$('[name=cuOb]').forEach(x => { x.checked = x.value === 'todas'; });
+    $$('[data-cuob]').forEach(x => { x.checked = true; });
+    $$('[data-cumod]').forEach(x => { x.checked = p.modulos.includes(x.dataset.cumod); });
+    $('#cuOrc').checked = p.orcamentos;
+    $$('[data-perfil]').forEach(b => b.classList.toggle('on', b.dataset.perfil === k));
+  };
+  $$('[data-perfil]').forEach(b => { b.onclick = () => marcarPerfil(b.dataset.perfil); });
+  // marcar uma obra específica passa para "Só estas"
+  $$('[data-cuob]').forEach(x => { x.onchange = () => { $$('[name=cuOb]').forEach(r => { r.checked = r.value === 'algumas'; }); }; });
+  // perfil que bate com o que está salvo aparece selecionado
+  const k0 = Object.keys(CL_PERFIS).find(k => { const p = CL_PERFIS[k][2]; return P.obras === 'todas' && p.orcamentos === P.orcamentos && p.modulos.length === P.modulos.length && p.modulos.every(m => P.modulos.includes(m)); });
+  if (k0) $(`[data-perfil="${k0}"]`).classList.add('on');
+  if ($('#cuExcluir')) $('#cuExcluir').onclick = async () => {
+    if (!confirm('Excluir o acesso ' + u.login + ' (' + u.nome + ')? Ele não consegue mais entrar e o login some da lista.')) return;
+    try { toast((await api('cli_usuario_excluir', { cliente_id: c.id, id: u.id })).msg); fecharModal(); CL.d = null; vCliente(c.id); } catch (x) { toast(x.message, 1); }
+  };
+}
+
+/* mensagem pronta para mandar o acesso (WhatsApp, e-mail ou copiar): o link do cliente, o usuário e, quando acabou de
+ * ser definida, a senha provisória; o texto diz o que a pessoa vai acompanhar */
+function clCompartilhar(c, u, senha) {
+  if (!u) return;
+  const link = c.url || CL.d.app_url, P = u.portal || { obras: 'todas', orcamentos: true, modulos: null };
+  const nome = String(u.nome).split(' ').filter(w => !/^(eng|eng\.|sr|sra|dr|dra)\.?$/i.test(w))[0] || u.nome;
+  const obras = (c.empreendimentos || []).filter(e => P.obras === 'todas' || P.obras.includes(e.obra)).map(e => e.nome);
+  const ve = [P.orcamentos ? 'os orçamentos' : '', obras.length ? (obras.length === 1 ? 'a obra ' + obras[0] : 'as obras ' + obras.slice(0, -1).join(', ') + ' e ' + obras.slice(-1)) : P.obras === 'todas' ? 'as obras' : ''].filter(Boolean).join(' e ');
+  const txt = `Olá, ${nome}! Segue seu acesso ao portal ${c.nome} da Size Engenharia${ve ? ', onde você acompanha ' + ve : ''}:\n\n${link}\nUsuário: ${u.login}\n`
+    + (senha ? `Senha provisória: ${senha}\n\nNo primeiro acesso, crie sua própria senha.` : `Senha: a que você já usa (se esqueceu, peça uma nova à Size).`)
+    + `\nNo celular, toque em "Instalar o app" para ficar com o ícone na tela.`;
+  modal(`${ic('send')} Compartilhar o acesso de ${esc(u.nome)}`, `<div class="grid">
+    ${c.url ? '' : '<div class="aviso warn">O endereço próprio deste cliente ainda não foi publicado: a mensagem leva o link do app da Size (ele entra com a cor do cliente). Publique para mandar o link com a logo dele.</div>'}
+    ${senha ? '' : '<div class="aviso info">A senha não vai na mensagem. Para mandar uma senha nova, toque em Editar e defina uma senha provisória.</div>'}
+    <textarea id="cuMsg" rows="9" class="cl-msg">${esc(txt)}</textarea>
+    <div class="acoes"><button type="button" class="btn" id="cuCopiar">${ic('copy')} Copiar mensagem</button>
+      <a class="btn sec" id="cuZap" target="_blank" rel="noopener">${ic('send')} Abrir no WhatsApp</a>
+      ${u.email ? `<a class="btn sec" id="cuMail">${ic('mail')} E-mail para ${esc(u.email)}</a>` : ''}</div></div>`, { semRodape: true, larga: true });
+  const msg = () => $('#cuMsg').value;
+  const links = () => {
+    $('#cuZap').href = 'https://wa.me/?text=' + encodeURIComponent(msg());
+    if ($('#cuMail')) $('#cuMail').href = 'mailto:' + encodeURIComponent(u.email) + '?subject=' + encodeURIComponent('Acesso ao portal ' + c.nome + ' · Size Engenharia') + '&body=' + encodeURIComponent(msg());
+  };
+  $('#cuMsg').oninput = links; links();
+  $('#cuCopiar').onclick = async () => { try { await navigator.clipboard.writeText(msg()); toast('Mensagem copiada: cole no WhatsApp ou no e-mail.'); } catch (e) { $('#cuMsg').select(); toast('Selecionei o texto: copie com Ctrl+C.', 1); } };
 }
 
 /* ---------- imagem → ícones ---------- */

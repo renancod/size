@@ -235,3 +235,37 @@ test('do orçamento à obra: tipo e foto no orçamento, o cliente vê a foto e o
   const id2 = adm('prop_copiar', { id, novo: true }).id;
   assert.equal(adm('prop_detalhe', { id: id2 }).proposta.foto_id, '');
 });
+
+test('excluir acesso do cliente: só o login daquele cliente, e ele não entra mais', () => {
+  const t = preparar();
+  const outro = t.adm('cli_salvar', { cliente: { nome: 'Outro', cor: '#2B4C7E', slug: 'outro' } }).id;
+  const uid = t.adm('cli_admin').clientes.find(c => c.id === t.cli).usuarios[0].id;
+  assert.throws(() => t.adm('cli_usuario_excluir', { cliente_id: outro, id: uid }), /não é deste cliente/);
+  assert.match(t.adm('cli_usuario_excluir', { cliente_id: t.cli, id: uid }).msg, /excluído/);
+  assert.equal(t.adm('cli_admin').clientes.find(c => c.id === t.cli).usuarios.length, 0);
+  assert.equal(t.G.chamar({ acao: 'login', login: 'dono.ava', senha: 'Cliente#2026x' }).ok, false);
+  assert.equal(t.bruto('cli_inicio').ok, false);
+});
+
+test('cada acesso vê o que foi liberado: obras escolhidas, sem orçamentos ou sem financeiro', () => {
+  const t = preparar('gestao');
+  const obra2 = t.adm('admin_obra_criar', { nome: 'Condomínio Norte', sigla: 'CN', endereco: 'Rua Y' }).id;
+  t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', empreendimentos: [{ obra: t.obra, modelo: 'gestao' }, { obra: obra2, modelo: 'gestao' }], cor: '#1D6F5F', slug: 'ava-residence' } });
+  // engenheiro: só a obra 2, sem orçamentos e sem financeiro
+  const eng = t.adm('cli_usuario_salvar', { cliente_id: t.cli, usuario: { nome: 'Eng. Paulo', login: 'paulo.eng' }, senha: 'Engenheiro#26', portal: { obras: [obra2], orcamentos: false, modulos: ['cronograma', 'diario', 'fvs'] } }).id;
+  assert.throws(() => t.adm('cli_usuario_salvar', { cliente_id: t.cli, usuario: { id: eng, nome: 'Eng. Paulo', login: 'paulo.eng' }, portal: { obras: [], orcamentos: false } }), /não vê nada/);
+  const s = t.G.chamar({ acao: 'login', login: 'paulo.eng', senha: 'Engenheiro#26' }).dados, ch = (acao, d = {}) => t.G.chamar({ acao, token: s.token, ...d });
+  assert.deepEqual(s.cliente.empreendimentos.map(e => e.id), [obra2]);
+  assert.deepEqual(s.cliente.empreendimentos[0].modulos, ['cronograma', 'diario', 'fvs']);
+  assert.equal(s.cliente.ve_orcamentos, false);
+  assert.match(ch('cli_cronograma', { obra: t.obra }).erro, /não está liberado/);
+  assert.ok(ch('cli_cronograma', { obra: obra2 }).ok);
+  assert.match(ch('cli_financeiro', { obra: obra2 }).erro, /não está liberada/);
+  assert.match(ch('cli_orcamentos').erro, /não estão liberados/);
+  assert.deepEqual(ch('cli_inicio').dados.orcamentos, []);
+  // o dono continua vendo tudo
+  assert.equal(t.cliente('sessao').cliente.empreendimentos.length, 2);
+  assert.ok(t.cliente('cli_financeiro', { obra: t.obra }).total);
+  const A = t.adm('cli_admin').clientes[0].usuarios.find(u => u.login === 'paulo.eng').portal;
+  assert.deepEqual([A.obras, A.orcamentos, A.modulos], [[obra2], false, ['cronograma', 'diario', 'fvs']]);
+});

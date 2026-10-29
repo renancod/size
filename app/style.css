@@ -1638,3 +1638,15 @@ details.pp-histc[open]>summary{margin-bottom:10px}
 .pp-gera-portal label.chk span{display:grid;gap:2px}.pp-gera-portal label.chk small{font-weight:400;color:var(--mute)}
 .pc-orc-foto{min-height:170px;align-items:flex-end}
 a.aviso.pc-lnk{display:flex;gap:8px;align-items:center;text-decoration:none}a.aviso.pc-lnk span{flex:1}
+.cl-excluir{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;padding-top:10px;border-top:1px solid var(--line)}
+label.chk{display:flex;gap:8px;align-items:center;font-weight:500;color:var(--txt)}label.chk input{width:auto;margin:0;flex:none}label.chk small{font-weight:400;color:var(--mute)}
+/* acessos do cliente: o que cada login vê, perfis prontos e a mensagem para compartilhar */
+.cl-u{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.cl-u-ve{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}.cl-u .acoes{flex-wrap:nowrap}
+.cl-ve{border:1px solid var(--line);border-radius:12px;padding:12px;background:#FAFBFC;display:grid;gap:10px}.cl-ve h4{margin:0;font-size:.95rem;color:var(--navy)}
+.cl-perfis{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.cl-perfis button{display:grid;gap:2px;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;color:var(--txt)}
+.cl-perfis button small{color:var(--mute);font-size:.74rem}.cl-perfis button.on{border-color:var(--teal);background:var(--teal-l);box-shadow:0 0 0 1px var(--teal)}
+.cl-ve-g{display:grid;gap:14px}.cl-ve-g>div{display:grid;gap:6px;align-content:start}.cl-ve-obras{display:grid;gap:4px;padding-left:24px}
+@media (min-width:640px){.cl-ve-g{grid-template-columns:1fr 1fr}}
+.cl-msg{font:inherit;font-size:.9rem;line-height:1.45;white-space:pre-wrap}

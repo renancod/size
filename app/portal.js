@@ -113,7 +113,7 @@ function portalIniciar() {
 }
 /* menu: as abas da obra seguem o empreendimento escolhido (cada um tem o seu tipo); com mais de um, o seletor fica no menu */
 function pcNav() {
-  const C = pcCli(), E = pcEmp(), ob = !!E, orc = !ob || C.orcamentos > 0, vs = pcVarios();
+  const C = pcCli(), E = pcEmp(), ob = !!E, orc = C.ve_orcamentos !== false && (!ob || C.orcamentos > 0), vs = pcVarios();
   const nav = [['#/c', 'Início', 'home', true], ['#/c/orcamentos', 'Orçamentos', 'file', orc], ['#/c/cronograma', 'Cronograma', 'cal', ob && pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', ob && pcTem('diario')],
     ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')],
     ['#/c/relatorios', 'Relatórios', 'pdf', ob && (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro'))], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
