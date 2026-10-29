@@ -133,10 +133,16 @@ test('negociação: cliente sem obra vê só o orçamento enviado, comenta, rece
   adm('prop_responder', { id: com.id, resposta: 'Ajustado na revisão 1.' });
   // revisão 1 com o meio-fio corrigido e modo aberto
   const id1 = adm('prop_copiar', { id }).id;
+  assert.deepEqual(cliente('cli_orcamentos').orcamentos, []);                         // revisão em rascunho: sai do portal
+  assert.match(bruto('cli_orcamento', { id }).erro, /não disponível/);
   adm('prop_salvar', { proposta: { id: id1, cliente: 'Mar Azul', empreendimento: 'Dunas', bdi_pct: 20, bdi_base: 'total' }, itens: [
     { tipo: 'E', descricao: 'Pavimentação' }, { descricao: 'Base de brita', unidade: 'm3', qtd: 10, unit_mat: 100, unit_mo: 50 }, { descricao: 'Meio-fio', unidade: 'm', qtd: 30, unit_mat: 10, unit_mo: 5 }] });
   adm('prop_portal', { id: id1, cliente_id: cli, modo: 'aberto' });
   adm('prop_status', { id: id1, op: 'enviar' });
+  adm('prop_status', { id: id1, op: 'reabrir' });                                     // reabriu: some de novo
+  assert.deepEqual(cliente('cli_orcamentos').orcamentos, []);
+  adm('prop_status', { id: id1, op: 'enviar' });
+  assert.equal(cliente('cli_orcamentos').orcamentos.length, 1);
   o = cliente('cli_orcamento', { id: id1 });
   assert.equal(o.etapas[0].itens[1].preco, 540);
   // planilha aberta: custo (material e MO), BDI e administração de cada item e o resumo

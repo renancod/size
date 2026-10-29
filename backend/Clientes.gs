@@ -357,7 +357,13 @@ function cliPublicar_(q, ctx) {
 const CLI_ORC_ST_ = ['Enviado', 'Aprovado', 'Revisado', 'Perdido'];
 const CLI_ORC_TIPOS_ = { duvida: 'Dúvida', incluir: 'Incluir item', retirar: 'Retirar item', quantidade: 'Mudar quantidade', geral: 'Consideração' };
 function propAceite_(p) { try { return p.aceite_json ? JSON.parse(p.aceite_json) : null; } catch (e) { return null; } }
-function cliPropostas_(cid) { return central_('Propostas').all().filter(p => String(p.cliente_id) === String(cid) && CLI_ORC_ST_.indexOf(p.status) >= 0); }
+/* o orçamento some do portal quando a revisão mais nova volta para a Size (rascunho, nova revisão em
+ * andamento ou cancelado): o cliente não fica vendo a versão antiga enquanto ela é refeita */
+function cliPropostas_(cid) {
+  const todas = central_('Propostas').all().filter(p => String(p.cliente_id) === String(cid)), ult = {};
+  todas.forEach(p => { const k = String(p.numero); if (!ult[k] || num_(p.revisao) > num_(ult[k].revisao)) ult[k] = p; });
+  return todas.filter(p => CLI_ORC_ST_.indexOf(p.status) >= 0 && CLI_ORC_ST_.indexOf(ult[String(p.numero)].status) >= 0);
+}
 function cliPropAchar_(ctx, id) {
   const p = cliPropostas_(ctx.cli.id).find(x => String(x.id) === String(id));
   if (!p) throw new Error('Orçamento não disponível.');
