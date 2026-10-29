@@ -362,7 +362,7 @@ function ppEditarItem(n) {
     $('#ppEdPv').innerHTML = `<span>Preço unit. <b class="bp-mono">${bpM(x.preco_unit)}</b></span><span>Total <b class="bp-mono">${bpM(x.preco)}</b></span><small>custo ${bpM(x.custo)} · BDI ${bpM(x.bdi)} · gestão ${bpM(x.gestao)}</small>`;
   };
   f.addEventListener('input', previa); f.addEventListener('change', previa); previa();
-  if ($('#ppEdIns')) $('#ppEdIns').onclick = () => { aplicar(f); if (l.fonte) return sinVerComposicao(l.comp_cod, E.p.sinapi_regime, bpPn(l.qtd)); ppInsumos(l, ppCalc(E.p, L).linhas[n]); };
+  if ($('#ppEdIns')) $('#ppEdIns').onclick = () => { aplicar(f); if (l.fonte) return sinVerComposicao(l.comp_cod, E.p.sinapi_regime, bpPn(l.qtd), l.descricao).catch(e => toast(e.message, 1)); ppInsumos(l, ppCalc(E.p, L).linhas[n]); };
   $$('[data-mv]', f).forEach(b => { b.onclick = () => {
     aplicar(f);
     const m = n + +b.dataset.mv;
@@ -493,7 +493,7 @@ function ppLigarVer(d) {
     b.onclick = async () => {
       const i = d.itens.find(x => x.codigo === b.dataset.verCod);
       if (!i) return;
-      try { if (i.fonte) await sinVerComposicao(i.comp_cod, d.proposta.sinapi_regime, i.qtd); else { await bpCarregar(); ppInsumos(i, i); } }
+      try { if (i.fonte) await sinVerComposicao(i.comp_cod, d.proposta.sinapi_regime, i.qtd, i.descricao); else { await bpCarregar(); ppInsumos(i, i); } }
       catch (e) { toast(e.message, 1); }
     };
   });

@@ -121,7 +121,9 @@ Sheet.prototype.setName = function (n) { this.nome = n; return this; };
       getUuid: () => crypto.randomUUID(),
       sleep: () => {}
     },
-    CacheService: { getScriptCache: () => ({ get: k => { const e = cache[k]; if (!e) return null; if (e.exp < Date.now()) { delete cache[k]; return null; } return e.v; }, put: (k, v, s) => { cache[k] = { v: String(v), exp: Date.now() + (s || 600) * 1000 }; }, remove: k => { delete cache[k]; } }) },
+    CacheService: { getScriptCache: () => ({ get: k => { const e = cache[k]; if (!e) return null; if (e.exp < Date.now()) { delete cache[k]; return null; } return e.v; }, put: (k, v, s) => { cache[k] = { v: String(v), exp: Date.now() + (s || 600) * 1000 }; }, remove: k => { delete cache[k]; },
+      getAll: ks => { const o = {}; ks.forEach(k => { const e = cache[k]; if (e && e.exp >= Date.now()) o[k] = e.v; }); return o; },
+      putAll: (o, s) => { Object.keys(o).forEach(k => { cache[k] = { v: String(o[k]), exp: Date.now() + (s || 600) * 1000 }; }); } }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {} }) },
     // Firebase falso: guarda cada mensagem enviada; _fcmResp(token) devolve o código HTTP (padrão 200)

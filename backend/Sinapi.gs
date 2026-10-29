@@ -86,6 +86,16 @@ function sinapiComposicao_(q, ctx) {
   if (!ss) throw new Error('O SINAPI ainda não foi importado.');
   // q.codigos (lista): várias de uma vez, lendo as abas uma vez só (Excel do orçamento); as que não estão no mês ficam de fora
   const lista = Array.isArray(q.codigos) ? q.codigos.map(String) : [String(q.codigo)], C = {}, I = {}, por = {};
+  // cada composição aberta fica 6 h na memória do Google (ler o SINAPI inteiro leva vários segundos);
+  // a chave leva o mês e a hora da importação, então importar de novo já usa os valores novos
+  const info = sinInfo_(ss), mes = String(info.mes || ''), pre = 'sc|' + mes + '|' + String(info.importado_em instanceof Date ? info.importado_em.getTime() : info.importado_em || '').slice(0, 40) + '|';
+  const cache = CacheService.getScriptCache(), achou = cache.getAll(lista.map(k => pre + k)), prontas = {};
+  lista.forEach(k => { if (achou[pre + k]) prontas[k] = JSON.parse(achou[pre + k]); });
+  if (lista.every(k => prontas[k])) {
+    TEMPO_.cache += 's';
+    if (Array.isArray(q.codigos)) return { mes: mes, composicoes: lista.map(k => prontas[k]) };
+    return Object.assign({ mes: mes }, prontas[lista[0]]);
+  }
   sinTab_('SinapiComposicoes', ss).all().forEach(c => { C[String(c.codigo)] = c; });
   if (!Array.isArray(q.codigos) && !C[lista[0]]) throw new Error('Composição ' + lista[0] + ' não está no SINAPI deste mês.');
   sinTab_('SinapiInsumos', ss).all().forEach(i => { I[String(i.codigo)] = i; });
@@ -98,9 +108,15 @@ function sinapiComposicao_(q, ctx) {
       preco_sd: r ? num_(aux ? r.custo_sd : r.preco_sd) : 0, preco_cd: r ? num_(aux ? r.custo_cd : r.preco_cd) : 0 });
   });
   const comp = k => { const c = C[k]; return { codigo: k, descricao: c.descricao, unidade: c.unidade, grupo: c.grupo, situacao: c.situacao, custo_sd: num_(c.custo_sd), custo_cd: num_(c.custo_cd) }; };
-  const mes = String(sinInfo_(ss).mes || '');
-  if (Array.isArray(q.codigos)) return { mes: mes, composicoes: lista.filter(k => C[k]).map(k => ({ composicao: comp(k), itens: por[k] })) };
-  return { mes: mes, composicao: comp(lista[0]), itens: por[lista[0]] };
+  const res = {}, guardar = {};
+  lista.filter(k => C[k]).forEach(k => {
+    res[k] = { composicao: comp(k), itens: por[k] };
+    const s = JSON.stringify(res[k]);
+    if (s.length < 90000) guardar[pre + k] = s;
+  });
+  try { cache.putAll(guardar, 21600); } catch (e) { /* sem memória: lê de novo na próxima */ }
+  if (Array.isArray(q.codigos)) return { mes: mes, composicoes: lista.filter(k => res[k]).map(k => res[k]) };
+  return Object.assign({ mes: mes }, res[lista[0]]);
 }
 /* custo por categoria de um item do SINAPI (composição ou insumo) no regime pedido — usado no orçamento */
 function sinCustoItem_(ix, fonte, codigo, regime) {

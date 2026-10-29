@@ -180,6 +180,7 @@ async function sinEnviar(D, origem, passo) {
     }
   }
   passo('Conferindo e trocando o mês…', 1);
+  SIN_COMP.clear();
   return api('sinapi_importar', { etapa: 'fim' });
 }
 /* o servidor baixa o arquivo do mês na Caixa e entrega em partes */
@@ -257,7 +258,7 @@ async function vSinapi() {
       + l.map(x => SIN.tipo === 'C'
         ? `<button type="button" class="sin-r" data-c="${esc(x.codigo)}"><code>${esc(x.codigo)}</code><span><b>${esc(x.descricao)}</b><small>${esc(x.grupo)}${x.situacao && x.situacao !== 'COM CUSTO' ? ' · <span class="bp-flag">' + esc(x.situacao.toLowerCase()) + '</span>' : ''}</small></span><span class="sin-p"><b class="bp-mono">${x[SIN.reg] === '' ? '—' : bpM(x[SIN.reg])}</b><small>/${esc(x.unidade)}</small></span></button>`
         : `<div class="sin-r"><code>${esc(x.codigo)}</code><span><b>${esc(x.descricao)}</b><small>${esc(x.classe)}</small></span><span class="sin-p"><b class="bp-mono">${x[SIN.reg] === '' ? '—' : bpM(x[SIN.reg])}</b><small>/${esc(x.unidade)}</small></span></div>`).join('');
-    $$('[data-c]', el).forEach(b => { b.onclick = () => sinVerComposicao(b.dataset.c, SIN.reg); });
+    $$('[data-c]', el).forEach(b => { b.onclick = () => sinVerComposicao(b.dataset.c, SIN.reg).catch(e => toast(e.message, 1)); });
   };
   let tm;
   $('#sinQ').oninput = e => { clearTimeout(tm); tm = setTimeout(() => { SIN.q = e.target.value; desenhar(); }, 150); };
@@ -266,9 +267,20 @@ async function vSinapi() {
 }
 
 /* composição do SINAPI aberta (itens com preço do regime) e "copiar para a base da Size" */
-async function sinVerComposicao(cod, reg, qtd) {
+const SIN_COMP = new Map();   // composições já abertas nesta visita (abrem na hora da segunda vez)
+async function sinVerComposicao(cod, reg, qtd, desc) {
   reg = reg === 'cd' ? 'cd' : 'sd';
-  const d = await api('sinapi_composicao', { codigo: cod }), c = d.composicao, q = Number(qtd) || 0;
+  // a janela abre na hora com o que já se sabe do item; os insumos entram quando o servidor responder
+  let d = SIN_COMP.get(String(cod));
+  if (!d) {
+    modal(`${ic('grid2')} SINAPI ${esc(cod)}`, `<div class="pp-ins-cab">${desc ? `<b>${esc(desc)}</b>` : ''}<small>abrindo a composição da Caixa…</small></div><div class="carregando"><span class="spin"></span></div>`, { semRodape: true, larga: true });
+    const caixa = $('#modal .mcaixa');
+    try { d = await api('sinapi_composicao', { codigo: cod }); }
+    catch (e) { if ($('#modal .mcaixa') === caixa) fecharModal(); throw e; }
+    SIN_COMP.set(String(cod), d);
+    if ($('#modal .mcaixa') !== caixa) return;   // fechou enquanto carregava
+  }
+  const c = d.composicao, q = Number(qtd) || 0;
   const g = baseNivel() === 'Gerir';
   const tot = d.itens.reduce((t, i) => t + i.coef * i['preco_' + reg], 0);
   modal(`${ic('grid2')} SINAPI ${esc(cod)}`, `<div class="pp-ins-cab"><b>${esc(c.descricao)}</b>

@@ -11,7 +11,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const tk = call('login', { login: 'admin', senha }).token;
   const adm = (acao, d = {}) => call(acao, { token: tk, ...d });
-  return { G, adm, call };
+  return { G, adm, call, tk };
 }
 /* um mês do SINAPI (como o app manda depois de ler o arquivo da Caixa) */
 function importar(t, mes, areia) {
@@ -39,6 +39,10 @@ test('importação em lotes: planilha separada, índice, composição aberta e h
   // várias de uma vez (Excel do orçamento): a que não está no mês fica de fora, sem erro
   const v = t.adm('sinapi_composicao', { codigos: ['94962', '99999'] });
   assert.deepEqual(v.composicoes.map(x => [x.composicao.codigo, x.itens.length]), [['94962', 2]]);
+  // a segunda abertura vem da memória do servidor, igual à primeira
+  const r2 = t.G.chamar({ acao: 'sinapi_composicao', token: t.tk, codigo: '94962' });
+  assert.match(r2.t.cache, /s/);
+  assert.deepEqual(r2.dados.itens.map(i => i.codigo), ['370', '88316']);
   // mês seguinte: areia sobe 10%; o histórico guarda o que mudou
   assert.match(importar(t, '2026-08', 110).msg, /1 insumo mudou de preço desde 07\/2026 \(média \+10%\)/);
   assert.equal(t.adm('sinapi_info').mes, '2026-08');
