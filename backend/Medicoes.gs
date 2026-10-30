@@ -46,6 +46,18 @@ function medApurar_(ctx, empCod, de, ate, exceto) {
   const reservado = medReservado_(ctx, exceto), elegiveis = [], pendentes = [];
   c.etapas.filter(e => e.ativa && String(e.empreiteiro) === String(empCod)).forEach(e => {
     e.itens.forEach(i => {
+      // verba (VB): mede em parcelas, o % lançado até o fim do período que ainda não foi medido (sem FVS: não tem medida)
+      if (ehVerba_(i.unidade)) {
+        const ls = prod.filter(p => String(p.item_id) === String(i.id) && num_(p.qtd) > 0 && ymd_(p.data) <= ate).sort((a, b) => ymd_(a.data).localeCompare(ymd_(b.data)));
+        const medido = reservado[i.id] || 0, ate_ = ls.reduce((t, p) => t + num_(p.qtd), 0), resto = r2_(ate_ - medido);
+        if (resto <= 0.0001 || !ls.some(p => ymd_(p.data) >= de)) return;
+        const porRdo = {};
+        ls.forEach(p => { const k = num_(p.diario); porRdo[k] = porRdo[k] || { rdo: k, data: ymd_(p.data), qtd: 0 }; porRdo[k].qtd = r2_(porRdo[k].qtd + num_(p.qtd)); });
+        const dias = Object.keys(porRdo).map(k => porRdo[k]).sort((a, b) => a.rdo - b.rdo).filter(d => d.data >= de);
+        elegiveis.push({ item_id: i.id, etapa: e.codigo, etapa_nome: e.nome, etapa_local: e.local, servico: i.servico, unidade: i.unidade, qtd: resto, executado: i.executado, prevista: i.prevista,
+          concluido_em: ymd_(ls[ls.length - 1].data), complemento: false, verba: true, contrato: medContratoTxt_(e), dias: dias, rdos: dias.map(d => d.rdo), fvs: 'verba' });
+        return;
+      }
       if (i.situacao !== 'concluido') return;
       const linhas = prod.filter(p => String(p.item_id) === String(i.id) && num_(p.qtd) > 0).sort((a, b) => ymd_(a.data).localeCompare(ymd_(b.data)));
       if (!linhas.length) return;
@@ -113,9 +125,15 @@ function medDetalhe_(q, ctx) {
     item_id: i.item_id, etapa: i.etapa, etapa_nome: i.etapa_nome, servico: i.servico, unidade: i.unidade, qtd: num_(i.qtd), concluido_em: ymd_(i.concluido_em), complemento: sim_(i.complemento),
     contrato: i.contrato || '', fvs: i.fvs || '', rdos: json_(i.rdos_json, []), dias: json_(i.dias_json, [])
   }));
+  // verba: o app mostra em % do previsto do serviço
+  if (itens.some(i => ehVerba_(i.unidade))) {
+    const prev = {};
+    calcExec_(ctx).etapas.forEach(e => e.itens.forEach(x => { prev[x.id] = x.prevista; }));
+    itens.forEach(i => { if (ehVerba_(i.unidade)) i.prevista = prev[i.item_id] || 1; });
+  }
   const emp = obraTab_(ctx, 'Equipes').all().find(x => String(x.codigo) === String(m.empreiteiro)) || {};
   const totais = {};
-  itens.forEach(i => { const k = i.servico + '|' + i.unidade; totais[k] = totais[k] || { servico: i.servico, unidade: i.unidade, qtd: 0 }; totais[k].qtd = r2_(totais[k].qtd + i.qtd); });
+  itens.forEach(i => { const k = i.servico + '|' + i.unidade; totais[k] = totais[k] || { servico: i.servico, unidade: i.unidade, qtd: 0, prevista: i.prevista }; totais[k].qtd = r2_(totais[k].qtd + i.qtd); });
   const prox = obraTab_(ctx, 'Medicoes').all().filter(x => String(x.empreiteiro) === String(m.empreiteiro)).reduce((t, x) => Math.max(t, num_(x.numero)), 0) + 1;
   const base = medPub_(m, itens.length);
   return Object.assign(base, {

@@ -182,7 +182,7 @@ const fmtP = n => { n = Number(n) || 0; return (n >= 10 ? Math.round(n) : Math.r
 function textoAuto(r) {
   const p = [], tipo = REL.tipo, h = hoje(), per = `${fc(r.de)} a ${fc(r.ate)}`;
   if (tipo !== 'previsao') {
-    const lst = r.executado.flatMap(e => e.itens.filter(i => i.periodo > 0).map(i => `${i.servico} (${nf(i.periodo)} ${i.unidade})`));
+    const lst = r.executado.flatMap(e => e.itens.filter(i => i.periodo > 0).map(i => `${i.servico} (${qun(i.periodo, i.unidade, i.previsto)})`));
     if (lst.length) p.push(`De ${per} foram executados: ${lst.join('; ')}.`);
     else if (r.de <= h) p.push(`De ${per} não houve execução registrada.`);
     if (r.parados.length) p.push(`Houve chuva em ${plural(r.parados.length, 'dia', 'dias')} (${r.parados.map(x => dsemC(x.data) + ' ' + fc(x.data)).join(', ')}) e a obra ficou parada.`);
@@ -229,7 +229,7 @@ function relFolha(r) {
 
   const exec = r.executado.map(e => cartao(e, e.itens.filter(i => i.periodo > 0).map(i => {
     const m = {}; Object.keys(i.dias_qtd || {}).forEach(s => { m[s] = i.previsto ? i.dias_qtd[s] / i.previsto * 100 : 0; });
-    return linha(i.servico, `${nf(i.periodo)} ${esc(i.unidade)} no período`, m, i.pct);
+    return linha(i.servico, `${esc(qun(i.periodo, i.unidade, i.previsto))} no período`, m, i.pct);
   }).join(''), 'Já concluído')).join('');
   const risco = REL.chuva || {};
   cols = relColunas(r.prev_de, r.ate, {}, {}, risco); // previsão: só do que ainda vem pela frente
@@ -239,7 +239,7 @@ function relFolha(r) {
     return cartao(e, its.map(i => {
       const m = {}; i.plano.forEach(x => { m[x.data] = x.pct; });
       const d0 = i.plano[0].data, d1 = i.plano[i.plano.length - 1].data;
-      return linha(i.servico, `${nf(i.prevista)} ${esc(i.unidade)} no total`, m, i.pct_depois, c => (i.inicia && d0 >= c.ini && d0 <= c.fim ? 'início' : '') || (i.conclui && d1 >= c.ini && d1 <= c.fim ? 'conclusão' : ''));
+      return linha(i.servico, ehVerba(i.unidade) ? 'verba' : `${nf(i.prevista)} ${esc(i.unidade)} no total`, m, i.pct_depois, c => (i.inicia && d0 >= c.ini && d0 <= c.fim ? 'início' : '') || (i.conclui && d1 >= c.ini && d1 <= c.fim ? 'conclusão' : ''));
     }).join(''), 'Concluído ao fim');
   }).join('');
   const chuva = r.parados.length ? `<div class="rl-chuva rl-cut"><b>Chuva no período</b><span>${r.parados.map(x => `${DSEM[new Date(x.data + 'T12:00').getDay()]}, ${fc(x.data)}`).join(' · ')} — obra parada.</span></div>` : '';

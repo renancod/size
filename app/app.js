@@ -35,6 +35,13 @@ function prazoHtml(P) {
 const brl = v => v === '' || v == null ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = v => { if (typeof v === 'number') return v; let s = String(v ?? '').trim().replace(/[R$\s]/g, ''); if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); const n = Number(s); return isNaN(n) ? 0 : n; };
 const nf = n => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+/* verba (VB): o serviço não tem medida, então é lançado e mostrado em % do previsto (10% + 20% = 30%).
+ * O que fica gravado continua sendo a quantidade (fração da verba): 25% de 1 VB = 0,25 */
+const ehVerba = u => /^(vb|verba|%)$/i.test(String(u || '').replace(/[.\s]/g, ''));
+const vbPct = (q, prev) => Number(prev) > 0 ? Number(q || 0) / Number(prev) * 100 : 0;
+const vbQtd = (p, prev) => Number(p || 0) / 100 * (Number(prev) > 0 ? Number(prev) : 1);
+/* quantidade com a unidade; verba vira % do previsto */
+const qun = (q, u, prev) => ehVerba(u) ? (Math.round(vbPct(q, prev) * 10) / 10).toLocaleString('pt-BR') + '%' : nf(q) + (u ? ' ' + u : '');
 const iso = d => d.toLocaleDateString('sv-SE');
 const hoje = () => iso(new Date());
 const maisDias = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };

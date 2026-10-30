@@ -196,7 +196,7 @@ function cartaoEtapa(e) {
     <small>${esc([e.local, e.frente, e.inicio && fd(e.inicio) + ' → ' + fd(e.termino)].filter(Boolean).join(' · '))}</small>
     ${barra(e)}
     <div class="its">${e.itens.map(i => `<div class="it"><span class="n">${esc(i.servico)}</span>${barra(i)}
-      <small>${nf(i.executado)} / ${nf(i.prevista)} ${esc(i.unidade)}${i.media ? ' · média ' + nf(i.media) + '/dia' : ''}</small></div>`).join('')}</div></a>`;
+      <small>${ehVerba(i.unidade) ? esc(qun(i.executado, i.unidade, i.prevista)) + ' da verba' : `${nf(i.executado)} / ${nf(i.prevista)} ${esc(i.unidade)}${i.media ? ' · média ' + nf(i.media) + '/dia' : ''}`}</small></div>`).join('')}</div></a>`;
 }
 const avisoHtml = a => `<div class="aviso-ex ${a.status === 'Aberto' ? '' : 'lido'}"><span><b>${esc(a.tipo)}</b> · ${esc(a.etapa_nome || 'Obra toda')}${a.texto ? '<br>' + esc(a.texto) : ''}
   <br><small>${esc(a.autor)} · ${fdh(a.data)}${a.ciente_por ? ' · ciente: ' + esc(a.ciente_por) + ' ' + fdh(a.ciente_em) : ''}</small></span>
@@ -387,25 +387,28 @@ async function vEtapa(cod) {
     ${e.frente && e.itens.some(i => !i.orc_item && !i.contrato_item) ? `<div class="aviso warn">${plural(e.itens.filter(i => !i.orc_item && !i.contrato_item).length, 'serviço digitado à mão não dá', 'serviços digitados à mão não dão')} baixa no orçamento da obra (${esc(e.itens.filter(i => !i.orc_item && !i.contrato_item).map(i => i.servico).join(', '))}). Para entrar no cronograma e na frente geral, em <b>Incluir serviço / editar</b> puxe o serviço pelo quadro "Serviços do orçamento da obra".</div>` : ''}
     ${e.itens.map(i => `<div class="card item-ex sxb-${i.situacao}"><div class="l1"><b>${esc(i.servico)}</b>${sxBadge(i.situacao)}${i.pct > 100 ? '<span class="badge exc">acima do previsto</span>' : ''}<span class="dir">${pct(i.pct)}</span></div>
       ${barra(i)}
-      <dl class="kv kv3"><dt>Executado</dt><dd><b>${nf(i.executado)}</b> de ${nf(i.prevista)} ${esc(i.unidade)}${i.alterado ? ` <small>(original ${nf(i.original)})</small>` : ''}</dd>
+      ${ehVerba(i.unidade) ? `<dl class="kv kv3"><dt>Executado</dt><dd><b>${qun(i.executado, i.unidade, i.prevista)}</b> da verba (${nf(i.prevista)} ${esc(i.unidade)})</dd>
+        <dt>Falta</dt><dd>${qun(Math.max(0, i.saldo), i.unidade, i.prevista)}</dd>
+        <dt>Prazo</dt><dd>${fd(i.inicio)} → ${fd(i.termino)} · ${plural(i.dias_restantes, 'dia útil restante', 'dias úteis restantes')}</dd>
+        <dt>Término</dt><dd class="${i.situacao === 'atrasado' ? 'atrasado' : ''}">${i.saldo <= 0 ? 'concluído ' + fd(i.ultimo) : i.projecao ? 'projetado ' + fd(i.projecao) : 'sem lançamento para projetar'}</dd></dl>` : `<dl class="kv kv3"><dt>Executado</dt><dd><b>${nf(i.executado)}</b> de ${nf(i.prevista)} ${esc(i.unidade)}${i.alterado ? ` <small>(original ${nf(i.original)})</small>` : ''}</dd>
         <dt>Saldo</dt><dd>${nf(i.saldo)} ${esc(i.unidade)}</dd>
         <dt>Prazo</dt><dd>${fd(i.inicio)} → ${fd(i.termino)}${i.termino_original && i.termino_original !== i.termino ? ` <small>(original ${fd(i.termino_original)})</small>` : ''} · ${plural(i.dias_restantes, 'dia útil restante', 'dias úteis restantes')}</dd>
         <dt>Média</dt><dd>${nf(i.media)} ${esc(i.unidade)}/dia · últimos 7: ${nf(i.media7)} · ${plural(i.dias_trab, 'dia trabalhado', 'dias trabalhados')}</dd>
         <dt>Precisa</dt><dd>${i.saldo <= 0 ? '—' : i.ritmo == null ? '<span class="atrasado">prazo acabou</span>' : nf(i.ritmo) + ' ' + esc(i.unidade) + '/dia até o término'}</dd>
         <dt>Término</dt><dd class="${i.situacao === 'atrasado' ? 'atrasado' : ''}">${i.saldo <= 0 ? 'concluído ' + fd(i.ultimo) : i.projecao ? 'projetado ' + fd(i.projecao) : 'sem produção para projetar'}</dd>
-        <dt>Produtividade</dt><dd>${i.prod_hd != null ? nf(i.prod_hd) + ' ' + esc(i.unidade) + '/homem-dia' : '—'}${i.prod_ed != null ? ' · ' + nf(i.prod_ed) + ' ' + esc(i.unidade) + '/equipe-dia' : ''}</dd></dl>
+        <dt>Produtividade</dt><dd>${i.prod_hd != null ? nf(i.prod_hd) + ' ' + esc(i.unidade) + '/homem-dia' : '—'}${i.prod_ed != null ? ' · ' + nf(i.prod_ed) + ' ' + esc(i.unidade) + '/equipe-dia' : ''}</dd></dl>`}
       <div class="fv-linha">${fvsDoItem(i)}</div>
       ${eng ? `<div class="acoes"><button class="btn sec peq" data-alt="${esc(i.id)}">${ic('edit')} Alterar</button></div>` : ''}</div>`).join('')}
     <div class="card"><h3>Produção por dia</h3>${Object.keys(dias).sort().reverse().map(s => `<div class="dia-prod"><a href="#/diario/${s}"><b>${fd(s)}</b> <small>${dsem(s)}${util(s) ? '' : ' · aditivo'}</small></a>
       <small>${(eqDia[s] || []).map(x => esc(x.equipe) + ' (' + x.pessoas + ')').join(', ')}</small>
-      ${dias[s].map(l => `<div class="lp ${eng ? 'click' : ''}" data-l="${esc(l.id)}"><span>${esc(l.servico)}</span><b>${nf(l.qtd)} ${esc(l.unidade)}</b><small>${esc(l.usuario)}</small></div>`).join('')}</div>`).join('') || '<p class="vazio">Nenhum lançamento ainda.</p>'}</div>
+      ${dias[s].map(l => `<div class="lp ${eng ? 'click' : ''}" data-l="${esc(l.id)}"><span>${esc(l.servico)}</span><b>${esc(qun(l.qtd, l.unidade, (e.itens.find(i => i.id === l.item_id) || {}).prevista))}</b><small>${esc(l.usuario)}</small></div>`).join('')}</div>`).join('') || '<p class="vazio">Nenhum lançamento ainda.</p>'}</div>
     ${r.avisos.length ? `<div class="card"><h3>Avisos</h3>${r.avisos.map(avisoHtml).join('')}</div>` : ''}
     <div class="card"><h3>Alterações registradas</h3>${r.alteracoes.map(a => `<div class="alt"><b>${esc(a.campo)}</b>: ${esc(fmtAlt(a.de))} → ${esc(fmtAlt(a.para))}<br><small>${esc(a.usuario)} · ${fdh(a.data)}${a.motivo ? ' · motivo: ' + esc(a.motivo) : ''}</small></div>`).join('') || '<p class="vazio">Nenhuma alteração. O previsto é o original.</p>'}</div>`);
   if ($('#edE')) $('#edE').onclick = () => mEtapa(e);
   if ($('#avE')) $('#avE').onclick = () => mAviso(e.codigo);
   $$('[data-alt]').forEach(b => { b.onclick = () => mAlterar(e.itens.find(i => i.id === b.dataset.alt)); });
   $$('[data-fvs-abrir]').forEach(b => { b.onclick = () => mAbrirFvs(e.itens.find(i => i.id === b.dataset.fvsAbrir)); });
-  if (eng) $$('[data-l]').forEach(el => { el.onclick = () => mCorrigir(r.lancamentos.find(l => l.id === el.dataset.l)); });
+  if (eng) $$('[data-l]').forEach(el => { el.onclick = () => { const l = r.lancamentos.find(x => x.id === el.dataset.l); mCorrigir(l, e.itens.find(i => i.id === l.item_id)); }; });
   ligarAvisos();
 }
 const fmtAlt = v => /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? fd(v) : String(v ?? '');
@@ -422,14 +425,14 @@ function mAlterar(i) {
     }
   });
 }
-function mCorrigir(l) {
-  const s = String(l.data).slice(0, 10), antigo = s < addD(hoje(), -1);
+function mCorrigir(l, it) {
+  const s = String(l.data).slice(0, 10), antigo = s < addD(hoje(), -1), vb = ehVerba(l.unidade), prev = (it || {}).prevista;
   modal('Corrigir lançamento', `<p><b>${esc(l.servico)}</b> · ${fd(s)} · ${esc(l.usuario)}</p>
-    <label>Quantidade (${esc(l.unidade)}) <small>(0 apaga o lançamento)</small><input name="q" type="number" step="any" min="0" inputmode="decimal" value="${num(l.qtd)}"></label>
+    <label>${vb ? 'Quanto andou neste dia (% da verba)' : 'Quantidade (' + esc(l.unidade) + ')'} <small>(0 apaga o lançamento)</small><input name="q" type="number" step="any" min="0" inputmode="decimal" value="${vb ? Math.round(vbPct(l.qtd, prev) * 100) / 100 : num(l.qtd)}"></label>
     <label>Motivo <small>${antigo ? '(obrigatório, fica registrado)' : '(recomendado)'}</small><input name="motivo" ${antigo ? 'required minlength="5"' : ''}></label>`, {
     ok: 'Salvar correção',
     onOk: async f => {
-      const r = await api('exec_diario_salvar', { data: s, motivo: f.motivo.value, lancamentos: [{ cliente_id: l.cliente_id || l.id, item_id: l.item_id, qtd: f.q.value, obs: l.obs }] });
+      const r = await api('exec_diario_salvar', { data: s, motivo: f.motivo.value, lancamentos: [{ cliente_id: l.cliente_id || l.id, item_id: l.item_id, qtd: vb ? vbQtd(num(f.q.value), prev) : f.q.value, obs: l.obs }] });
       toast(r.msg); await carregarExec(true); rotear();
     }
   });
@@ -608,6 +611,11 @@ function desenharDiario() {
   ligarAvisos();
   carregarMinis();
 }
+/* "faltam 30 m de 100" ou, na verba, "executado até agora 10% · lance quanto andou hoje" */
+function diaResta(i, antes, resta) {
+  if (!ehVerba(i.unidade)) return (resta < 0 ? 'acima do previsto em ' + nf(-resta) : 'faltam ' + nf(resta)) + ' ' + esc(i.unidade) + ' de ' + nf(i.prevista);
+  return 'executado até agora ' + qun(antes, i.unidade, i.prevista) + ' · ' + (resta < 0 ? 'passou de 100% em ' + qun(-resta, i.unidade, i.prevista) : 'lance quanto andou hoje (faltam ' + qun(resta, i.unidade, i.prevista) + ')');
+}
 function blocoEtapa(cod) {
   const e = etapaDe(cod);
   if (!e) return '';
@@ -623,11 +631,11 @@ function blocoEtapa(cod) {
       ${ed ? `<button type="button" class="linkbtn" data-eqadd>${ic('plus')} equipe</button> <button type="button" class="linkbtn" data-eqnova>${ic('users')} cadastrar equipe</button>` : ''}</div>
     ${e.itens.filter(i => i.situacao !== 'concluido' || DIA.lanc[i.id] || outrosDe(i.id).length).map(i => {
       const l = DIA.lanc[i.id] || {}, outros = outrosDe(i.id);
-      const antes = num(i.executado) - num(l.salvo || 0), resta = num(i.prevista) - antes - num(l.qtd || 0);
+      const antes = num(i.executado) - num(l.salvo || 0), resta = num(i.prevista) - antes - num(l.qtd || 0), vb = ehVerba(i.unidade);
       return `<div class="dia-it" data-it="${esc(i.id)}"><span class="nome"><b>${esc(i.servico)}</b>
-        <small class="resta ${resta < 0 ? 'atrasado' : ''}">${resta < 0 ? 'acima do previsto em ' + nf(-resta) : 'faltam ' + nf(resta)} ${esc(i.unidade)} de ${nf(i.prevista)}</small>
-        ${outros.length ? `<small>já lançado hoje: ${outros.map(x => esc(x.usuario) + ' ' + nf(x.qtd)).join(', ')}</small>` : ''}</span>
-        <label class="q"><input type="number" step="any" min="0" inputmode="decimal" data-q value="${l.qtd || ''}" placeholder="0" ${ed ? '' : 'disabled'}><span>${esc(i.unidade)}</span></label>
+        <small class="resta ${resta < 0 ? 'atrasado' : ''}">${diaResta(i, antes, resta)}</small>
+        ${outros.length ? `<small>já lançado hoje: ${outros.map(x => esc(x.usuario) + ' ' + esc(qun(x.qtd, i.unidade, i.prevista))).join(', ')}</small>` : ''}</span>
+        <label class="q"><input type="number" step="any" min="0" inputmode="decimal" data-q value="${l.qtd ? (vb ? Math.round(vbPct(l.qtd, i.prevista) * 100) / 100 : l.qtd) : ''}" placeholder="0" ${ed ? '' : 'disabled'}><span>${vb ? '%' : esc(i.unidade)}</span></label>
         ${barra({ pct: i.prevista ? (antes + num(l.qtd || 0)) / i.prevista * 100 : 0, planejado: i.planejado, situacao: i.situacao })}</div>`;
     }).join('')}
     ${ed ? `<label class="linkbtn foto-et">${ic('camera')} Foto desta etapa<input type="file" accept="image/*" capture="environment" data-foto="${esc(cod)}"></label>` : ''}</div>`;
@@ -675,11 +683,12 @@ function ligarEtapasDia() {
       const id = r.dataset.it, inp = $('[data-q]', r);
       inp.oninput = () => {
         const l = DIA.lanc[id] = DIA.lanc[id] || { cid: uid(), salvo: 0 };
-        l.qtd = inp.value === '' ? '' : num(inp.value);
+        const i = itemDe(id);
+        l.qtd = inp.value === '' ? '' : ehVerba(i.unidade) ? vbQtd(num(inp.value), i.prevista) : num(inp.value);
         salvarRascunho();
-        const i = itemDe(id), antes = num(i.executado) - num(l.salvo || 0), resta = num(i.prevista) - antes - num(l.qtd || 0);
+        const antes = num(i.executado) - num(l.salvo || 0), resta = num(i.prevista) - antes - num(l.qtd || 0);
         const sm = $('.resta', r);
-        sm.textContent = (resta < 0 ? 'acima do previsto em ' + nf(-resta) : 'faltam ' + nf(resta)) + ' ' + i.unidade + ' de ' + nf(i.prevista);
+        sm.innerHTML = diaResta(i, antes, resta);
         sm.classList.toggle('atrasado', resta < 0);
         const p = i.prevista ? (antes + num(l.qtd || 0)) / i.prevista * 100 : 0, bar = $('.pbar', r);
         bar.classList.toggle('exc', p > 100);
@@ -881,7 +890,7 @@ async function imprimirRdo(data) {
       ${r.equipes.length ? `<table class="rdo-g"><tr><th>Etapa</th><th>Equipe</th><th class="n">Pessoas</th></tr>${r.equipes.map(e => `<tr><td>${esc(e.etapa)}</td><td>${esc(e.equipe)}</td><td class="n">${e.pessoas}</td></tr>`).join('')}<tr class="tot"><td colspan="2">Total</td><td class="n">${totPes}</td></tr></table>` : '<p>Sem equipes registradas.</p>'}
       <h4>Serviços executados</h4>
       ${r.servicos.length ? `<table class="rdo-g"><tr><th>Etapa</th><th>Serviço</th><th class="n">No dia</th><th class="n">Acumulado</th><th class="n">Previsto</th><th class="n">%</th></tr>
-        ${r.servicos.map(s => `<tr><td>${esc(s.etapa)}</td><td>${esc(s.servico)}${s.obs ? '<br><small>' + esc(s.obs) + '</small>' : ''}</td><td class="n"><b>${nf(s.dia)}</b> ${esc(s.unidade)}</td><td class="n">${nf(s.acumulado)}</td><td class="n">${nf(s.previsto)}</td><td class="n">${pct(s.pct)}</td></tr>`).join('')}</table>` : '<p>Nenhum serviço lançado.</p>'}
+        ${r.servicos.map(s => `<tr><td>${esc(s.etapa)}</td><td>${esc(s.servico)}${s.obs ? '<br><small>' + esc(s.obs) + '</small>' : ''}</td>${ehVerba(s.unidade) ? `<td class="n"><b>${qun(s.dia, s.unidade, s.previsto)}</b></td><td class="n">${qun(s.acumulado, s.unidade, s.previsto)}</td><td class="n">verba</td>` : `<td class="n"><b>${nf(s.dia)}</b> ${esc(s.unidade)}</td><td class="n">${nf(s.acumulado)}</td><td class="n">${nf(s.previsto)}</td>`}<td class="n">${pct(s.pct)}</td></tr>`).join('')}</table>` : '<p>Nenhum serviço lançado.</p>'}
       <h4>Ocorrências</h4><p class="rdo-txt">${esc(d.ocorrencias || 'Nenhuma.')}</p>
       ${d.obs ? `<h4>Observações</h4><p class="rdo-txt">${esc(d.obs)}</p>` : ''}
       ${r.avisos.length ? `<h4>Avisos da engenharia</h4>${r.avisos.map(a => `<p class="rdo-txt"><b>${esc(a.tipo)}</b> · ${esc(a.etapa_nome)}: ${esc(a.texto)} <small>(${esc(a.autor)}, ${fd(a.data)}${a.ciente_por ? ' · ciente ' + esc(a.ciente_por) : ''})</small></p>`).join('')}` : ''}

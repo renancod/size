@@ -203,7 +203,7 @@ function calcExec_(ctx, ate) {
       homem_dia: hd, equipe_dia: ed, prod_hd: hd ? r2_(exec / hd) : null, prod_ed: ed ? r2_(exec / ed) : null, situacao: sit, sem_lanc: sem,
       hoje_qtd: r2_(dia[hoje] || 0), alterado: num_(i.qtd_original) && num_(i.qtd_original) !== prev || ymd_(i.termino_original) && ymd_(i.termino_original) !== fim
     };
-    if (exec > prev && prev > 0) alertas.push({ tipo: 'excedido', item: i.id, etapa: i.etapa, texto: i.servico + ': executado ' + nfmt_(exec) + ' de ' + nfmt_(prev) + ' ' + i.unidade + ' — corrigir a quantidade prevista' });
+    if (exec > prev && prev > 0) alertas.push({ tipo: 'excedido', item: i.id, etapa: i.etapa, texto: i.servico + (ehVerba_(i.unidade) ? ': executado ' + qun_(exec, i.unidade, prev) + ' da verba — passou de 100%' : ': executado ' + nfmt_(exec) + ' de ' + nfmt_(prev) + ' ' + i.unidade + ' — corrigir a quantidade prevista') });
     if (sit === 'atrasado') alertas.push({ tipo: 'atrasado', item: i.id, etapa: i.etapa, texto: i.servico + ': ' + (fim && hoje > fim ? 'prazo vencido em ' + fmtBr_(fim) : 'término projetado ' + fmtBr_(projecao) + ' (previsto ' + fmtBr_(fim) + ')') });
     if (sem >= 2) alertas.push({ tipo: 'sem_lancamento', item: i.id, etapa: i.etapa, texto: i.servico + ': ' + sem + ' dias úteis sem lançamento' });
     return r;
@@ -226,6 +226,9 @@ function calcExec_(ctx, ate) {
 function obraAtiva_(ctx) { return !ctx.obra || sim_(ctx.obra.ativa); }
 function r2_(n) { return Math.round(num_(n) * 100) / 100; }
 function nfmt_(n) { return Number(r2_(n)).toLocaleString('pt-BR'); }
+/* verba (VB): sem medida, vai em % do previsto (o gravado continua a fração: 25% de 1 VB = 0,25). Igual ao app (app.js ehVerba/qun) */
+const ehVerba_ = u => /^(vb|verba|%)$/i.test(String(u || '').replace(/[.\s]/g, ''));
+function qun_(q, u, prev) { return ehVerba_(u) ? nfmt_(num_(prev) > 0 ? num_(q) / num_(prev) * 100 : 0) + '%' : nfmt_(q) + (u ? ' ' + u : ''); }
 function fmtBr_(s) { return s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) : ''; }
 function dataTxt_(s) { return s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : ''; }
 
@@ -464,7 +467,7 @@ function execDiarioSalvar_(q, ctx) {
   mudou.filter((x, i, a) => a.indexOf(x) === i).forEach(id => {
     const it = itens.find(x => String(x.id) === String(id));
     const tot = P.all().filter(p => String(p.item_id) === String(id)).reduce((t, p) => t + num_(p.qtd), 0);
-    if (tot > num_(it.qtd_prevista)) excedidos.push(it.servico + ' (' + nfmt_(tot) + ' de ' + nfmt_(it.qtd_prevista) + ' ' + it.unidade + ')');
+    if (tot > num_(it.qtd_prevista)) excedidos.push(it.servico + ' (' + (ehVerba_(it.unidade) ? qun_(tot, it.unidade, it.qtd_prevista) + ' da verba' : nfmt_(tot) + ' de ' + nfmt_(it.qtd_prevista) + ' ' + it.unidade) + ')');
   });
   log_(ctx, 'exec_diario', 'RDO ' + d.numero + ' ' + dia + ' ' + mudou.length + ' lanç.');
   return {

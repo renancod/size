@@ -292,7 +292,7 @@ function roGerencial_(ctx, orc, frentes, etapas, curva, chaveDe, prod, pctDe, ge
     .forEach(f => add('alto', f.nome + ': custo estimado no fim ' + brl_(f.emp.custo_fim) + ', ' + brl_(f.emp.desvio) + ' acima do orçado (gasto ' + brl_(f.emp.custo_real) + ' com ' + nfmt_(f.pct) + '% executado).'));
   if (geral.atraso > 0) add(geral.atraso > 10 ? 'alto' : 'medio', 'Término da obra projetado para ' + dataTxt_(geral.projecao) + ' (previsto ' + dataTxt_(geral.termino) + '): ' + geral.atraso + ' dias úteis de atraso no ritmo atual.');
   etapas.forEach(e => e.itens.filter(i => i.situacao === 'atrasado').slice(0, 2).forEach(i => add('alto', e.nome + ' · ' + i.servico + ': término projetado ' + dataTxt_(i.projecao) + ' (previsto ' + dataTxt_(i.termino) + ', ' + i.atraso + ' dias úteis). ' +
-    (i.ritmo_nec ? 'Precisa de ' + nfmt_(i.ritmo_nec) + ' ' + i.unidade + '/dia' + (i.ritmo ? ' (ritmo atual ' + nfmt_(i.ritmo) + ')' : '') + '.' : 'Prazo já vencido.'))));
+    (i.ritmo_nec ? 'Precisa de ' + qun_(i.ritmo_nec, i.unidade, i.prevista) + '/dia' + (i.ritmo ? ' (ritmo atual ' + qun_(i.ritmo, i.unidade, i.prevista) + ')' : '') + '.' : 'Prazo já vencido.'))));
   etapas.forEach(e => e.itens.filter(i => i.situacao === 'risco').slice(0, 2).forEach(i => add('medio', e.nome + ' · ' + i.servico + ': em risco, término projetado ' + dataTxt_(i.projecao) + ' (previsto ' + dataTxt_(i.termino) + ').')));
   frentes.filter(f => f.etapas && f.fin && f.fin.falta_comprar > 0 && f.situacao !== 'concluido' && f.situacao !== 'nao_iniciado')
     .forEach(f => add('medio', f.nome + ' está em execução e tem ' + f.fin.falta_comprar + (f.fin.falta_comprar === 1 ? ' material' : ' materiais') + ' a comprar.'));

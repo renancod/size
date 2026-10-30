@@ -266,15 +266,15 @@ function roFolha(r) {
   const frTab = frs.map(f => `<div class="rl-bloco rl-et"><div class="rl-et-t"><div><b>${esc(f.nome)}</b><small>${f.etapas ? plural(f.etapas, 'etapa', 'etapas') + ' · ' : ''}${f.termino ? `término previsto ${fd(f.termino)}${f.projecao && f.projecao !== f.termino ? ' · projetado ' + fd(f.projecao) : ''}` : 'sem etapa programada'}</small>${f.etapas ? roSit(f.situacao) : ''}</div>
       <div class="rl-pct">${fmtP(f.pct)}%<small>+${fmtP(f.pct - f.pct_ini)} p.p. no período</small></div></div>
     <table class="rl-t"><thead><tr><th>Serviço</th><th class="n">Previsto</th><th class="n">Executado</th><th class="n">No período</th><th class="bar">%</th></tr></thead><tbody>
-    ${f.itens.map(i => `<tr><td>${i.codigo ? `<small>${esc(i.codigo)}</small>` : ''}${esc(i.servico)}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade)}</td><td class="n">${nf(i.executado)}</td><td class="n">${i.periodo ? nf(i.periodo) : '—'}</td><td class="bar"><span class="rl-bar">${i.pct > 0 ? `<i style="width:${Math.max(1.5, Math.min(100, i.pct))}%"></i>` : ''}</span><small>${fmtP(i.pct)}%</small></td></tr>`).join('')}
+    ${f.itens.map(i => `<tr><td>${i.codigo ? `<small>${esc(i.codigo)}</small>` : ''}${esc(i.servico)}</td>${ehVerba(i.unidade) ? `<td class="n">verba</td><td class="n">${qun(i.executado, i.unidade, i.qtd)}</td><td class="n">${i.periodo ? qun(i.periodo, i.unidade, i.qtd) : '—'}</td>` : `<td class="n">${nf(i.qtd)} ${esc(i.unidade)}</td><td class="n">${nf(i.executado)}</td><td class="n">${i.periodo ? nf(i.periodo) : '—'}</td>`}<td class="bar"><span class="rl-bar">${i.pct > 0 ? `<i style="width:${Math.max(1.5, Math.min(100, i.pct))}%"></i>` : ''}</span><small>${fmtP(i.pct)}%</small></td></tr>`).join('')}
     </tbody></table></div>`).join('');
   // prazos
   const ets = r.etapas;
   const prazos = ets.length ? grGantt(ets, hj) + `<div class="rl-bloco"><table class="rl-t ro-prazo"><thead><tr><th>Etapa · serviço</th><th class="n">Feito</th><th class="n">Ritmo atual</th><th class="n">Ritmo p/ cumprir</th><th class="n">Término</th></tr></thead><tbody>
     ${ets.map(e => e.itens.filter(i => i.situacao !== 'concluido' || e.situacao === 'concluido').map((i, k) => `<tr class="${k ? 'ro-sub' : ''}"><td>${k ? '' : `<b class="ro-et">${esc(e.nome)}</b>`}${esc(i.servico)}<br>${roSit(i.situacao)}</td>
-      <td class="n">${fmtP(i.pct)}%<small>${nf(i.executado)} de ${nf(i.prevista)} ${esc(i.unidade)}</small></td>
-      <td class="n">${i.ritmo ? nf(i.ritmo) + ' ' + esc(i.unidade) + '/dia' : '—'}</td>
-      <td class="n">${i.situacao === 'concluido' ? '—' : i.ritmo_nec == null ? '<b class="rl-venc">prazo vencido</b>' : `<b class="${i.ritmo && i.ritmo_nec > i.ritmo * 1.05 ? 'rl-venc' : ''}">${nf(i.ritmo_nec)} ${esc(i.unidade)}/dia</b>`}</td>
+      <td class="n">${fmtP(i.pct)}%<small>${ehVerba(i.unidade) ? 'da verba' : `${nf(i.executado)} de ${nf(i.prevista)} ${esc(i.unidade)}`}</small></td>
+      <td class="n">${i.ritmo ? esc(qun(i.ritmo, i.unidade, i.prevista)) + '/dia' : '—'}</td>
+      <td class="n">${i.situacao === 'concluido' ? '—' : i.ritmo_nec == null ? '<b class="rl-venc">prazo vencido</b>' : `<b class="${i.ritmo && i.ritmo_nec > i.ritmo * 1.05 ? 'rl-venc' : ''}">${esc(qun(i.ritmo_nec, i.unidade, i.prevista))}/dia</b>`}</td>
       <td class="n">previsto ${fc(i.termino)}${i.projecao && i.situacao !== 'concluido' ? `<small class="${i.atraso ? 'atrasado' : ''}">projetado ${fc(i.projecao)}${i.atraso ? ' · +' + i.atraso + ' d.u.' : ''}</small>` : ''}</td></tr>`).join('')).join('')}
     </tbody></table></div>` : '<p class="rl-vazio">Nenhuma etapa aberta.</p>';
   // semanas e clima

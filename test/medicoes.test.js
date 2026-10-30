@@ -96,6 +96,32 @@ test('só serviço concluído e com FVS aprovada entra; o resto aparece como pen
   assert.match(t.lanc('medicao_prever', { empreiteiro: emp, de: dia(-6), ate: dia(0) }).pendentes.find(x => x.servico === 'Meio-fio').motivo, /sem FVS/);
 });
 
+test('verba (VB) em %: 10% + 20% = 30%; mede em parcelas por período, sem FVS; aviso passa de 100%', () => {
+  const t = preparar();
+  const emp = t.eng('exec_equipe_salvar', { nome: 'Equipe Topo', pessoas: 2 }).codigo;
+  const r = t.eng('exec_etapa_salvar', { nome: 'Acompanhamento', empreiteiro: emp, itens: [{ servico: 'Acompanhamento técnico', unidade: 'VB', qtd_prevista: 1, inicio: dia(-30), termino: dia(30), fvs_modelo: '-' }] });
+  const vb = t.eng('exec_dados').etapas.find(x => x.codigo === r.codigo).itens[0];
+  lancar(t, vb, dia(-12), 0.1);
+  lancar(t, vb, dia(-4), 0.2);
+  let i = t.eng('exec_dados').etapas.find(x => x.codigo === r.codigo).itens[0];
+  assert.deepEqual([i.executado, i.pct], [0.3, 30]);
+  // 1ª medição: só o que andou até o fim do período (10%), sem FVS
+  const p1 = t.lanc('medicao_prever', { empreiteiro: emp, de: dia(-15), ate: dia(-8) });
+  assert.deepEqual(p1.elegiveis.map(x => [x.servico, x.qtd, x.verba]), [['Acompanhamento técnico', 0.1, true]]);
+  assert.equal(p1.pendentes.length, 0);
+  const m1 = t.lanc('medicao_criar', { empreiteiro: emp, de: dia(-15), ate: dia(-8) }).id;
+  t.lanc('medicao_enviar', { id: m1 });
+  assert.equal(t.lanc('medicao_detalhe', { id: m1 }).itens[0].prevista, 1);
+  // 2ª medição: a parcela seguinte (20%), o já medido não volta
+  const p2 = t.lanc('medicao_prever', { empreiteiro: emp, de: dia(-7), ate: dia(0) });
+  assert.deepEqual(p2.elegiveis.map(x => x.qtd), [0.2]);
+  // passou de 100%: aviso em %, sem travar
+  lancar(t, vb, dia(-2), 0.8);
+  const al = t.eng('exec_dados').alertas || [];
+  assert.ok(JSON.stringify(t.eng('exec_dados')).includes('110% da verba'), JSON.stringify(al).slice(0, 300));
+  assert.equal(t.G.rodar(`qun_(0.25, 'VB', 1) + ' | ' + qun_(12.5, 'm', 0) + ' | ' + ehVerba_('vb.') + ehVerba_('verba') + ehVerba_('un')`), '25% | 12,5 m | truetruefalse');
+});
+
 test('rascunho → enviar → aprovar: numeração por empreiteiro, reserva dos serviços, PDF e pasta no Drive', () => {
   const t = preparar();
   const { emp, boca, pv } = cenario(t);

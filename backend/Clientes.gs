@@ -145,7 +145,14 @@ function cliDiario_(q, ctx) {
   obraTab_(ctx, 'Producao').all().filter(p => ymd_(p.data) === dia && num_(p.qtd)).forEach(p => {
     const k = p.etapa + '|' + p.servico + '|' + p.unidade, s = serv[k] = serv[k] || { etapa: et[String(p.etapa)] || '', servico: p.servico, unidade: p.unidade, qtd: 0 };
     s.qtd = r2_(s.qtd + num_(p.qtd));
+    if (ehVerba_(p.unidade)) s.item_id = String(p.item_id);
   });
+  // verba: o app do cliente mostra em % do previsto do serviço
+  if (Object.values(serv).some(s => s.item_id)) {
+    const prev = {};
+    calcExec_(ctx).etapas.forEach(e => e.itens.forEach(x => { prev[x.id] = x.prevista; }));
+    Object.values(serv).forEach(s => { if (s.item_id) { s.prevista = prev[s.item_id] || 1; delete s.item_id; } });
+  }
   const pessoas = obraTab_(ctx, 'EquipesDia').all().filter(e => ymd_(e.data) === dia).reduce((t, e) => t + num_(e.pessoas), 0);
   return {
     data: dia, numero: num_(d.numero), condicao: d.condicao || '', tmin: d.tmin, tmax: d.tmax, chuva_manha: d.chuva_manha || '', chuva_tarde: d.chuva_tarde || '', vento: d.vento || '',

@@ -104,7 +104,7 @@ function orCartao(f) {
     <small>${r.emp.tem ? 'Receita ' + orM(r.emp.receita) + ' · ' : r.v_total ? 'Orçado ' + orM(r.v_total) + ' · ' : ''}${plural(r.servicos, 'serviço', 'serviços')}${r.mo_contratado ? ' · MO contratada ' + orM(r.mo_contratado) : ''}</small>
     ${orBar(r.pct_exec)}
     <div class="its">${f.itens.slice(0, 5).map(i => `<div class="it"><span class="n">${esc(i.servico)}</span>${orBar(i.pct_exec)}
-      <small>${nf(i.executado)} / ${nf(i.qtd)} ${esc(i.unidade)} executado · <b>faltam ${nf(Math.max(0, i.qtd - i.executado))}</b> · ${i.a_distribuir < 0 ? `<b class="atrasado">${nf(-i.a_distribuir)} acima do orçado em frentes</b>` : nf(i.a_distribuir) + ' a distribuir'}</small></div>`).join('')}
+      <small>${ehVerba(i.unidade) ? `${qun(i.executado, i.unidade, i.qtd)} da verba executado · <b>faltam ${qun(Math.max(0, i.qtd - i.executado), i.unidade, i.qtd)}</b>` : `${nf(i.executado)} / ${nf(i.qtd)} ${esc(i.unidade)} executado · <b>faltam ${nf(Math.max(0, i.qtd - i.executado))}</b>`} ·${i.a_distribuir < 0 ? `<b class="atrasado">${nf(-i.a_distribuir)} acima do orçado em frentes</b>` : nf(i.a_distribuir) + ' a distribuir'}</small></div>`).join('')}
       ${f.itens.length > 5 ? `<small>+${f.itens.length - 5} serviços</small>` : ''}</div>
     ${falta.length ? `<div class="or-falta">${falta.slice(0, 4).map(m => `<span>${ic('cart')} Falta comprar <b>${nf(m.falta_comprar)} ${esc(m.unidade)}</b> ${esc(m.descricao)}</span>`).join('')}</div>` : ''}</a>`;
 }
@@ -135,7 +135,7 @@ async function vObraFrente(cod) {
         <td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}<b>${esc(i.servico)}</b><div class="ct-mini">${orBar(i.pct_exec)}<small>${pct(i.pct_exec)} executado · ${pct(i.pct_prog)} em frentes</small></div>
           ${i.frentes_exec.length ? `<small class="or-fx">${i.frentes_exec.map(x => `<a href="#/exec/etapa/${enc(x.etapa)}">${esc(x.nome)}</a> ${nf(x.executado)}/${nf(x.prevista)}`).join(' · ')}</small>` : ''}
           ${i.contratos.length ? `<small class="or-fx">${i.contratos.map(c => `Contrato ${esc(c.rotulo)} (${esc(c.empreiteiro)}): ${nf(c.qtd)} a ${orM(c.unitario)}`).join(' · ')}</small>` : ''}</td>
-        <td>${esc(i.unidade)}</td><td class="n">${nf(i.qtd)}</td><td class="n">${nf(i.programado)}</td><td class="n">${nf(i.executado)}</td>
+        <td>${esc(i.unidade)}</td><td class="n">${nf(i.qtd)}</td><td class="n">${nf(i.programado)}</td><td class="n">${ehVerba(i.unidade) ? qun(i.executado, i.unidade, i.qtd) : nf(i.executado)}</td>
         <td class="n ${i.a_distribuir < 0 ? 'atrasado' : ''}">${nf(i.a_distribuir)}</td><td class="n">${nf(i.contratado)}</td>
         <td class="n">${i.unit_venda ? orM(i.unit_venda) : '—'}</td><td class="n">${i.unit_material ? orM(i.unit_material) : '—'}</td><td class="n">${i.unit_mo ? orM(i.unit_mo) : '—'}</td><td class="n"><b>${orM(r.v_venda ? i.v_venda : i.v_total)}</b></td></tr>`).join('')}`).join('')}
       </tbody></table></div>` : `<p class="vazio">Nenhum serviço nesta frente.${ger ? ' Toque em <b>Incluir serviços</b> (ex: 2.500 m de rede coletora) ou cole a planilha do Excel.' : ''}</p>`}
@@ -171,7 +171,7 @@ async function vObraOrc() {
     <div class="aviso info">Cada <b>frente geral</b> (ex: Rede de Esgoto) tem o total que precisa executar. Ao abrir uma <b>frente de execução</b> (ex: 250 m na Rua das Flores) o saldo é consumido e o painel mostra o que falta distribuir, executar e comprar.</div>
     ${fr.map(f => `<div class="card"><div class="or-h"><h3><a href="#/obra/frente/${enc(f.codigo)}">${esc(f.nome)}</a> <small>${esc(f.codigo)}</small></h3>${ger ? `<span class="acoes"><button class="btn sec peq" data-add="${esc(f.codigo)}">${ic('plus')} Serviços</button><button class="btn sec peq" data-colar="${esc(f.codigo)}">${ic('file')} Colar</button></span>` : ''}</div>
       ${f.itens.length ? `<div class="ct-rol"><table class="tab or-tab or-mini"><thead><tr><th>Serviço</th><th>Un.</th><th class="n">Total</th><th class="n">Em frentes</th><th class="n">Executado</th><th class="n">A distribuir</th></tr></thead><tbody>
-        ${f.itens.map(i => `<tr class="${ger ? 'click' : ''}" data-fr="${esc(f.codigo)}" data-oi="${esc(i.id)}"><td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}${esc(i.servico)}${orBar(i.pct_exec)}</td><td>${esc(i.unidade)}</td><td class="n"><b>${nf(i.qtd)}</b></td><td class="n">${nf(i.programado)}</td><td class="n">${nf(i.executado)}</td><td class="n ${i.a_distribuir < 0 ? 'atrasado' : ''}">${nf(i.a_distribuir)}</td></tr>`).join('')}
+        ${f.itens.map(i => `<tr class="${ger ? 'click' : ''}" data-fr="${esc(f.codigo)}" data-oi="${esc(i.id)}"><td>${i.codigo ? '<small>' + esc(i.codigo) + '</small> ' : ''}${esc(i.servico)}${orBar(i.pct_exec)}</td><td>${esc(i.unidade)}</td><td class="n"><b>${nf(i.qtd)}</b></td><td class="n">${nf(i.programado)}</td><td class="n">${ehVerba(i.unidade) ? qun(i.executado, i.unidade, i.qtd) : nf(i.executado)}</td><td class="n ${i.a_distribuir < 0 ? 'atrasado' : ''}">${nf(i.a_distribuir)}</td></tr>`).join('')}
       </tbody></table></div>` : '<small>Sem serviços ainda.</small>'}</div>`).join('') || '<div class="card vazio"><p>Nenhuma frente geral. Crie a primeira (ex: Rede de Esgoto).</p></div>'}
     ${ger ? `<div class="acoes"><button class="btn" id="orNovaF">${ic('plus')} Nova frente geral</button></div>` : ''}`));
   orLigar(D);

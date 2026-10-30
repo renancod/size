@@ -156,13 +156,13 @@ function mfRefaz() {
 function mfPrev() {
   const r = MF.prev; if (!r) return;
   const total = {};
-  r.elegiveis.filter(x => MF.sel.has(x.item_id)).forEach(x => { const k = x.unidade; total[k] = (total[k] || 0) + x.qtd; });
+  r.elegiveis.filter(x => MF.sel.has(x.item_id) && !x.verba).forEach(x => { const k = x.unidade; total[k] = (total[k] || 0) + x.qtd; });
   $('#mfPrev').innerHTML = `${r.elegiveis.length ? r.elegiveis.map(x => `<label class="md-it"><input type="checkbox" data-i="${esc(x.item_id)}" ${MF.sel.has(x.item_id) ? 'checked' : ''}>
-      <span class="md-it-t"><b>${esc(x.servico)}</b>${x.complemento ? ' <span class="badge fvb fvb-vist">complemento</span>' : ''}<small>${esc(x.etapa_nome)}${x.etapa_local ? ' · ' + esc(x.etapa_local) : ''} · concluído em ${fd(x.concluido_em)}</small>
-      <small>${esc(x.fvs || 'FVS')} · ${x.rdos.length ? rdoN(x.rdos[0]) + (x.rdos.length > 1 ? ' a ' + rdoN(x.rdos[x.rdos.length - 1]) : '') : ''}${x.contrato ? ' · ' + esc(x.contrato) : ''}</small></span><b class="md-q">${nf(x.qtd)} ${esc(x.unidade)}</b></label>`).join('')
+      <span class="md-it-t"><b>${esc(x.servico)}</b>${x.complemento ? ' <span class="badge fvb fvb-vist">complemento</span>' : ''}<small>${esc(x.etapa_nome)}${x.etapa_local ? ' · ' + esc(x.etapa_local) : ''} · ${x.verba ? 'verba (em parcelas) · último lançamento ' + fd(x.concluido_em) : 'concluído em ' + fd(x.concluido_em)}</small>
+      <small>${esc(x.fvs || 'FVS')} · ${x.rdos.length ? rdoN(x.rdos[0]) + (x.rdos.length > 1 ? ' a ' + rdoN(x.rdos[x.rdos.length - 1]) : '') : ''}${x.contrato ? ' · ' + esc(x.contrato) : ''}</small></span><b class="md-q">${esc(qun(x.qtd, x.unidade, x.prevista))}</b></label>`).join('')
       : '<div class="aviso info">Nenhum serviço pronto para medir neste período: precisa estar concluído e com FVS aprovada.</div>'}
     ${r.elegiveis.length ? `<div class="md-tot">${Object.keys(total).map(u => `<span><b>${nf(total[u])}</b> ${esc(u)}</span>`).join(' · ')} <small>no total</small></div>` : ''}
-    ${r.pendentes.length ? `<div class="md-pend"><h4>${ic('alert')} Concluídos, mas ainda não podem ser medidos</h4>${r.pendentes.map(x => `<div class="md-pi"><b>${esc(x.servico)}</b> <small>${esc(x.etapa_nome)} · ${nf(x.qtd)} ${esc(x.unidade)} · concluído em ${fd(x.concluido_em)}</small><small class="md-motivo">${esc(x.motivo)}</small></div>`).join('')}</div>` : ''}`;
+    ${r.pendentes.length ? `<div class="md-pend"><h4>${ic('alert')} Concluídos, mas ainda não podem ser medidos</h4>${r.pendentes.map(x => `<div class="md-pi"><b>${esc(x.servico)}</b> <small>${esc(x.etapa_nome)} · ${esc(qun(x.qtd, x.unidade, x.prevista))} · concluído em ${fd(x.concluido_em)}</small><small class="md-motivo">${esc(x.motivo)}</small></div>`).join('')}</div>` : ''}`;
   $$('#mfPrev [data-i]').forEach(c => { c.onchange = () => { c.checked ? MF.sel.add(c.dataset.i) : MF.sel.delete(c.dataset.i); mfPrev(); }; });
   $('#mfSalvar').disabled = !MF.sel.size;
 }
@@ -195,9 +195,9 @@ async function vMedDet(id) {
       <dt>Lançada por</dt><dd>${esc(d.criado_por)}${d.enviado_por ? ' · enviada por ' + esc(d.enviado_por) : ''}</dd>
       ${d.obs ? `<dt>Observações</dt><dd>${esc(d.obs)}</dd>` : ''}</dl></div>
     ${Object.keys(porEtapa).map(en => `<div class="card"><h3>${esc(en)}</h3><table class="tab md-tab"><thead><tr><th>Serviço</th><th class="n">Quantidade</th><th>Concluído</th><th>RDOs</th><th>FVS</th></tr></thead><tbody>
-      ${porEtapa[en].map(i => `<tr><td>${esc(i.servico)}${i.complemento ? ' <span class="badge fvb fvb-vist">complemento</span>' : ''}</td><td class="n"><b>${nf(i.qtd)}</b> ${esc(i.unidade)}</td><td>${fd(i.concluido_em)}</td><td>${i.rdos.length ? rdoN(i.rdos[0]) + (i.rdos.length > 1 ? ' a ' + rdoN(i.rdos[i.rdos.length - 1]) : '') : '—'}</td><td>${esc(i.fvs || '—')}</td></tr>`).join('')}</tbody></table></div>`).join('')}
-    <div class="card"><h3>Total por serviço</h3>${d.totais.map(t => `<div class="md-total"><span>${esc(t.servico)}</span><b>${nf(t.qtd)} ${esc(t.unidade)}</b></div>`).join('')}</div>
-    <details class="card fv-hist"><summary>Memória de cálculo (lançamentos por diário)</summary>${d.itens.map(i => `<div class="alt"><b>${esc(i.servico)}</b> <small>${esc(i.etapa_nome)}</small><br><small>${i.dias.map(x => `${rdoN(x.rdo)} (${fc(x.data)}): ${nf(x.qtd)} ${esc(i.unidade)}`).join(' · ')}</small></div>`).join('')}</details>
+      ${porEtapa[en].map(i => `<tr><td>${esc(i.servico)}${i.complemento ? ' <span class="badge fvb fvb-vist">complemento</span>' : ''}</td><td class="n"><b>${esc(qun(i.qtd, i.unidade, i.prevista))}</b></td><td>${fd(i.concluido_em)}</td><td>${i.rdos.length ? rdoN(i.rdos[0]) + (i.rdos.length > 1 ? ' a ' + rdoN(i.rdos[i.rdos.length - 1]) : '') : '—'}</td><td>${esc(i.fvs || '—')}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+    <div class="card"><h3>Total por serviço</h3>${d.totais.map(t => `<div class="md-total"><span>${esc(t.servico)}</span><b>${esc(qun(t.qtd, t.unidade, t.prevista))}</b></div>`).join('')}</div>
+    <details class="card fv-hist"><summary>Memória de cálculo (lançamentos por diário)</summary>${d.itens.map(i => `<div class="alt"><b>${esc(i.servico)}</b> <small>${esc(i.etapa_nome)}</small><br><small>${i.dias.map(x => `${rdoN(x.rdo)} (${fc(x.data)}): ${esc(qun(x.qtd, i.unidade, i.prevista))}`).join(' · ')}</small></div>`).join('')}</details>
     <div class="card" id="mdAcao"></div>`);
   mdDesenhaAcao();
 }
@@ -263,9 +263,9 @@ function mdFolha(d, numero, aprovando) {
     ${d.obs ? `<div class="rl-callout rl-cut"><div class="rl-sec-t sm">Observações</div>${esc(d.obs).replace(/\n/g, '<br>')}</div>` : ''}
     ${sec('Serviços medidos (concluídos, com FVS aprovada)', Object.keys(porEtapa).map(en => `<div class="rl-bloco rl-et"><div class="rl-et-t"><div><b>${esc(en)}</b></div></div>
       <table class="rl-t"><thead><tr><th>Serviço</th><th class="n">Quantidade</th><th>Concluído</th><th>Diários</th><th>FVS</th></tr></thead><tbody>
-      ${porEtapa[en].map(i => `<tr><td>${esc(i.servico)}${i.complemento ? '<small>complemento de serviço já medido</small>' : ''}</td><td class="n"><b>${nf(i.qtd)}</b> ${esc(i.unidade)}</td><td>${fd(i.concluido_em)}</td><td>${rdos(i)}</td><td>${esc(i.fvs || '—')}</td></tr>`).join('')}</tbody></table></div>`).join(''))}
-    ${sec('Total por serviço', `<div class="rl-bloco rl-et"><table class="rl-t"><tbody>${d.totais.map(t => `<tr><td>${esc(t.servico)}</td><td class="n"><b>${nf(t.qtd)}</b> ${esc(t.unidade)}</td></tr>`).join('')}</tbody></table></div>`)}
-    ${sec('Memória de cálculo', `<div class="rl-bloco rl-lis">${d.itens.map(i => `<div class="rl-li"><span><b>${esc(i.servico)}</b> <small>${esc(i.etapa_nome)}</small><br><small>${i.dias.map(x => `${rdoN(x.rdo)} (${fc(x.data)}): ${nf(x.qtd)}`).join(' · ')}</small></span></div>`).join('')}</div>`)}
+      ${porEtapa[en].map(i => `<tr><td>${esc(i.servico)}${i.complemento ? '<small>complemento de serviço já medido</small>' : ''}</td><td class="n"><b>${esc(qun(i.qtd, i.unidade, i.prevista))}</b></td><td>${fd(i.concluido_em)}</td><td>${rdos(i)}</td><td>${esc(i.fvs || '—')}</td></tr>`).join('')}</tbody></table></div>`).join(''))}
+    ${sec('Total por serviço', `<div class="rl-bloco rl-et"><table class="rl-t"><tbody>${d.totais.map(t => `<tr><td>${esc(t.servico)}</td><td class="n"><b>${esc(qun(t.qtd, t.unidade, t.prevista))}</b></td></tr>`).join('')}</tbody></table></div>`)}
+    ${sec('Memória de cálculo', `<div class="rl-bloco rl-lis">${d.itens.map(i => `<div class="rl-li"><span><b>${esc(i.servico)}</b> <small>${esc(i.etapa_nome)}</small><br><small>${i.dias.map(x => `${rdoN(x.rdo)} (${fc(x.data)}): ${esc(ehVerba(i.unidade) ? qun(x.qtd, i.unidade, i.prevista) : nf(x.qtd))}`).join(' · ')}</small></span></div>`).join('')}</div>`)}
     <div class="rl-sec rl-cut"><div class="fv-ass"><div><span></span><b>${esc(d.enviado_por || d.criado_por || quem)}</b><small>Medição lançada por</small></div>
       <div><span></span><b>${aprov || '&nbsp;'}</b><small>Aprovação (aceite eletrônico com login)</small></div></div></div>
     <div class="rl-nota rl-cut">Documento gerado pelo sistema Size Engenharia. A medição considera apenas serviços concluídos e com FVS aprovada. O aceite eletrônico e o código de verificação ficam registrados no sistema.</div></div>`;
