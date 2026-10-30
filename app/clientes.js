@@ -18,14 +18,24 @@ async function vClientes() {
       <div class="g2"><label>Chave (token)<input name="chave" type="password" autocomplete="off" required></label><label>Repositório<input name="repo" value="renancod/size" required></label></div>
       <button class="btn">Guardar chave</button></form>`}
     <div class="cl-lista">${A.clientes.map(c => `<a class="card cl-item" href="#/admin/cliente/${enc(c.id)}" style="text-decoration:none;color:inherit">
-      ${c.logo_url ? `<span class="cl-cor cl-logo" style="border-color:${esc(c.cor)}"><img src="${esc(c.logo_url)}" alt="" loading="lazy" data-cor="${esc(c.cor)}"></span>` : `<span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>`}
+      ${c.logo_url ? `<span class="cl-cor cl-logo" style="border-color:${esc(c.cor)}"><img src="${esc(c.logo_url)}" alt="" loading="lazy" crossorigin="anonymous" data-cor="${esc(c.cor)}"></span>` : `<span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>`}
       <span><b>${esc(c.nome)}</b> <span class="pc-chip ${c.estagio === 'Obra' ? 'ok' : c.estagio === 'Inativo' ? 'err' : 'warn'}">${esc(c.estagio)}</span>
         ${c.razao_social || c.cnpj ? `<br><small>${esc([c.razao_social, c.cnpj].filter(Boolean).join(' · '))}</small>` : ''}
         ${c.contato || c.telefone || c.email ? `<br><small>${ic('user')} ${esc([c.contato + (c.cargo ? ' (' + c.cargo + ')' : ''), c.telefone, c.email].filter(x => x && x.trim()).join(' · '))}</small>` : ''}
         <br><small>${c.empreendimentos.length ? c.empreendimentos.map(e => esc(e.nome) + ' (' + esc(A.tipos[e.modelo]) + ')').join(', ') : 'sem obra'} · ${c.orc_total} ${c.orc_total === 1 ? 'orçamento' : 'orçamentos'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
       ${ic('chevron')}</a>`).join('') || '<div class="card vazio"><p>Nenhum cliente ainda.</p></div>'}</div>`);
   // logo que não carregou (endereço ainda subindo): volta ao quadrado na cor do cliente
-  $$('.cl-logo img').forEach(im => { im.onerror = () => { const s = im.parentNode; s.className = 'cl-cor'; s.style.background = im.dataset.cor; s.innerHTML = ic('building'); }; });
+  $$('.cl-logo img').forEach(im => {
+    im.onerror = () => { const s = im.parentNode; s.className = 'cl-cor'; s.style.background = im.dataset.cor; s.innerHTML = ic('building'); };
+    // logo com fundo próprio (ex: quadrado preto): o quadrado pega a cor do canto dela, sem moldura branca
+    const pinta = () => { try {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+      const g = cv.getContext('2d'); g.drawImage(im, 1, 1, 1, 1, 0, 0, 1, 1);
+      const [r, gr, b, a] = g.getImageData(0, 0, 1, 1).data;
+      if (a > 200) im.parentNode.style.background = `rgb(${r},${gr},${b})`;
+    } catch (e) { /* imagem de outro endereço sem permissão: fica o branco */ } };
+    if (im.complete && im.naturalWidth) pinta(); else im.addEventListener('load', pinta);
+  });
   if ($('#clGh')) $('#clGh').onsubmit = async e => {
     e.preventDefault();
     // "chave", nunca "token": token é o login do app na chamada (sobrescrever derrubava a sessão)
