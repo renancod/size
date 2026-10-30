@@ -140,6 +140,33 @@ function migrar_() {
   });
 }
 
+/* ---------- prazo da obra em DIAS ÚTEIS (seg a sex, sem feriados nacionais e municipais da obra) ----------
+ * Contrato: do início mais cedo ao fim mais tarde das frentes gerais (sem datas nelas, as frentes de execução),
+ * mais os dias úteis dos aditivos de prazo (contratos do cliente). Projeção pelo ritmo: % executado ÷ dias úteis passados. */
+function prazoObra_(ctx, A) {
+  const fer = feriadosObra_(ctx.obra), util = s => { const w = dow_(s); return w >= 1 && w <= 5 && !fer(s); };
+  const uteis = (a, b) => { let n = 0; for (let s = a; s <= b; s = addDias_(s, 1)) if (util(s)) n++; return n; };
+  const somar = (a, n) => { let s = a; while (n > 0) { s = addDias_(s, 1); if (util(s)) n--; } return s; };
+  const fr = orcFrentes_(ctx).map(f => ({ ini: cronoData_(f.inicio), fim: cronoData_(f.fim) })).filter(f => f.ini && f.fim);
+  A = A || cliAndamento_(ctx);
+  const ini = fr.length ? fr.map(f => f.ini).sort()[0] : A.inicio, fimOrig = fr.length ? fr.map(f => f.fim).sort().pop() : A.fim;
+  if (!ini || !fimOrig) return null;
+  let extra = 0;
+  try { extra = ccAditivoDias_(ctx); } catch (e) { extra = 0; }
+  const fim = extra > 0 ? somar(fimOrig, extra) : fimOrig, hoje = hojeYmd_(), pct = num_(A.pct_exec);
+  const total = uteis(ini, fim), passados = hoje < ini ? 0 : uteis(ini, hoje < fim ? hoje : fim);
+  const r = { inicio: ini, fim: fim, fim_original: fimOrig, aditivo_dias: extra, total: total, passados: passados,
+    restantes: hoje < fim ? uteis(addDias_(hoje, 1), fim) : 0, vencidos: hoje > fim ? uteis(addDias_(fim, 1), hoje) : 0,
+    pct_exec: pct, pct_prev: num_(A.pct_prev), projecao: '', atraso: 0,
+    situacao: pct >= 99.95 ? 'concluida' : hoje < ini ? 'a_iniciar' : hoje > fim ? 'vencido' : 'andamento' };
+  // ritmo atual (com pelo menos 10 dias úteis de obra e algum avanço)
+  if (pct > 0 && pct < 99.95 && passados >= 10) {
+    r.projecao = somar(hoje, Math.ceil((100 - pct) / (pct / passados)));
+    if (r.projecao > fim) r.atraso = uteis(addDias_(fim, 1), r.projecao);
+  }
+  return r;
+}
+
 /* ---------- obra: previsto × executado (RDO) × medido ---------- */
 function cronoObra_(q, ctx) {
   const calc = calcExec_(ctx), orc = orcCalc_(ctx, calc), hoje = calc.hoje, cad = {};

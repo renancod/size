@@ -20,6 +20,8 @@ function criarGAS() {
   Blob.prototype.getContentType = function () { return this._m; };
   Blob.prototype.copyBlob = function () { return new Blob(this._b, this._m, this._n); };
   Blob.prototype.getSize = function () { return this._b.length; };
+  // conversão para PDF (no Google é o HTML renderizado; aqui guarda o próprio HTML para o teste conferir o conteúdo)
+  Blob.prototype.getAs = function (m) { return new Blob(this._b, m, this._n.replace(/\.\w+$/, '') + '.pdf'); };
 
   function Range(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr, nc }); }
   Range.prototype.getValues = function () {
@@ -145,7 +147,7 @@ Sheet.prototype.setName = function (n) { this.nome = n; return this; };
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Contratos.gs', 'Orcamento.gs', 'ImportAva.gs', 'RelatorioObra.gs', 'Push.gs', 'Base.gs', 'Propostas.gs', 'Cronograma.gs', 'Sinapi.gs', 'Clientes.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Contratos.gs', 'Orcamento.gs', 'ImportAva.gs', 'RelatorioObra.gs', 'Push.gs', 'Base.gs', 'Propostas.gs', 'Cronograma.gs', 'Sinapi.gs', 'Clientes.gs', 'ContratosCliente.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());

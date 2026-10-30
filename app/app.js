@@ -19,6 +19,19 @@ const LS = {
 const norm = s => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const fd = s => { if (!s) return ''; const a = String(s).slice(0, 10).split('-'); return a.length === 3 ? `${a[2]}/${a[1]}/${a[0]}` : String(s); };
 const fdh = s => { if (!s) return ''; const h = String(s).slice(11, 16); return fd(s) + (h && h !== '00:00' ? ' ' + h : ''); };
+/* prazo da obra em dias úteis (cartão da obra no Início e no portal do cliente): dia X de N, faltam, término e projeção */
+function prazoHtml(P) {
+  if (!P) return '';
+  const pct = P.total ? Math.min(100, P.passados / P.total * 100) : 0, adt = P.aditivo_dias ? ` <small>(+${P.aditivo_dias} de aditivo)</small>` : '';
+  if (P.situacao === 'concluida') return `<span class="prazo ok"><b>Obra concluída</b><small>prazo de ${P.total} dias úteis${adt}</small></span>`;
+  if (P.situacao === 'a_iniciar') return `<span class="prazo"><b>Início em ${fd(P.inicio)}</b><small>${P.total} dias úteis de prazo${adt} · término ${fd(P.fim)}</small></span>`;
+  // atraso maior que o prazo inteiro: a data projetada não ajuda (início de obra, pouco lançado); mostra o alerta
+  const proj = P.atraso > P.total ? `<span class="atrasado">ritmo atual bem abaixo do necessário</span>`
+    : P.atraso > 0 ? `<span class="atrasado">no ritmo atual termina ${fd(P.projecao)} (+${P.atraso} dias úteis)</span>` : P.projecao ? `<span class="ok">no ritmo atual termina ${fd(P.projecao)}</span>` : '';
+  if (P.situacao === 'vencido') return `<span class="prazo atrasado"><b>Prazo vencido há ${P.vencidos} dias úteis</b><small>término era ${fd(P.fim)}${adt}${proj ? ' · ' + proj : ''}</small><span class="prazo-bar"><i style="width:100%"></i></span></span>`;
+  return `<span class="prazo ${P.atraso > 0 ? 'risco' : ''}"><b>Dia ${P.passados} de ${P.total} dias úteis · faltam ${P.restantes}</b><span class="prazo-bar"><i style="width:${pct.toFixed(1)}%"></i></span>
+    <small>término ${fd(P.fim)}${adt}${proj ? ' · ' + proj : ''}</small></span>`;
+}
 const brl = v => v === '' || v == null ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = v => { if (typeof v === 'number') return v; let s = String(v ?? '').trim().replace(/[R$\s]/g, ''); if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); const n = Number(s); return isNaN(n) ? 0 : n; };
 const nf = n => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
@@ -175,9 +188,14 @@ const tempoGuardar = (() => { let tm; return () => { clearTimeout(tm); tm = setT
 /* nome da tela sem os códigos (#/orc/orcamento/PR-1234/proposta → #/orc/orcamento/…/proposta) para agrupar */
 const telaNome = h => h.split('?')[0].replace(/\/[A-Z]{1,4}-?[0-9a-f]{3,}[^/]*/gi, '/…').replace(/\/\d+(?=\/|$)/g, '/…');
 
+/* uma busca só por vez: quem pedir a lista enquanto ela está chegando espera a mesma resposta (a tela e o início não duplicam) */
 async function pedidos(forcar) {
-  if (!S.ped || forcar) { const r = await api('pedidos_listar'); S.ped = r.pedidos; S.todos = r.todos; contadores(); }
-  return S.ped;
+  if (S.ped && !forcar) return S.ped;
+  if (!S.pedP || forcar) {
+    const obra = S.obraId;
+    S.pedP = api('pedidos_listar').then(r => { if (obra === S.obraId) { S.ped = r.pedidos; S.todos = r.todos; contadores(); } return r.pedidos; }).finally(() => { S.pedP = null; });
+  }
+  return S.pedP;
 }
 async function recarregarDados() {
   // guarda no aparelho para o app abrir sem sinal (diário de obra em campo)
@@ -726,8 +744,9 @@ async function verArquivo(id) {
 /* painel da obra aberta (o Início da empresa fica em empresa.js) */
 async function vHome() {
   titulo('Painel da obra');
-  if (S.dados && !S.offline) await pedidos().catch(() => {});
-  if (S.dados && typeof carregarExec === 'function' && can(['exec_ver', 'exec_lancar', 'exec_planejar'])) await carregarExec().catch(() => {});
+  // pedidos e execução ao mesmo tempo (um não espera o outro)
+  await Promise.all([S.dados && !S.offline ? pedidos().catch(() => {}) : null,
+    S.dados && typeof carregarExec === 'function' && can(['exec_ver', 'exec_lancar', 'exec_planejar']) ? carregarExec().catch(() => {}) : null]);
   const pend = pendenciasCompras();
   view(`<div class="cab"><h2>${obraAtual() ? esc(obraAtual().nome) : 'Obra'}</h2>${multiObra() ? `<button type="button" class="btn sec peq" id="painelTrocar">${ic('back')} Trocar obra</button>` : ''}</div>
     ${S.offline ? '<div class="aviso warn">Sem sinal: mostrando os dados guardados no aparelho. O diário de obra funciona e envia sozinho quando o sinal voltar.</div>' : ''}
@@ -959,7 +978,7 @@ async function vPedido(numero) {
     ${d.recebimentos.length ? `<div class="card"><h3>Recebimentos</h3><div class="rolar"><table class="tab"><tr><th>Data</th><th>Material</th><th class="n">Qtd</th><th>Por</th></tr>
       ${d.recebimentos.map(r => `<tr><td>${fdh(r.data)}</td><td>${esc(r.descricao)}</td><td class="n">${nf(r.qtd)} ${esc(r.unidade)}</td><td>${esc(r.usuario)}${r.nf ? '<br><small>NF ' + esc(r.nf) + '</small>' : ''}</td></tr>`).join('')}</table></div></div>` : ''}
 
-    <div class="card"><h3>Arquivos</h3>${d.arquivos.map(a => `<div class="arq"><span class="tipo">${esc(a.tipo)}</span><span class="nome">${esc(a.nome)}<br><small>${fdh(a.data)} · ${esc(a.usuario)}</small></span>
+    <div class="card"><h3>Arquivos</h3>${d.arquivos.map(a => `<div class="arq"><span class="tipo">${esc({ OC: 'Ordem de compra', BOLETO: 'Boleto' }[a.tipo] || a.tipo)}</span><span class="nome">${esc(a.nome)}<br><small>${fdh(a.data)} · ${esc(a.usuario)}</small></span>
       <button class="btn sec peq" data-ver="${esc(a.file_id)}">Ver</button></div>`).join('') || '<small>Nenhum arquivo.</small>'}
       ${p.pasta_url && admin() ? `<p><a href="${esc(p.pasta_url)}" target="_blank" rel="noopener">Abrir pasta no Drive</a></p>` : ''}</div>
 
@@ -978,7 +997,7 @@ async function vPedido(numero) {
     try { await depois(await api('capturar_emails')); } catch (x) { toast(x.message, 1); e.target.disabled = false; }
   };
 }
-async function depois(r) { toast(r.msg || 'Feito.'); S.ped = null; if (DET) await vPedido(DET.pedido.numero); pedidos().catch(() => {}); buscarNotif(); }
+async function depois(r) { toast(r.msg || 'Feito.'); S.ped = null; if (DET) await vPedido(DET.pedido.numero); pedidos(true).catch(() => {}); buscarNotif(); }
 
 /* ---------- ações do pedido ---------- */
 function mCotar(nums) {
@@ -1182,7 +1201,7 @@ function mNF(d) {
 }
 
 function mAnexar(d) {
-  modal('Anexar arquivo', `<label>Tipo<select name="tipo"><option value="ORC">Orçamento</option><option value="NF">Nota fiscal</option><option value="COMPROVANTE">Comprovante</option><option value="FOTO">Foto</option><option value="OUTRO" selected>Outro</option></select></label>
+  modal('Anexar arquivo', `<label>Tipo<select name="tipo"><option value="ORC">Orçamento</option><option value="NF">Nota fiscal</option><option value="BOLETO">Boleto</option><option value="COMPROVANTE">Comprovante</option><option value="FOTO">Foto</option><option value="OUTRO" selected>Outro</option></select></label>
     ${campoArquivo('arq', 'Arquivo (PDF ou imagem)', true)}<small>Para o orçamento contar na regra de cotação, use "Registrar orçamento".</small>`,
   { ok: 'Anexar', onOk: async f => depois(await api('arquivo_anexar', { pedido: d.pedido.numero, tipo: f.tipo.value, arquivo: await lerArquivo(f.arq) })) });
 }

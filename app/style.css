@@ -1650,3 +1650,16 @@ label.chk{display:flex;gap:8px;align-items:center;font-weight:500;color:var(--tx
 .cl-ve-g{display:grid;gap:14px}.cl-ve-g>div{display:grid;gap:6px;align-content:start}.cl-ve-obras{display:grid;gap:4px;padding-left:24px}
 @media (min-width:640px){.cl-ve-g{grid-template-columns:1fr 1fr}}
 .cl-msg{font:inherit;font-size:.9rem;line-height:1.45;white-space:pre-wrap}
+/* prazo da obra em dias úteis (cartão do Início e do portal do cliente) */
+.prazo{display:grid;gap:4px;font-size:.8rem;color:var(--mute);text-align:left}.prazo b{color:var(--txt);font-size:.85rem}
+.prazo-bar{display:block;height:6px;border-radius:4px;background:#E6E9EF;overflow:hidden}.prazo-bar i{display:block;height:100%;background:var(--teal);border-radius:4px}
+.prazo.risco .prazo-bar i{background:#E0A100}.prazo.atrasado b,.prazo .atrasado{color:#C0392B}.prazo.atrasado .prazo-bar i{background:#C0392B}.prazo .ok{color:#1F8A55}
+.prazo.ok b{color:#1F8A55}
+.emp-obra:has(.prazo){grid-template-areas:"s t b e" "s k k e" "s p p e"}.emp-obra .prazo{grid-area:p;margin-top:4px}
+.pc-card .prazo .prazo-bar i,.pc-emp .prazo .prazo-bar i{background:var(--pc)}
+/* contratos e aditivos da obra */
+.cc-res{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));margin-bottom:12px}.cc-res .card{margin:0;display:grid;gap:4px;align-content:center}.cc-res .card>b{font-size:1.4rem;color:var(--navy)}
+.cc-item{display:grid;gap:10px}.cc-h{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:12px;align-items:center}
+.cc-ic{width:40px;height:40px;border-radius:10px;background:var(--teal-l);color:var(--teal);display:grid;place-items:center}
+.cc-v{display:grid;text-align:right}.cc-v b{font-size:1.1rem}.cc-v small{color:var(--teal);font-weight:600}
+.cc-fr{display:flex;gap:6px;flex-wrap:wrap}.cc-fr .pc-chip{text-decoration:none}.cc-frs{display:grid;gap:4px;max-height:220px;overflow:auto;padding:4px 0}

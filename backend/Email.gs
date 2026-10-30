@@ -46,14 +46,72 @@ function emailCotacao_(ctx, f, ps, q) {
   enviar_(f.email, 'Cotação Size · ' + ctx.obra.nome + ' ' + tag_(ps), emailHtml_('Solicitação de cotação', intro, linhasEmail_(ctx, ps), false));
 }
 
-function emailFornecedor_(ctx, p, prefixo, titulo, intro, anexos) {
+function emailFornecedor_(ctx, p, prefixo, titulo, intro, anexos, semPortal) {
   const f = obraTab_(ctx, 'Fornecedores').all().find(x => String(x.codigo) === String(p.fornecedor_cod) || norm_(x.nome) === norm_(p.fornecedor));
   if (!f || !f.email) return false;
   try {
-    intro += botaoPortal_(linkFornecedor_(ctx, f.codigo, [p.numero]), 'Informar data de entrega e enviar a nota fiscal');
+    if (!semPortal) intro += botaoPortal_(linkFornecedor_(ctx, f.codigo, [p.numero]), 'Informar data de entrega e enviar a nota fiscal');
     enviar_(f.email, prefixo + ' · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_(titulo, intro, linhasEmail_(ctx, [p]), true), anexos);
     return true;
-  } catch (e) { return false; } // a operação já foi gravada; o app avisa que o e-mail não saiu
+  } catch (e) { log_(ctx, 'email_falhou', p.numero + ' · ' + prefixo + ' · ' + e.message); return false; } // a operação já foi gravada; o app avisa que o e-mail não saiu
+}
+
+/* ---------- ordem de compra (PDF) ----------
+ * Gerada na aprovação: vai anexada ao e-mail do fornecedor escolhido e fica na pasta do pedido (tipo OC). */
+function ocHtml_(ctx, p) {
+  const f = obraTab_(ctx, 'Fornecedores').all().find(x => String(x.codigo) === String(p.fornecedor_cod) || norm_(x.nome) === norm_(p.fornecedor)) || {};
+  const its = itensDe_(ctx, p.numero), d = x => x instanceof Date ? Utilities.formatDate(x, tz_(), 'dd/MM/yyyy') : '';
+  const td = 'style="border:1px solid #c9ced8;padding:6px 8px"', th = 'style="border:1px solid #c9ced8;padding:6px 8px;background:#0E2A6B;color:#fff;text-align:left"';
+  const soma = its.reduce((t, i) => t + num_(i.valor_unit) * num_(i.qtd), 0), total = num_(p.valor_total) || soma;
+  return '<html><body style="font-family:Arial;font-size:12px;color:#1f2733">'
+    + '<table style="width:100%"><tr><td><b style="font-size:18px;color:#0E2A6B">' + h_(empresa_()) + '</b><br>Setor de Compras</td>'
+    + '<td style="text-align:right"><b style="font-size:16px">ORDEM DE COMPRA</b><br>Nº <b>' + h_(p.numero) + '</b><br>Emitida em ' + d(p.aprovado_em || new Date()) + '</td></tr></table><hr>'
+    + '<table style="width:100%;margin:8px 0"><tr><td style="vertical-align:top;width:50%"><b>Fornecedor</b><br>' + h_(p.fornecedor) + (f.cnpj ? '<br>CNPJ ' + h_(f.cnpj) : '') + (f.contato ? '<br>' + h_(f.contato) : '') + (f.email ? '<br>' + h_(f.email) : '') + (f.telefone ? '<br>' + h_(f.telefone) : '') + '</td>'
+    + '<td style="vertical-align:top"><b>Local de entrega</b><br>Obra ' + h_(ctx.obra.nome) + (ctx.obra.endereco ? '<br>' + h_(ctx.obra.endereco) : '') + (p.frente ? '<br>Frente: ' + h_(p.frente) : '') + '</td></tr></table>'
+    + '<table style="border-collapse:collapse;width:100%"><tr><th ' + th + '>Item</th><th ' + th + '>Material</th><th ' + th + '>Quant.</th><th ' + th + '>Unit.</th><th ' + th + '>Total</th></tr>'
+    + its.map(i => '<tr><td ' + td + '>' + i.item + '</td><td ' + td + '>' + h_(i.descricao) + '</td><td ' + td + '>' + h_(i.qtd) + ' ' + h_(i.unidade) + '</td><td ' + td + '>' + (i.valor_unit !== '' ? brl_(i.valor_unit) : '') + '</td><td ' + td + '>' + (i.valor_unit !== '' ? brl_(num_(i.valor_unit) * num_(i.qtd)) : '') + '</td></tr>').join('')
+    + '<tr><td ' + td + ' colspan="4" style="text-align:right"><b>Valor total</b></td><td ' + td + '><b>' + brl_(total) + '</b></td></tr></table>'
+    + '<p><b>Condição de pagamento:</b> ' + h_(p.condicao) + (p.prazo_fat ? ' ' + h_(p.prazo_fat) + ' dias após a nota fiscal' : '') + (p.condicao === 'Faturamento direto' ? ' (pagamento antes da entrega; a entrega é liberada com o comprovante)' : '') + '<br>'
+    + (p.previsao instanceof Date ? '<b>Entrega prevista:</b> ' + d(p.previsao) + '<br>' : '') + (p.necessidade instanceof Date ? '<b>Necessário até:</b> ' + d(p.necessidade) + '<br>' : '')
+    + '<b>Nota fiscal:</b> informar o nº ' + h_(p.numero) + ' na nota.' + (p.condicao === 'Faturamento direto' ? '' : ' Entregar somente após a liberação da entrega.') + '</p>'
+    + (p.observacoes ? '<p><b>Observações:</b> ' + h_(p.observacoes) + '</p>' : '')
+    + '<p style="margin-top:28px">Aprovado por ' + h_(p.aprovado_por || ctx.u.nome) + ' · ' + h_(empresa_()) + '</p></body></html>';
+}
+function ocPdf_(ctx, p) {
+  return Utilities.newBlob(ocHtml_(ctx, p), 'text/html', 'Ordem de compra ' + p.numero + '.html').getAs('application/pdf').setName('Ordem de compra ' + p.numero + '.pdf');
+}
+/* aprovada: o escolhido recebe a ordem de compra; quem orçou e não foi escolhido recebe o agradecimento */
+function avisarAprovacao_(ctx, p) {
+  let oc = null;
+  try { oc = ocPdf_(ctx, p); salvarBlob_(ctx, p, 'OC', oc.copyBlob(), oc.getName(), 'aprovação'); } catch (e) { log_(ctx, 'oc_falhou', p.numero + ' · ' + e.message); }
+  const direto = p.condicao === 'Faturamento direto';
+  const ok = emailFornecedor_(ctx, p, 'Pedido aprovado Size', 'Ordem de compra ' + p.numero,
+    'Prezados, sua proposta foi <b>aprovada</b>. Segue a <b>ordem de compra</b> em anexo para a obra <b>' + h_(ctx.obra.nome) + '</b>.<br>'
+    + (direto ? 'Condição: <b>faturamento direto</b>. O pagamento é feito antes da entrega e você recebe o comprovante com a liberação.'
+      : p.entrega === 'Entrega liberada' ? 'A entrega já está <b>liberada</b>.' : '<b>Aguarde a liberação da entrega</b>: avisamos por e-mail.'),
+    oc ? [oc] : [], direto);
+  const F = obraTab_(ctx, 'Fornecedores').all(), vistos = {};
+  obraTab_(ctx, 'Orcamentos').all().filter(o => o.pedido === p.numero && (o.fornecedor_cod || o.fornecedor) !== (p.fornecedor_cod || p.fornecedor)).forEach(o => {
+    const f = F.find(x => String(x.codigo) === String(o.fornecedor_cod)), mail = f ? f.email : /@/.test(o.fornecedor) ? o.fornecedor : '';
+    if (!mail || vistos[mail] || String(o.fornecedor_cod) === String(p.fornecedor_cod)) return;
+    vistos[mail] = 1;
+    try {
+      enviar_(mail, 'Cotação Size · ' + ctx.obra.nome + ' ' + tag_([p]) + ' · resultado', '<div style="font-family:Arial;font-size:14px"><p>Prezados' + (f && f.contato ? ' (' + h_(f.contato) + ')' : '') + ',</p><p>Agradecemos o orçamento enviado para o pedido <b>' + h_(p.numero) + '</b> da obra <b>' + h_(ctx.obra.nome) + '</b>. Nesta cotação seguimos com outra proposta. Contamos com vocês nas próximas.</p><p>Atenciosamente,<br>Setor de Compras · ' + h_(empresa_()) + '</p></div>');
+    } catch (e) { log_(ctx, 'email_falhou', p.numero + ' · resultado da cotação · ' + e.message); }
+  });
+  return ok;
+}
+/* cancelado: avisa o fornecedor escolhido e quem estava cotando (o motivo é interno: não vai no e-mail) */
+function avisarCancelamento_(ctx, p) {
+  const F = obraTab_(ctx, 'Fornecedores').all(), mails = {};
+  if (p.fornecedor) { const f = F.find(x => String(x.codigo) === String(p.fornecedor_cod) || norm_(x.nome) === norm_(p.fornecedor)); if (f && f.email) mails[f.email] = f.contato || ''; }
+  obraTab_(ctx, 'Orcamentos').all().filter(o => o.pedido === p.numero).forEach(o => { const f = F.find(x => String(x.codigo) === String(o.fornecedor_cod)); if (f && f.email) mails[f.email] = f.contato || ''; });
+  Object.keys(mails).forEach(m => {
+    try {
+      enviar_(m, 'Pedido Size · ' + ctx.obra.nome + ' ' + tag_([p]) + ' · cancelado', '<div style="font-family:Arial;font-size:14px"><p>Prezados' + (mails[m] ? ' (' + h_(mails[m]) + ')' : '') + ',</p><p>O pedido <b>' + h_(p.numero) + '</b> da obra <b>' + h_(ctx.obra.nome) + '</b> foi <b>cancelado</b>' + (p.fornecedor ? '. Por favor, desconsiderem a ordem de compra e não façam a entrega' : '. Não é mais necessário enviar orçamento') + '.</p><p>Atenciosamente,<br>Setor de Compras · ' + h_(empresa_()) + '</p></div>');
+    } catch (e) { log_(ctx, 'email_falhou', p.numero + ' · cancelamento · ' + e.message); }
+  });
+  return Object.keys(mails).length;
 }
 
 /* destinatários do financeiro: e-mail da obra (ou o geral) + usuários com permissão de financeiro nesta obra */
@@ -71,9 +129,14 @@ function avisarFinanceiro_(ctx, p, motivo) {
   const url = c.APP_URL ? String(c.APP_URL).replace(/\/?$/, '/') + '?obra=' + encodeURIComponent(ctx.obra.id) + '#/pedido/' + encodeURIComponent(p.numero) : '';
   const intro = '<b>' + h_(motivo) + '</b><br>Fornecedor: ' + h_(p.fornecedor) + ' · Valor: <b>' + brl_(p.valor_total) + '</b> · ' + h_(p.condicao) +
     (url ? '<br><a href="' + url + '">Abrir no app de Compras</a>' : '');
+  // a nota fiscal e o boleto do pedido vão anexados (o financeiro paga sem abrir o app)
+  const anexos = [];
+  obraTab_(ctx, 'Arquivos').all().filter(a => a.pedido === p.numero && ['NF', 'BOLETO'].indexOf(a.tipo) >= 0).slice(-3).forEach(a => {
+    try { anexos.push(DriveApp.getFileById(a.file_id).getBlob()); } catch (e) { /* arquivo apagado do Drive */ }
+  });
   try {
-    enviar_(para.join(','), 'Financeiro · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_('Pagamento pendente', intro, linhasEmail_(ctx, [p]), true));
-  } catch (e) { /* aviso por e-mail é opcional */ }
+    enviar_(para.join(','), 'Financeiro · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_('Pagamento pendente', intro + (anexos.length ? '<br><small>Nota fiscal / boleto em anexo.</small>' : ''), linhasEmail_(ctx, [p]), true), anexos);
+  } catch (e) { log_(ctx, 'email_falhou', p.numero + ' · financeiro · ' + e.message); }
 }
 
 function avisarAprovadores_(ctx, p) {
@@ -86,31 +149,35 @@ function avisarAprovadores_(ctx, p) {
     '</b> · ' + h_(p.condicao) + (p.prazo_fat ? ' ' + p.prazo_fat + ' dias' : '') + (url ? '<br><a href="' + url + '">Abrir no app para aprovar ou reprovar</a>' : '');
   try {
     enviar_(us.map(u => u.email).join(','), 'Aprovação · ' + ctx.obra.nome + ' ' + tag_([p]), emailHtml_('Compra aguardando aprovação', intro, linhasEmail_(ctx, [p]), true));
-  } catch (e) { /* aviso por e-mail é opcional */ }
+  } catch (e) { log_(ctx, 'email_falhou', p.numero + ' · aprovadores · ' + e.message); }
 }
 
 /* ---------- captura automática ---------- */
 function capturarEmails() {
+  // 1) leitura do Gmail FORA da fila de gravação (é a parte demorada: quem grava no app não fica esperando)
+  const eu = Session.getEffectiveUser().getEmail().toLowerCase();
+  const threads = GmailApp.search('has:attachment newer_than:45d subject:Size', 0, 60);
+  if (!threads.length) return { msg: 'Nenhum e-mail novo.' };
+  const msgs = [];
+  threads.forEach(t => t.getMessages().forEach(m => {
+    const de = m.getFrom(), rem = ((de.match(/<([^>]+)>/) || [0, de])[1]).trim().toLowerCase();
+    if (rem === eu) return;
+    const subj = m.getSubject(), nums = subj.match(/\b[A-Z]{1,5}-\d{4,6}\b/g);   // pedido PB-0001 … PB-12345
+    if (!nums) return;
+    const anexos = m.getAttachments({ includeInlineImages: false }).filter(a => /pdf/i.test(a.getContentType()) || a.getSize() >= 30000);
+    if (anexos.length) msgs.push({ m: m, rem: rem, nums: nums, tipo: /cota/i.test(subj) ? 'ORC' : 'NF', anexos: anexos });
+  }));
+  if (!msgs.length) return { msg: 'Nenhum e-mail novo.' };
+  // 2) gravação dentro da fila
   const L = LockService.getScriptLock();
   L.waitLock(30000);
   try {
-    const eu = Session.getEffectiveUser().getEmail().toLowerCase();
-    const threads = GmailApp.search('has:attachment newer_than:45d subject:Size', 0, 60);
-    if (!threads.length) return { msg: 'Nenhum e-mail novo.' };
     const obras = central_('Obras').all().filter(o => sim_(o.ativa));
     const ctxs = {};
     const ctxDe = o => ctxs[o.id] = ctxs[o.id] || { u: { id: '', nome: 'E-mail automático' }, obra: o, ss: SpreadsheetApp.openById(o.planilha_id), perms: [], admin: true };
     let salvos = 0;
 
-    threads.forEach(t => t.getMessages().forEach(m => {
-      const de = m.getFrom(), rem = ((de.match(/<([^>]+)>/) || [0, de])[1]).trim().toLowerCase();
-      if (rem === eu) return;
-      const subj = m.getSubject(), nums = subj.match(/\b[A-Z]{1,5}-\d{4}\b/g);
-      if (!nums) return;
-      const tipo = /cota/i.test(subj) ? 'ORC' : 'NF';
-      const anexos = m.getAttachments({ includeInlineImages: false }).filter(a => /pdf/i.test(a.getContentType()) || a.getSize() >= 30000);
-      if (!anexos.length) return;
-
+    msgs.forEach(({ m, rem, nums, tipo, anexos }) => {
       nums.forEach(n => {
         let ctx = null, p = null;
         obras.some(o => {
@@ -140,15 +207,15 @@ function capturarEmails() {
             });
             if (p.status === 'Aberto') p.status = 'Em cotação';
             hist_(p, ctx, 'Orçamento recebido por e-mail de ' + (F ? F.nome : rem) + ' (preencher o valor)');
-          } else if (tipo === 'NF' && p.status === 'Aprovado' && p.fin === 'Aguardando NF') {
-            registrarNF_(ctx, p, '', '');
+          } else if (tipo === 'NF' && p.status === 'Aprovado' && (p.fin === 'Aguardando NF' || !p.nf_numero)) {
+            registrarNF_(ctx, p, '', '');   // no faturamento direto também fica registrado que a nota chegou
           } else {
             hist_(p, ctx, 'Arquivo recebido por e-mail de ' + rem + ': ' + a.getName());
           }
         });
         if (mudou) salvar_(ctx, p);
       });
-    }));
+    });
     return { msg: salvos + ' arquivo(s) novo(s) recebido(s) por e-mail.' };
   } finally { L.releaseLock(); }
 }

@@ -68,6 +68,7 @@ function fornDados_(ctx) {
         nf_numero: p.nf_numero, nf_em: fmt(p.nf_em), pago_em: fmt(p.pago_em),
         liberada: ['Entrega liberada', 'Recebido parcial', 'Recebido'].indexOf(p.entrega) >= 0,
         comprovantes: A.filter(a => a.pedido === p.numero && a.tipo === 'COMPROVANTE').map(a => ({ id: a.file_id, nome: a.nome })),
+        ordens: A.filter(a => a.pedido === p.numero && a.tipo === 'OC').map(a => ({ id: a.file_id, nome: a.nome })),
         notas: A.filter(a => a.pedido === p.numero && a.tipo === 'NF').map(a => ({ nome: a.nome, data: fmtVal_(a.data) })),
         recebido: itensDe_(ctx, p.numero).map(i => ({ item: i.item, qtd_recebida: i.qtd_recebida || 0 }))
       };
@@ -134,7 +135,7 @@ function fornNF_(ctx, q) {
 function fornArquivo_(ctx, q) {
   const p = pedidoDoPortal_(ctx, q.numero);
   if (etapaFornecedor_(ctx, p) !== 'compra') throw new Error('Sem acesso.');
-  const a = obraTab_(ctx, 'Arquivos').all().find(x => x.pedido === p.numero && x.tipo === 'COMPROVANTE' && String(x.file_id) === String(q.id));
+  const a = obraTab_(ctx, 'Arquivos').all().find(x => x.pedido === p.numero && (x.tipo === 'COMPROVANTE' || x.tipo === 'OC') && String(x.file_id) === String(q.id));
   if (!a) throw new Error('Arquivo não encontrado.');
   const f = DriveApp.getFileById(a.file_id);
   return { nome: a.nome || f.getName(), mime: f.getMimeType(), b64: Utilities.base64Encode(f.getBlob().getBytes()) };

@@ -52,7 +52,7 @@ function veValores_(ctx) {
   return pode_(ctx, ['financeiro', 'compras_cotar', 'compras_definir', 'compras_aprovar', 'compras_liberar']);
 }
 const CAMPOS_VALOR_ = ['valor_total', 'prazo_fat', 'vencimento', 'forma_pagto', 'pago_em', 'excecao_orc'];
-const ARQ_VALOR_ = ['ORC', 'COMPROVANTE'];
+const ARQ_VALOR_ = ['ORC', 'COMPROVANTE', 'BOLETO', 'OC'];
 function semValores_(o) {
   CAMPOS_VALOR_.forEach(k => { if (k in o) o[k] = ''; });
   if (o.historico) o.historico = String(o.historico).replace(/R\$\s?-?[\d.,]+/g, 'R$ •••');
@@ -85,26 +85,29 @@ function obraDados_(q, ctx) {
   };
 }
 
+/* a lista completa da obra fica na memória do Google (Db.gs memoria_) e renova a cada gravação na planilha da obra;
+ * o recorte de cada pessoa (só os seus, sem valores) é feito depois */
 function pedidosListar_(q, ctx) {
-  const todos = veTodos_(ctx);
-  const its = {}, orcs = {};
-  obraTab_(ctx, 'Itens').all().forEach(i => { (its[i.pedido] = its[i.pedido] || []).push(i); });
-  obraTab_(ctx, 'Orcamentos').all().forEach(o => { (orcs[o.pedido] = orcs[o.pedido] || {})[o.fornecedor_cod || o.fornecedor] = 1; });
-  const valores = veValores_(ctx);
-  const ps = obraTab_(ctx, 'Pedidos').all().filter(p => (todos || String(p.solicitante_id) === String(ctx.u.id)) && (valores || !encerradoParaEstoque_(p)));
-  return {
-    todos: todos,
-    valores: valores,
-    pedidos: ps.slice(-2000).reverse().map(p => {
+  const todos = veTodos_(ctx), valores = veValores_(ctx);
+  const lista = memoria_('ss' + ctx.ss.getId(), 'pedidos', () => {
+    const its = {}, orcs = {};
+    obraTab_(ctx, 'Itens').all().forEach(i => { (its[i.pedido] = its[i.pedido] || []).push(i); });
+    obraTab_(ctx, 'Orcamentos').all().forEach(o => { (orcs[o.pedido] = orcs[o.pedido] || {})[o.fornecedor_cod || o.fornecedor] = 1; });
+    return obraTab_(ctx, 'Pedidos').all().slice(-2000).reverse().map(p => {
       const o = pub_(p);
       delete o.historico;
-      if (!valores) { semValores_(o); o.fin = ''; }
       o.situacao = situacao_(p);
       o.n_orc = Object.keys(orcs[p.numero] || {}).length;
       o.itens = (its[p.numero] || []).sort((a, b) => a.item - b.item)
         .map(i => ({ item: i.item, descricao: i.descricao, unidade: i.unidade, qtd: i.qtd, qtd_recebida: i.qtd_recebida || 0 }));
       return o;
-    })
+    });
+  });
+  return {
+    todos: todos,
+    valores: valores,
+    pedidos: lista.filter(p => (todos || String(p.solicitante_id) === String(ctx.u.id)) && (valores || !encerradoParaEstoque_(p)))
+      .map(o => { if (!valores) { semValores_(o); o.fin = ''; } return o; })
   };
 }
 
@@ -260,10 +263,13 @@ function pedidoDefinir_(q, ctx) {
     (exc ? ' · EXCEÇÃO à regra de ' + min + ' orçamentos: ' + exc : ''));
   if (q.aprovar && pode_(ctx, 'compras_aprovar')) aprovar_(ctx, p);
   salvar_(ctx, p);
+  let avisado = false;
   if (p.status === 'Aguardando aprovação') avisarAprovadores_(ctx, p);
+  else if (q.avisar !== false) avisado = avisarAprovacao_(ctx, p);
   log_(ctx, 'pedido_definir', p.numero + ' ' + p.fornecedor + ' ' + valor);
-  return { msg: p.status === 'Aprovado' ? 'Compra definida e aprovada.' : 'Compra definida. Aguardando aprovação.' };
+  return { msg: p.status === 'Aprovado' ? 'Compra definida e aprovada.' + msgOc_(p, avisado) : 'Compra definida. Aguardando aprovação.' };
 }
+const msgOc_ = (p, avisado) => avisado ? ' Ordem de compra enviada a ' + p.fornecedor + '.' : ' Fornecedor sem e-mail: a ordem de compra está nos arquivos do pedido para enviar pelo WhatsApp.';
 
 function aprovar_(ctx, p) {
   p.status = 'Aprovado';
@@ -287,8 +293,9 @@ function pedidoAprovar_(q, ctx) {
   if (p.status !== 'Aguardando aprovação') throw new Error('Pedido não está aguardando aprovação.');
   aprovar_(ctx, p);
   salvar_(ctx, p);
+  const avisado = q.avisar !== false && avisarAprovacao_(ctx, p);
   log_(ctx, 'pedido_aprovar', p.numero);
-  return { msg: 'Compra aprovada.' };
+  return { msg: 'Compra aprovada.' + (q.avisar !== false ? msgOc_(p, avisado) : '') };
 }
 
 function pedidoDevolver_(q, ctx) {
@@ -325,9 +332,14 @@ function pedidoPagar_(q, ctx) {
       'Prezados, o pagamento do pedido abaixo foi efetuado' + (p.forma_pagto ? ' via <b>' + h_(p.forma_pagto) + '</b>' : '') +
       ' e a <b>entrega está liberada</b> na obra <b>' + h_(ctx.obra.nome) + '</b>' + (ctx.obra.endereco ? ' (' + h_(ctx.obra.endereco) + ')' : '') + '. Segue o comprovante em anexo.',
       [DriveApp.getFileById(a.file_id).getBlob()]);
+  } else if (q.avisar !== false) {
+    // faturado: o fornecedor também recebe o comprovante
+    avisado = emailFornecedor_(ctx, p, 'Pagamento Size', 'Pagamento efetuado',
+      'Prezados, o pagamento do pedido abaixo' + (p.nf_numero && p.nf_numero !== 's/ nº' ? ' (nota fiscal ' + h_(p.nf_numero) + ')' : '') + ' foi efetuado' +
+      (p.forma_pagto ? ' via <b>' + h_(p.forma_pagto) + '</b>' : '') + '. Segue o comprovante em anexo. Obrigado!', [DriveApp.getFileById(a.file_id).getBlob()], true);
   }
   log_(ctx, 'pedido_pagar', p.numero);
-  return { msg: 'Pagamento registrado.' + (antecipado ? ' Entrega liberada' + (avisado ? ' e fornecedor avisado com o comprovante.' : '. Fornecedor sem e-mail: envie o link pelo WhatsApp.') : '') };
+  return { msg: 'Pagamento registrado.' + (antecipado ? ' Entrega liberada' + (avisado ? ' e fornecedor avisado com o comprovante.' : '. Fornecedor sem e-mail: envie o link pelo WhatsApp.') : avisado ? ' Comprovante enviado ao fornecedor.' : '') };
 }
 
 function registrarNF_(ctx, p, numero, data) {
@@ -428,18 +440,20 @@ function pedidoCancelar_(q, ctx) {
   if (p.status === 'Cancelado' || p.status === 'Concluído') throw new Error('Pedido já está ' + p.status.toLowerCase() + '.');
   if (p.status === 'Aprovado' && !ctx.admin) throw new Error('Compra já aprovada: só um administrador pode cancelar.');
   if (p.fin === 'Pago' && !ctx.admin) throw new Error('Pedido já pago: só um administrador pode cancelar.');
+  const tinhaFornecedor = p.status !== 'Aberto';
   p.status = 'Cancelado';
   hist_(p, ctx, 'Cancelado: ' + motivo);
   salvar_(ctx, p);
+  const n = tinhaFornecedor && q.avisar !== false ? avisarCancelamento_(ctx, p) : 0;
   log_(ctx, 'pedido_cancelar', p.numero + ' ' + motivo);
-  return { msg: 'Pedido cancelado.' };
+  return { msg: 'Pedido cancelado.' + (n ? ' ' + (n > 1 ? n + ' fornecedores avisados' : 'Fornecedor avisado') + ' por e-mail.' : '') };
 }
 
 /* ---------- arquivos ---------- */
 function arquivoAnexar_(q, ctx) {
   const p = achar_(ctx, q.pedido);
   if (!veTodos_(ctx) && String(p.solicitante_id) !== String(ctx.u.id)) throw new Error('Você só pode anexar nos seus pedidos.');
-  const tipo = ['ORC', 'NF', 'COMPROVANTE', 'FOTO', 'OUTRO'].indexOf(q.tipo) >= 0 ? q.tipo : 'OUTRO';
+  const tipo = ['ORC', 'NF', 'BOLETO', 'COMPROVANTE', 'FOTO', 'OUTRO'].indexOf(q.tipo) >= 0 ? q.tipo : 'OUTRO';
   salvarArquivo_(ctx, p, tipo, q.arquivo, 'anexo');
   hist_(p, ctx, 'Arquivo anexado (' + tipo + '): ' + (q.arquivo && q.arquivo.nome || ''));
   salvar_(ctx, p);

@@ -31,7 +31,7 @@ function orSemAcesso() { view('<div class="card vazio"><p>Você não tem acesso 
 function orGrupos(D, aqui) {
   const fr = D ? D.frentes.filter(f => f.ativa || f.itens.length) : [];
   const g = [{ t: 'Obra', itens: [{ k: 'v:painel', t: 'Painel da obra', i: 'chart', on: aqui === 'painel' }, { k: 'v:orc', t: 'Orçamento (quantidades)', i: 'list', on: aqui === 'orc' }, { k: 'v:fin', t: 'Valores (financeiro)', i: 'money', on: aqui === 'fin' },
-    { k: 'v:crono', t: 'Cronograma físico-financeiro', i: 'cal', on: aqui === 'crono' }, { k: 'v:rel', t: 'Relatório da obra', i: 'file', on: aqui === 'rel' }] }];
+    { k: 'v:crono', t: 'Cronograma físico-financeiro', i: 'cal', on: aqui === 'crono' }, { k: 'v:cc', t: 'Contratos e aditivos', i: 'file', on: aqui === 'cc' }, { k: 'v:rel', t: 'Relatório da obra', i: 'file', on: aqui === 'rel' }] }];
   if (fr.length) g.push({ t: 'Frentes gerais', itens: fr.map(f => ({ k: 'fr:' + f.codigo, t: f.nome, i: 'grid', n: f.resumo.falta_comprar || undefined, cl: f.resumo.falta_comprar ? 'quente' : '', on: aqui === f.codigo })) });
   if (orGere()) g.push({ t: 'Ações', itens: [{ k: 'a:frente', t: 'Nova frente geral', i: 'plus', cl: 'acao' }] });
   return g;
@@ -43,6 +43,7 @@ function orLigar(D) {
     else if (k === 'v:fin') location.hash = '#/obra/financeiro';
     else if (k === 'v:rel') location.hash = '#/obra/relatorio';
     else if (k === 'v:crono') location.hash = '#/obra/cronograma';
+    else if (k === 'v:cc') location.hash = '#/obra/contratos';
     else if (k.startsWith('fr:')) location.hash = '#/obra/frente/' + enc(k.slice(3));
     else if (k === 'a:frente') mOrFrente();
   });
@@ -103,7 +104,7 @@ function orCartao(f) {
     <small>${r.emp.tem ? 'Receita ' + orM(r.emp.receita) + ' · ' : r.v_total ? 'Orçado ' + orM(r.v_total) + ' · ' : ''}${plural(r.servicos, 'serviço', 'serviços')}${r.mo_contratado ? ' · MO contratada ' + orM(r.mo_contratado) : ''}</small>
     ${orBar(r.pct_exec)}
     <div class="its">${f.itens.slice(0, 5).map(i => `<div class="it"><span class="n">${esc(i.servico)}</span>${orBar(i.pct_exec)}
-      <small>${nf(i.executado)} / ${nf(i.qtd)} ${esc(i.unidade)} executado · ${i.a_distribuir < 0 ? `<b class="atrasado">${nf(-i.a_distribuir)} acima do orçado em frentes</b>` : nf(i.a_distribuir) + ' a distribuir'}</small></div>`).join('')}
+      <small>${nf(i.executado)} / ${nf(i.qtd)} ${esc(i.unidade)} executado · <b>faltam ${nf(Math.max(0, i.qtd - i.executado))}</b> · ${i.a_distribuir < 0 ? `<b class="atrasado">${nf(-i.a_distribuir)} acima do orçado em frentes</b>` : nf(i.a_distribuir) + ' a distribuir'}</small></div>`).join('')}
       ${f.itens.length > 5 ? `<small>+${f.itens.length - 5} serviços</small>` : ''}</div>
     ${falta.length ? `<div class="or-falta">${falta.slice(0, 4).map(m => `<span>${ic('cart')} Falta comprar <b>${nf(m.falta_comprar)} ${esc(m.unidade)}</b> ${esc(m.descricao)}</span>`).join('')}</div>` : ''}</a>`;
 }
@@ -400,4 +401,57 @@ function mOrMatLista(f, m, depois) {
 }
 
 /* ---------- rotas ---------- */
-ROTAS.push([/^#\/obra$/, vObra], [/^#\/obra\/orcamento$/, vObraOrc], [/^#\/obra\/financeiro$/, vObraFin], [/^#\/obra\/frente\/(FR\w+)$/, vObraFrente]);
+/* ---------- contratos com o cliente: principal, aditivos e novos contratos (valor, prazo a mais em dias úteis, documento e frentes) ---------- */
+const CC_IC = { Contrato: 'file', Aditivo: 'plus', 'Novo contrato': 'layers' };
+async function vObraContratos() {
+  titulo('Contratos e aditivos');
+  if (!orPode()) return orSemAcesso();
+  const [D, L] = await Promise.all([OR.d ? Promise.resolve(OR.d) : carregarOrc(), api('cc_listar')]);
+  const P = L.prazo, ger = L.gere;
+  view(comEtapas(orGrupos(D, 'cc'), `<div class="cab"><h2>Contratos e aditivos</h2><span class="contagem">${esc(D.obra.nome)}</span>${ger ? `<span class="acoes"><button type="button" class="btn peq" id="ccNovo">${ic('plus')} Aditivo ou novo contrato</button></span>` : ''}</div>
+    <div class="cc-res"><div class="card"><small>Valor contratado (com aditivos)</small><b>${orM(L.valor_total)}</b><small>${plural(L.contratos.length, 'documento', 'documentos')}</small></div>
+      <div class="card">${P ? prazoHtml(P) : '<small class="mute">Sem datas: defina o início e o fim das frentes gerais no cronograma.</small>'}</div></div>
+    <div class="aviso info">Escopo novo pelo orçamento: faça o orçamento do aditivo em <b>Orçamentos</b>, aprove e use <b>Incluir em obra existente</b>: as etapas viram frentes gerais novas com serviços, materiais e datas. Aqui também dá para cadastrar à mão e ligar às frentes que já existem.</div>
+    ${L.contratos.map(c => `<div class="card cc-item"><div class="cc-h"><span class="cc-ic">${ic(CC_IC[c.tipo] || 'file')}</span><div><b>${esc(c.numero)}</b> <span class="badge">${esc(c.tipo)}</span><br><small>${fd(c.data)}${c.proposta ? ' · do orçamento ' + esc(c.proposta) : ''}${c.descricao ? ' · ' + esc(c.descricao) : ''}</small></div>
+        <div class="cc-v"><b>${orM(c.valor)}</b>${c.dias_uteis ? `<small>+${c.dias_uteis} dias úteis</small>` : ''}</div></div>
+      ${c.frentes.length ? `<div class="cc-fr">${c.frentes.map(f => `<a class="pc-chip" href="#/obra/frente/${enc(f.codigo)}">${esc(f.nome)}</a>`).join('')}</div>` : '<small class="mute">Nenhuma frente geral ligada.</small>'}
+      <div class="acoes">${c.arquivo ? `<button type="button" class="btn sec peq" data-ccarq="${esc(c.id)}">${ic('download')} ${esc(c.arquivo_nome || 'Documento')}</button>` : '<small class="mute">Sem documento anexado.</small>'}
+        ${ger ? `<button type="button" class="btn sec peq" data-cced="${esc(c.id)}">Editar</button>` : ''}</div></div>`).join('') || '<div class="card vazio"><p>Nenhum contrato cadastrado. O contrato principal é criado no <b>Gerar obra</b>; para obra antiga, cadastre aqui.</p></div>'}`));
+  orLigar(D);
+  if ($('#ccNovo')) $('#ccNovo').onclick = () => mCc(L, null);
+  $$('[data-cced]').forEach(b => { b.onclick = () => mCc(L, L.contratos.find(c => c.id === b.dataset.cced)); });
+  $$('[data-ccarq]').forEach(b => { b.onclick = async () => {
+    const w = window.open('', '_blank');
+    try { const r = await api('cc_arquivo', { id: b.dataset.ccarq }), bin = atob(r.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], { type: r.mime || 'application/pdf' })); if (w) w.location = url; else location.href = url; } catch (e) { if (w) w.close(); toast(e.message, 1); }
+  }; });
+}
+function mCc(L, c) {
+  const tem = L.contratos.some(x => x.tipo === 'Contrato' && (!c || x.id !== c.id));
+  const tipos = L.tipos.filter(t => t !== 'Contrato' || !tem);
+  modal(c ? 'Editar ' + esc(c.numero) : 'Aditivo ou novo contrato', `<div class="grid">
+    <div class="g2"><label>Tipo<select name="tipo">${tipos.map(t => `<option ${(c ? c.tipo : 'Aditivo') === t ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label>Número ou nome<input name="numero" required value="${esc(c ? c.numero : 'Aditivo ' + String(L.contratos.filter(x => x.tipo === 'Aditivo').length + 1).padStart(2, '0'))}"></label></div>
+    <div class="g2"><label>Data<input type="date" name="data" value="${esc(c ? c.data : new Date().toLocaleDateString('sv-SE'))}"></label>
+      <label>Valor (R$)<input name="valor" inputmode="decimal" value="${esc(c ? orV(c.valor) : '')}" placeholder="0,00"></label></div>
+    <label>Prazo a mais <small>(dias úteis; soma no prazo da obra)</small><input name="dias" type="number" min="0" step="1" value="${c ? c.dias_uteis : 0}"></label>
+    <label>Descrição<textarea name="descricao" rows="2" placeholder="ex: inclusão da pavimentação da Rua B">${esc(c ? c.descricao : '')}</textarea></label>
+    <label>Frentes gerais deste contrato</label>
+    <div class="cc-frs">${L.frentes.map(f => `<label class="chk"><input type="checkbox" data-ccfr="${esc(f.codigo)}" ${c && f.contrato === c.id ? 'checked' : ''}> ${esc(f.nome)}${f.contrato && (!c || f.contrato !== c.id) ? ` <small>(${esc((L.contratos.find(x => x.id === f.contrato) || {}).numero || 'outro contrato')})</small>` : ''}</label>`).join('') || '<small class="mute">Nenhuma frente geral. Crie em "Nova frente geral".</small>'}</div>
+    <label>Documento <small>(PDF do contrato ou aditivo assinado${c && c.arquivo ? '; escolha só para trocar' : ''})</small><input type="file" name="arq" accept="application/pdf,image/*"></label>
+    ${c ? `<button type="button" class="btn perigo peq" id="ccExc" style="justify-self:start">${ic('x')} Excluir este ${esc(c.tipo.toLowerCase())}</button>` : ''}</div>`, {
+    ok: 'Salvar', larga: true, onOk: async f => {
+      let arquivo = null;
+      const a = f.arq.files[0];
+      if (a) { if (a.size > 10e6) throw new Error('Arquivo grande demais (máx. 10 MB).'); arquivo = { nome: a.name, mime: a.type, b64: await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = no; r.readAsDataURL(a); }) }; }
+      toast((await api('cc_salvar', { contrato: { id: c ? c.id : '', tipo: f.tipo.value, numero: f.numero.value, data: f.data.value, valor: f.valor.value, dias_uteis: f.dias.value, descricao: f.descricao.value, frentes: $$('[data-ccfr]').filter(x => x.checked).map(x => x.dataset.ccfr) }, arquivo })).msg);
+      OR.d = null; vObraContratos();
+    }
+  });
+  if ($('#ccExc')) $('#ccExc').onclick = async () => {
+    if (!confirm('Excluir ' + c.numero + '? As frentes gerais e o documento no Drive continuam; só o registro sai.')) return;
+    try { toast((await api('cc_excluir', { id: c.id })).msg); fecharModal(); vObraContratos(); } catch (e) { toast(e.message, 1); }
+  };
+}
+
+ROTAS.push([/^#\/obra$/, vObra], [/^#\/obra\/orcamento$/, vObraOrc], [/^#\/obra\/financeiro$/, vObraFin], [/^#\/obra\/frente\/(FR\w+)$/, vObraFrente], [/^#\/obra\/contratos$/, vObraContratos]);

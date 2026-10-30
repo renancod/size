@@ -279,3 +279,49 @@ test('endereço do cliente: ícone, logo e fundo com versão (o navegador não f
   assert.match(a['cliente.js'], /logo\.png\?v=abc/);
   assert.match(a['cliente.js'], /capa\.jpg\?v=abc/);
 });
+
+test('contratos do cliente: principal no Gerar obra, aditivo pelo orçamento (frentes novas) e à mão, prazo em dias úteis', () => {
+  const G = criarGAS();
+  G.setup();
+  const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
+  const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
+  const tk = call('login', { login: 'admin', senha }).token, adm = (acao, d = {}) => call(acao, { token: tk, ...d });
+  const orc = (nome, etapa) => {
+    const id = adm('prop_salvar', { proposta: { cliente: 'Mar Azul', empreendimento: nome, bdi_pct: 0 }, itens: [{ tipo: 'E', descricao: etapa }, { descricao: 'Base de brita', unidade: 'm3', qtd: 10, unit_mat: 100 }] }).id;
+    adm('prop_cronograma', { id, etapas: [{ codigo: '1', ini: dia(-20), fim: dia(40) }] });
+    adm('prop_status', { id, op: 'aprovar' });
+    return id;
+  };
+  const id = orc('Residencial Dunas', 'Pavimentação');
+  const obra = adm('prop_gerar_obra', { id, nome: 'Residencial Dunas', sigla: 'RD', endereco: 'X' }).obra_id;
+  let L = adm('cc_listar', { obra });
+  assert.deepEqual(L.contratos.map(c => [c.tipo, c.valor]), [['Contrato', 1000]]);
+  assert.equal(L.contratos[0].frentes[0].nome, 'Pavimentação');
+  const P0 = L.prazo;
+  assert.ok(P0.total > 30 && P0.passados > 0 && P0.restantes > 0);
+  assert.equal(P0.situacao, 'andamento');
+  // aditivo vindo de outro orçamento aprovado: frente geral nova e +10 dias úteis
+  const id2 = orc('Dunas · praça', 'Paisagismo');
+  assert.match(adm('prop_incluir_obra', { id: id2, obra_id: obra, tipo: 'Aditivo', dias_uteis: 10 }).msg, /Aditivo 1 incluído.*\+10 dias úteis/);
+  L = adm('cc_listar', { obra });
+  assert.equal(L.contratos.length, 2);
+  assert.equal(L.contratos[1].frentes[0].nome, 'Paisagismo · Aditivo 1');
+  assert.equal(L.valor_total, 2000);
+  assert.equal(L.prazo.total, P0.total + 10);
+  assert.equal(L.prazo.aditivo_dias, 10);
+  assert.throws(() => adm('prop_incluir_obra', { id: id2, obra_id: obra }), /já está na obra/);
+  // aditivo à mão com o documento, ligado a uma frente que já existe
+  const fr = L.frentes.find(f => f.nome === 'Pavimentação').codigo;
+  assert.throws(() => adm('cc_salvar', { obra, contrato: { tipo: 'Contrato', numero: 'X' } }), /já tem o contrato principal/);
+  const cc = adm('cc_salvar', { obra, contrato: { tipo: 'Aditivo', numero: 'Aditivo 02', valor: '1.500,00', dias_uteis: 5, frentes: [fr] }, arquivo: FOTO }).id;
+  L = adm('cc_listar', { obra });
+  const a2 = L.contratos.find(c => c.id === cc);
+  assert.deepEqual([a2.valor, a2.dias_uteis, a2.arquivo, a2.frentes.map(f => f.nome)], [1500, 5, true, ['Pavimentação']]);
+  assert.equal(L.contratos.find(c => c.tipo === 'Contrato').frentes.length, 0);   // a frente passou para o aditivo
+  assert.ok(adm('cc_arquivo', { obra, id: cc }).b64);
+  assert.equal(L.prazo.aditivo_dias, 15);
+  adm('cc_excluir', { obra, id: cc });
+  assert.equal(adm('cc_listar', { obra }).prazo.aditivo_dias, 10);
+  // o cartão do Início mostra o prazo
+  assert.equal(adm('empresa_dados').obras.find(o => o.id === obra).prazo.total, P0.total + 10);
+});

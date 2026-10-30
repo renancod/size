@@ -113,6 +113,7 @@ function ppAcoes(d) {
     g ? b('copiar', 'copy', 'Copiar como novo') : '',
     g && p.status === 'Rascunho' ? b('precos', 'refresh', 'Atualizar preços pela base') : '',
     d.admin && p.status === 'Aprovado' && !p.obra_id ? b('obra', 'building', 'Gerar obra', 'bp-ac') : '',
+    d.admin && p.status === 'Aprovado' && !p.obra_id ? b('incluir', 'plus', 'Incluir em obra existente') : '',
     g && p.status === 'Rascunho' ? b('cancelar', 'x', 'Cancelar orçamento') : '',
     g && p.status === 'Rascunho' && !p.revisao ? b('excluir', 'trash', 'Excluir') : ''
   ].filter(Boolean).join('');
@@ -133,7 +134,8 @@ function ppLigarAcoes(d) {
     copiar: async () => { await salvarAntes(); const r = await api('prop_copiar', { id: p.id, novo: true }); toast(r.msg); ir(r.id); },
     precos: async () => { await salvarAntes(); toast((await api('prop_precos', { id: p.id })).msg); await bpCarregar(true); recarrega(); },
     excluir: async () => { if (!confirm('Excluir o orçamento ' + p.rotulo + '? Não dá para desfazer.')) return; toast((await api('prop_excluir', { id: p.id })).msg); location.hash = '#/orc/orcamentos'; },
-    obra: () => ppGerarObra(d)
+    obra: () => ppGerarObra(d),
+    incluir: () => ppIncluirObra(d)
   };
   $$('[data-pa]').forEach(b => { b.onclick = async () => { b.disabled = true; try { await A[b.dataset.pa](); } catch (e) { toast(e.message, 1); } b.disabled = false; }; });
 }
@@ -590,6 +592,26 @@ function ppGerarObra(d) {
     }
   });
   mapaLocal($('#modal .ml'), $('#modal form'));
+}
+
+/* ---------- aditivo ou novo contrato numa obra que já existe: as etapas viram frentes gerais novas ---------- */
+function ppIncluirObra(d) {
+  const p = d.proposta, obras = (S.sess.obras || []).filter(o => o.ativa);
+  if (!obras.length) return toast('Nenhuma obra ativa para incluir.', 1);
+  modal(`${ic('plus')} Incluir ${esc(p.rotulo)} em obra existente`, `<p><small>Para <b>aditivo</b> ou <b>novo contrato</b> na mesma obra. Cada etapa deste orçamento vira uma <b>frente geral nova</b> (ex: "Pavimentação · Aditivo 1") com os serviços, materiais e datas; o valor e o prazo a mais ficam em Orçamento da obra → Contratos e aditivos.</small></p>
+    <label>Obra<select name="obra" required>${obras.map(o => `<option value="${esc(o.id)}">${esc(o.nome)}</option>`).join('')}</select></label>
+    <div class="g2"><label>Tipo<select name="tipo"><option>Aditivo</option><option>Novo contrato</option></select></label>
+      <label>Número ou nome <small>(vazio = automático)</small><input name="numero" placeholder="ex: Aditivo 01"></label></div>
+    <div class="g2"><label>Data<input type="date" name="data" value="${new Date().toLocaleDateString('sv-SE')}"></label>
+      <label>Prazo a mais <small>(dias úteis)</small><input name="dias" type="number" min="0" step="1" value="0"></label></div>
+    <div class="aviso info">${plural(d.etapas.filter(e => e.itens).length, 'frente geral nova', 'frentes gerais novas')} · ${plural(d.total.itens, 'serviço', 'serviços')} · ${bpM(d.total.preco)}${p.contrato_id ? ' · o contrato anexado ao orçamento vai como documento' : ''}</div>`, {
+    ok: 'Incluir na obra', larga: true, onOk: async f => {
+      const r = await api('prop_incluir_obra', { id: p.id, obra_id: f.obra.value, tipo: f.tipo.value, numero: f.numero.value, data: f.data.value, dias_uteis: f.dias.value });
+      toast(r.msg);
+      await trocarObra(r.obra_id);
+      location.hash = '#/obra/contratos';
+    }
+  });
 }
 
 /* ---------- proposta para imprimir / salvar em PDF (cliente ou planilha interna) ---------- */

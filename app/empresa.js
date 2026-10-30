@@ -61,6 +61,7 @@ function empCartao(o) {
       ${o.pedidos_andamento != null ? `<span>${ic('cart')} ${plural(o.pedidos_andamento, 'pedido', 'pedidos')}${o.pedidos_urgentes ? ` · <b class="atrasado">${o.pedidos_urgentes} urgente${o.pedidos_urgentes > 1 ? 's' : ''}</b>` : ''}</span>` : ''}
       ${o.frentes_exec ? `<span>${ic('book')} ${plural(o.frentes_exec, 'frente', 'frentes')}</span>` : ''}
       ${diario ? `<span>${ic('clock')} diário ${diario}</span>` : ''}`}</span>
+    ${o.ativa !== false && o.prazo ? prazoHtml(o.prazo) : ''}
     <span class="emp-entrar">${ic('chevron')}</span></button>`;
 }
 /* as notificações chegam depois da tela: redesenha os cartões das obras com as pendências */

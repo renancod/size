@@ -243,7 +243,7 @@ function cliInicio_(q, ctx) {
       let a = null;
       try { a = JSON.parse(cache.get(k) || 'null'); } catch (x) { a = null; }
       if (!a) {
-        try { const cx = { u: ctx.u, admin: false, perms: [] }; cliAbrirObra_(cx, E[i]); const A = cliAndamento_(cx); a = { pct_exec: A.pct_exec, pct_prev: A.pct_prev, inicio: A.inicio, fim: A.fim }; }
+        try { const cx = { u: ctx.u, admin: false, perms: [] }; cliAbrirObra_(cx, E[i]); const A = cliAndamento_(cx); a = { pct_exec: A.pct_exec, pct_prev: A.pct_prev, inicio: A.inicio, fim: A.fim, prazo: prazoObra_(cx, A) }; }
         catch (x) { a = { erro: x.message }; }
         try { cache.put(k, JSON.stringify(a), 600); } catch (x) { /* sem memória */ }
       }
@@ -255,6 +255,7 @@ function cliInicio_(q, ctx) {
   const p = cli.empreendimentos.find(x => x.id === e.obra);
   const and = cliAndamento_(ctx), r = { cliente: cli, emp: p, obra: { id: e.obra, nome: ctx.obra.nome, endereco: ctx.obra.endereco || '' }, orcamentos: E.length > 1 ? orcs.filter(o => o.obra_id === e.obra) : orcs };
   r.andamento = { pct_exec: and.pct_exec, pct_prev: and.pct_prev, inicio: and.inicio, fim: and.fim };
+  try { r.prazo = prazoObra_(ctx, and); } catch (x) { r.prazo = null; }
   r.proximas = and.frentes.filter(f => f.ini && f.ini > and.hoje).sort((a, b) => a.ini.localeCompare(b.ini)).slice(0, 3).map(f => ({ nome: f.nome, ini: f.ini }));
   if (ctx.mods.indexOf('diario') >= 0) {
     const d = cliDiariosLib_(ctx)[0];

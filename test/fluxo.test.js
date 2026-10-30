@@ -265,8 +265,14 @@ test('notificações por etapa e financeiro por obra', () => {
   const antes = t.G._enviados.length;
   apr('pedido_aprovar', { numero: n });
   assert.deepEqual(etapas(fin), ['pagar:' + n]);
-  assert.equal(t.G._enviados.length, antes + 1);
-  assert.match(t.G._enviados.at(-1).para, /fin\.pb@size\.com/); // e-mail do financeiro DESTA obra
+  // financeiro desta obra + ordem de compra ao fornecedor escolhido
+  const novos = t.G._enviados.slice(antes);
+  assert.equal(novos.length, 2);
+  assert.ok(novos.some(e => /fin\.pb@size\.com/.test(e.para))); // e-mail do financeiro DESTA obra
+  const oc = novos.find(e => e.para === 'casa@x.com');
+  assert.match(oc.assunto, /Pedido aprovado/);
+  assert.equal(oc.anexos, 1);                                        // a ordem de compra em PDF
+  assert.ok(apr('pedido_detalhe', { numero: n }).arquivos.some(a => a.tipo === 'OC'));
   fin('pedido_pagar', { numero: n, forma: 'PIX', comprovante: PDF });
   assert.deepEqual(etapas(est), ['receber:' + n]);
   const meus = est('notificacoes').itens.filter(i => i.etapa === 'meu');
@@ -443,4 +449,53 @@ test('captura de e-mail: resposta com PDF vira orçamento; NF encaminha ao finan
   d = t.adm('pedido_detalhe', { obra, numero });
   assert.equal(d.pedido.fin, 'A pagar');
   assert.ok(d.arquivos.some(a => a.tipo === 'NF'));
+});
+
+test('avisos ao fornecedor e ao financeiro: ordem de compra, não escolhido, pagamento do faturado, boleto anexo, cancelamento e lembrete do antecipado', () => {
+  const t = preparar();
+  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar', email_financeiro: 'fin@size.com' }).id;
+  const a = (acao, d = {}) => t.adm(acao, { obra, ...d });
+  a('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Casa', email: 'casa@x.com' } });
+  a('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Depósito', email: 'dep@x.com' } });
+  const n = a('pedido_criar', { itens: [{ descricao: 'Cimento', qtd: 20, unidade: 'sc' }] }).numero;
+  a('orcamento_salvar', { pedido: n, fornecedor_cod: 'F001', valor: 1000, arquivo: PDF });
+  a('orcamento_salvar', { pedido: n, fornecedor_cod: 'F002', valor: 1100, arquivo: PDF });
+  const orc = a('pedido_detalhe', { numero: n }).orcamentos.find(o => o.fornecedor_cod === 'F001').id;
+  let antes = t.G._enviados.length;
+  assert.match(a('pedido_definir', { numero: n, orcamento: orc, condicao: 'Faturado', prazo_fat: 30, valores: { 1: 50 }, aprovar: true }).msg, /Ordem de compra enviada a Casa/);
+  let novos = t.G._enviados.slice(antes);
+  const oc = novos.find(e => e.para === 'casa@x.com');
+  assert.match(oc.html, /aprovada/);
+  assert.equal(oc.anexos, 1);
+  assert.match(novos.find(e => e.para === 'dep@x.com').html, /seguimos com outra proposta/);   // não escolhido
+  // a OC tem o local de entrega, a condição e o total
+  const arq = a('pedido_detalhe', { numero: n }).arquivos.find(x => x.tipo === 'OC');
+  const pdf = Buffer.from(a('arquivo_ver', { id: arq.file_id }).b64, 'base64').toString('utf8');
+  assert.match(pdf, /ORDEM DE COMPRA/); assert.match(pdf, /Av\. Beira-Mar/); assert.match(pdf, /30 dias/);
+  // boleto anexado vai junto no e-mail do financeiro quando a NF chega
+  a('pedido_liberar', { numero: n });
+  a('arquivo_anexar', { pedido: n, tipo: 'BOLETO', arquivo: PDF });
+  antes = t.G._enviados.length;
+  a('pedido_nf', { numero: n, nf_numero: '123', arquivo: PDF });
+  const fin = t.G._enviados.slice(antes).find(e => /fin@size/.test(e.para));
+  assert.equal(fin.anexos, 2);                                                                 // NF + boleto
+  // pagamento do faturado: o fornecedor recebe o comprovante
+  antes = t.G._enviados.length;
+  assert.match(a('pedido_pagar', { numero: n, forma: 'PIX', comprovante: PDF }).msg, /Comprovante enviado/);
+  assert.match(t.G._enviados.slice(antes).find(e => e.para === 'casa@x.com').html, /pagamento .* foi efetuado/);
+  // cancelamento avisa quem orçou
+  const n2 = a('pedido_criar', { itens: [{ descricao: 'Areia', qtd: 2, unidade: 'm³' }] }).numero;
+  a('orcamento_salvar', { pedido: n2, fornecedor_cod: 'F002', valor: 300, arquivo: PDF });
+  antes = t.G._enviados.length;
+  assert.match(a('pedido_cancelar', { numero: n2, motivo: 'obra mudou o projeto' }).msg, /Fornecedor avisado/);
+  const canc = t.G._enviados.slice(antes)[0];
+  assert.equal(canc.para, 'dep@x.com');
+  assert.ok(!/projeto/.test(canc.html));                                                       // o motivo é interno
+  // faturamento direto pendente entra no lembrete das 8h
+  const n3 = a('pedido_criar', { itens: [{ descricao: 'Brita', qtd: 3, unidade: 'm³' }] }).numero;
+  a('orcamento_salvar', { pedido: n3, fornecedor_cod: 'F001', valor: 900, arquivo: PDF });
+  a('pedido_definir', { numero: n3, orcamento: a('pedido_detalhe', { numero: n3 }).orcamentos[0].id, condicao: 'Faturamento direto', aprovar: true });
+  antes = t.G._enviados.length;
+  t.G.lembretesDiarios();
+  assert.match(t.G._enviados.slice(antes).find(e => /fin@size/.test(e.para)).html, new RegExp('antecipado[\\s\\S]*' + n3));
 });

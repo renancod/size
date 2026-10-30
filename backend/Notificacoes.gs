@@ -94,21 +94,25 @@ function textoVencimento_(dias, venc) {
 
 /* e-mail diário (8h) ao financeiro de cada obra com o que vence em até 5 dias ou já venceu */
 function lembretesDiarios() {
-  central_('Obras').all().filter(o => sim_(o.ativa) && o.planilha_id).forEach(o => {
+  central_('Obras').all().filter(o => sim_(o.ativa) && o.planilha_id).forEach(o => { try {   // uma obra com erro não derruba as outras
     const ctx = { u: { id: '', nome: 'Lembrete automático' }, obra: o, ss: SpreadsheetApp.openById(o.planilha_id), perms: [], admin: true };
     const ps = obraTab_(ctx, 'Pedidos').all().filter(p => p.status === 'Aprovado' && p.fin === 'A pagar' && diasAte_(p.vencimento) !== null && diasAte_(p.vencimento) <= 5)
       .sort((a, b) => a.vencimento - b.vencimento);
+    // faturamento direto: a entrega só sai depois do pagamento (aprovado há quantos dias)
+    const ant = obraTab_(ctx, 'Pedidos').all().filter(p => p.status === 'Aprovado' && p.fin === 'Aguardando pagamento');
     const para = emailsFinanceiro_(ctx);
-    if (!ps.length || !para.length) return;
+    if ((!ps.length && !ant.length) || !para.length) return;
     const th = 'style="border:1px solid #ccc;padding:6px;background:#0E2A6B;color:#fff;text-align:left"', td = 'style="border:1px solid #ccc;padding:6px"';
     const html = '<div style="font-family:Arial;font-size:14px"><h2 style="color:#0E2A6B">Pagamentos próximos do vencimento · ' + h_(o.nome) + '</h2>' +
       '<table style="border-collapse:collapse;font-size:13px"><tr><th ' + th + '>Pedido</th><th ' + th + '>Fornecedor</th><th ' + th + '>Valor</th><th ' + th + '>NF</th><th ' + th + '>Vencimento</th></tr>' +
       ps.map(p => '<tr><td ' + td + '>' + h_(p.numero) + '</td><td ' + td + '>' + h_(p.fornecedor) + '</td><td ' + td + '>' + brl_(p.valor_total) + '</td><td ' + td + '>' + h_(p.nf_numero) +
         '</td><td ' + td + '><b>' + h_(textoVencimento_(diasAte_(p.vencimento), p.vencimento)) + '</b></td></tr>').join('') +
       '</table><p>Total: <b>' + brl_(ps.reduce((s, p) => s + num_(p.valor_total), 0)) + '</b></p>' +
+      (ant.length ? '<h3 style="color:#0E2A6B">Pagamento antecipado pendente (a entrega só é liberada depois do pagamento)</h3><table style="border-collapse:collapse;font-size:13px"><tr><th ' + th + '>Pedido</th><th ' + th + '>Fornecedor</th><th ' + th + '>Valor</th><th ' + th + '>Aprovado em</th></tr>' +
+        ant.map(p => '<tr><td ' + td + '>' + h_(p.numero) + '</td><td ' + td + '>' + h_(p.fornecedor) + '</td><td ' + td + '>' + brl_(p.valor_total) + '</td><td ' + td + '>' + (p.aprovado_em instanceof Date ? Utilities.formatDate(p.aprovado_em, tz_(), 'dd/MM/yyyy') : '') + '</td></tr>').join('') + '</table>' : '') +
       (config_().APP_URL ? '<p><a href="' + String(config_().APP_URL).replace(/\/?$/, '/') + '?obra=' + encodeURIComponent(o.id) + '#/financeiro">Abrir o Financeiro no app</a></p>' : '') + '</div>';
-    try { enviar_(para.join(','), 'Pagamentos a vencer · ' + o.nome + ' (' + ps.length + ')', html); } catch (e) { /* tenta de novo amanhã */ }
-  });
+    try { enviar_(para.join(','), 'Pagamentos a vencer · ' + o.nome + ' (' + (ps.length + ant.length) + ')', html); } catch (e) { /* tenta de novo amanhã */ }
+  } catch (e) { console.error('Lembrete da obra ' + o.nome + ': ' + e.message); } });
 }
 
 /* cria os gatilhos automáticos que faltarem (e-mails a cada 10 min e lembrete diário às 8h) */

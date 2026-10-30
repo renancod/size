@@ -85,7 +85,7 @@ function blocoCompra(p) {
   return `${situacao}
     <dl class="kv"><dt>Valor</dt><dd>${brl(c.valor)}</dd><dt>Pagamento</dt><dd>${esc(c.condicao)}${c.prazo_fat ? ' ' + esc(c.prazo_fat) + ' dias' : ''}${c.pago_em ? ' · pago em ' + fd(c.pago_em) : ''}</dd>
       ${c.previsao ? `<dt>Entrega prevista</dt><dd>${fd(c.previsao)}</dd>` : ''}${c.nf_numero ? `<dt>Nota fiscal</dt><dd>${esc(c.nf_numero)}${c.nf_em ? ' · ' + fd(c.nf_em) : ''}</dd>` : ''}</dl>
-    ${c.comprovantes.length ? `<div class="acoes" style="margin:10px 0">${c.comprovantes.map(a => `<button type="button" class="btn sec peq" data-comp="${esc(a.id)}" data-num="${esc(p.numero)}">Comprovante: ${esc(a.nome)}</button>`).join('')}</div>` : ''}
+    ${c.comprovantes.length || (c.ordens || []).length ? `<div class="acoes" style="margin:10px 0">${(c.ordens || []).slice(-1).map(a => `<button type="button" class="btn sec peq" data-comp="${esc(a.id)}" data-num="${esc(p.numero)}">Ordem de compra (PDF)</button>`).join('')}${c.comprovantes.map(a => `<button type="button" class="btn sec peq" data-comp="${esc(a.id)}" data-num="${esc(p.numero)}">Comprovante: ${esc(a.nome)}</button>`).join('')}</div>` : ''}
     ${c.entrega !== 'Recebido' ? `<form class="grid" data-acao="forn_entrega" data-num="${esc(p.numero)}" style="margin-top:14px">
       <h3 style="margin:0">Data prevista de entrega</h3>
       <div class="g2"><label>Data<input type="date" name="previsao" min="${hoje()}" required value="${esc(c.previsao || '')}"></label><label>Observação <small>(opcional)</small><input name="obs" placeholder="ex: entrega pela manhã"></label></div>

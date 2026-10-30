@@ -48,7 +48,9 @@ const SCHEMA_OBRA = {
   Fornecedores: ['codigo', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'materiais', 'condicao', 'obs', 'ativo'],
   Materiais: ['codigo', 'descricao', 'unidade', 'categoria', 'estoque_min', 'ativo'],
   // frente geral; os valores (preço cobrado do cliente e custos orçados) são do orçamento do empreendimento; inicio/fim = cronograma físico-financeiro
-  Frentes: ['codigo', 'nome', 'descricao', 'ativa', 'preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos', 'inicio', 'fim'],
+  Frentes: ['codigo', 'nome', 'descricao', 'ativa', 'preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos', 'inicio', 'fim', 'contrato'],
+  // contratos com o cliente: o principal (Gerar obra), aditivos e contratos novos, com o PDF e os dias úteis de prazo a mais
+  ContratosCliente: ['id', 'tipo', 'numero', 'data', 'descricao', 'valor', 'dias_uteis', 'proposta_id', 'proposta', 'arquivo_id', 'arquivo_nome', 'criado_em', 'criado_por'],
   Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs', 'frente'],
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],
@@ -182,7 +184,7 @@ function tabela_(ss, nome, cols) {
   }
   TEMPO_.abas++;
   const t = new Tabela_(sh, head);
-  t._dados = v;
+  t._dados = v; t.ssId = ss.getId();
   return (_tabs[k] = t);
 }
 
@@ -193,6 +195,8 @@ Tabela_.prototype.mudou_ = function () {
   if (this.grupo) memMudou_(this.grupo);
   const n = this.sh.getName();
   if (n !== 'Log' && n !== 'Aparelhos') memMudou_('notif');
+  // planilha da obra: renova o que estiver guardado dela (ex.: lista de pedidos)
+  if (this.ssId && n !== 'Log') memMudou_('ss' + this.ssId);
 };
 Tabela_.prototype.all = function () {
   if (this._rows) return this._rows;

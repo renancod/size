@@ -218,7 +218,7 @@ async function pcInicio() {
     <div class="pc-emps">${d.empreendimentos.map(e => { const A = e.andamento || {};
       return `<a class="pc-emp" href="#/c/obra/${enc(e.id)}"><div class="pc-emp-f" data-empfoto="${esc(e.id)}"><span class="pc-chip">${esc(e.tipo || '')}</span><b>${esc(e.sigla || '')}</b></div>
         <div class="pc-emp-t"><b>${esc(e.nome)}</b><small>${esc(e.endereco || '')}</small>
-        ${A.erro ? '<small class="mute">andamento indisponível</small>' : `${pcBarra(A.pct_prev, A.pct_exec)}<div class="pc-lin"><small><b>${pcPct(A.pct_exec)}</b> executado · previsto ${pcPct(A.pct_prev)}</small><small>${A.fim ? 'término ' + pcData(A.fim) : ''}</small></div>`}</div></a>`; }).join('')}</div>
+        ${A.erro ? '<small class="mute">andamento indisponível</small>' : `${pcBarra(A.pct_prev, A.pct_exec)}<div class="pc-lin"><small><b>${pcPct(A.pct_exec)}</b> executado · previsto ${pcPct(A.pct_prev)}</small>${A.prazo ? '' : `<small>${A.fim ? 'término ' + pcData(A.fim) : ''}</small>`}</div>${prazoHtml(A.prazo)}`}</div></a>`; }).join('')}</div>
     ${orcs ? `<div class="pc-grade">${orcs}</div>` : ''}`);
   pcEmpFotos();
 }
@@ -231,6 +231,7 @@ async function pcObra(id) {
   view((pcVarios() ? `<a class="linkbtn" href="#/c">${ic('back')} Todos os empreendimentos</a>` : '')
     + pcHero(C, d.obra.nome || C.nome, (E && E.tipo ? esc(E.tipo) + ' · ' : '') + (A.fim ? 'término previsto ' + pcData(A.fim) : 'acompanhamento da obra'), `<div class="pc-hero-anel">${pcAnel(A.pct_exec, A.pct_prev)}<small>previsto para hoje: <b>${pcPct(A.pct_prev)}</b></small></div>`, '', '').replace('<section class="pc-hero', `<section data-empfoto="${esc(d.obra.id)}" class="pc-hero`)
     + `<div class="pc-grade">
+    ${d.prazo ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Prazo da obra</div>${prazoHtml(d.prazo)}</section>` : ''}
     ${d.diario !== undefined ? (d.diario ? `<a class="pc-card pc-lnk" href="#/c/diario/${d.diario.data}"><div class="pc-k">Último diário · ${pcData(d.diario.data)}${d.diario.condicao ? ' · ' + esc(d.diario.condicao.toLowerCase()) : ''}</div>
       ${d.diario.foto ? `<div class="pc-fotos"><div class="pc-foto" data-pcfoto="${esc(d.diario.foto)}"></div></div>` : ''}
       <div>${d.diario.servicos.slice(0, 3).map(esc).join(' · ') || 'Sem serviços lançados'}${d.diario.servicos.length > 3 ? ' · +' + (d.diario.servicos.length - 3) : ''}</div></a>`

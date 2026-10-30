@@ -313,17 +313,65 @@ function propGerarObra_(q, ctx) {
   const o = criarObra_(String(q.nome || p.empreendimento).trim(), q.sigla, String(q.endereco || p.local || '').trim(), nomes);
   if (q.lat !== undefined && String(q.lat || '').trim()) { obraLocal_(o, q); central_('Obras').update(o); }
   const octx = { u: ctx.u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
+  // contrato principal com o cliente (o contrato assinado do orçamento vai anexado)
+  const cc = ccCriar_(octx, { tipo: 'Contrato', numero: String(q.contrato_numero || '').trim() || propRotulo_(p), data: hojeYmd_(), descricao: 'Contrato principal · ' + (p.empreendimento || ''),
+    valor: calc.total.preco, dias_uteis: 0, proposta_id: p.id, proposta: propRotulo_(p), arquivo_id: p.contrato_id || (propAceite_(p) || {}).arquivo_id || '', arquivo_nome: p.contrato_nome || ((propAceite_(p) || {}).arquivo_id ? 'contrato assinado (aceite).pdf' : '') });
+  const r = propLevar_(p, calc, octx, e => orcFrente_(octx, e.descricao), cc.id);
+  const nServ = r.nServ, nMat = r.nMat;
+  p.obra_id = o.id;
+  p.atualizado_em = new Date(); p.atualizado_por = ctx.u.nome;
+  propHist_(p, ctx, 'Obra gerada', o.id + ' · ' + o.nome);
+  T.update(p);
+  log_(ctx, 'proposta_obra', propRotulo_(p) + ' → ' + o.id + ' ' + o.nome);
+  // portal do cliente: a obra entra como empreendimento do cliente do orçamento (com o tipo e a foto do orçamento)
+  const cli = q.portal && p.cliente_id ? propObraPortal_(p, o, q.tipo) : '';
+  return { msg: 'Obra ' + o.nome + ' criada com ' + plural_(etapas.length, 'frente geral', 'frentes gerais') + ', ' + plural_(nServ, 'serviço', 'serviços') + ' e ' + plural_(nMat, 'material', 'materiais') + ' no orçamento da obra.'
+    + (cli ? ' ' + cli + ' já acompanha a obra pelo portal.' : ''), obra_id: String(o.id), portal: cli };
+}
+/* aditivo ou novo contrato numa obra que já existe: as etapas do orçamento aprovado viram frentes gerais NOVAS
+ * ("Pavimentação · Aditivo 1"), com serviços, materiais e datas; o prazo a mais (dias úteis) entra no prazo da obra */
+function propIncluirObra_(q, ctx) {
+  if (!ctx.admin) throw new Error('Só administradores incluem orçamento em obra.');
+  const T = central_('Propostas'), p = propAchar_(q.id);
+  if (p.status !== 'Aprovado') throw new Error('Só o orçamento aprovado entra na obra.');
+  if (p.obra_id) throw new Error('Este orçamento já está na obra ' + p.obra_id + '.');
+  const o = central_('Obras').all().find(x => String(x.id) === String(q.obra_id));
+  if (!o || !o.planilha_id) throw new Error('Escolha a obra.');
+  const calc = propCalc_(p, propItens_(p.id));
+  if (!calc.total.itens) throw new Error('O orçamento não tem itens.');
+  const tipo = q.tipo === 'Novo contrato' ? 'Novo contrato' : 'Aditivo';
+  const octx = { u: ctx.u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
+  const C = obraTab_(octx, 'ContratosCliente'), n = C.all().filter(x => x.tipo === tipo).length + 1;
+  const rotulo = String(q.numero || '').trim() || (tipo === 'Aditivo' ? 'Aditivo ' + n : 'Contrato ' + (C.all().filter(x => x.tipo !== 'Aditivo').length + 1));
+  const cc = ccCriar_(octx, { tipo: tipo, numero: rotulo, data: ymd_(q.data) || hojeYmd_(), descricao: String(q.descricao || '').trim() || (p.empreendimento || propRotulo_(p)),
+    valor: calc.total.preco, dias_uteis: Math.max(0, parseInt(q.dias_uteis, 10) || 0), proposta_id: p.id, proposta: propRotulo_(p), arquivo_id: p.contrato_id || (propAceite_(p) || {}).arquivo_id || '', arquivo_nome: p.contrato_nome || '' });
+  const Fr = obraTab_(octx, 'Frentes');
+  const r = propLevar_(p, calc, octx, e => {
+    let nome = e.descricao + ' · ' + rotulo, k = 2;
+    while (Fr.all().some(f => norm_(f.nome) === norm_(nome))) nome = e.descricao + ' · ' + rotulo + ' (' + k++ + ')';
+    return Fr.insert({ codigo: Fr.proxCodigo('codigo', 'FR', 2), nome: nome, ativa: 'Sim' });
+  }, cc.id);
+  p.obra_id = o.id;
+  p.atualizado_em = new Date(); p.atualizado_por = ctx.u.nome;
+  propHist_(p, ctx, tipo + ' na obra', o.id + ' · ' + o.nome + ' · ' + rotulo);
+  T.update(p);
+  log_(ctx, 'proposta_aditivo', propRotulo_(p) + ' → ' + o.id + ' ' + rotulo);
+  return { msg: rotulo + ' incluído na obra ' + o.nome + ': ' + plural_(r.frentes, 'frente geral nova', 'frentes gerais novas') + ', ' + plural_(r.nServ, 'serviço', 'serviços') + (cc.dias_uteis ? ' e +' + cc.dias_uteis + ' dias úteis de prazo' : '') + '.', obra_id: String(o.id) };
+}
+/* leva as etapas do orçamento para frentes gerais da obra: serviços (quantidade, material, MO, venda), materiais das composições e datas */
+function propLevar_(p, calc, octx, frenteDe, contratoId) {
+  const etapas = calc.etapas.filter(e => e.itens);
   const ix = baseIndice_(), Mt = obraTab_(octx, 'Materiais'), Fr = obraTab_(octx, 'Frentes'), crono = {};
   propCrono_(p, calc).linhas.forEach(l => { crono[l.codigo] = l; });
   let nServ = 0, nMat = 0;
   etapas.forEach(e => {
-    const f = orcFrente_(octx, e.descricao);
+    const f = frenteDe(e);
     const its = calc.linhas.filter(l => l.tipo === 'I' && String(l.codigo).split('.')[0] === e.codigo);
     const r = orcItensSalvar_({ frente: f.codigo, itens: its.map(i => ({ codigo: i.codigo, grupo: e.descricao, servico: i.descricao, unidade: i.unidade, qtd: i.qtd,
       unit_material: baseR4_(i.unit_mat), unit_mo: baseR4_(i.unit_mo + i.unit_eq + i.unit_sv), unit_venda: i.preco_unit, obs: i.comp_cod ? (i.fonte ? 'SINAPI ' : 'Composição ') + i.comp_cod + ' · ' + propRotulo_(p) : propRotulo_(p) })) }, octx);
     nServ += its.length;
     Object.assign(f, { preco: e.preco, custo_direto: e.custo, adm_local: 0, indiretas: 0, tributos: 0, descricao: 'Do orçamento ' + propRotulo_(p),
-      inicio: (crono[e.codigo] || {}).ini || '', fim: (crono[e.codigo] || {}).fim || '' });
+      inicio: (crono[e.codigo] || {}).ini || '', fim: (crono[e.codigo] || {}).fim || '', contrato: contratoId || '' });
     Fr.update(f);
     // materiais de cada serviço: o que a composição gasta por unidade (já com a perda que estiver no coeficiente)
     its.forEach((i, n) => {
@@ -338,15 +386,7 @@ function propGerarObra_(q, ctx) {
       });
     });
   });
-  p.obra_id = o.id;
-  p.atualizado_em = new Date(); p.atualizado_por = ctx.u.nome;
-  propHist_(p, ctx, 'Obra gerada', o.id + ' · ' + o.nome);
-  T.update(p);
-  log_(ctx, 'proposta_obra', propRotulo_(p) + ' → ' + o.id + ' ' + o.nome);
-  // portal do cliente: a obra entra como empreendimento do cliente do orçamento (com o tipo e a foto do orçamento)
-  const cli = q.portal && p.cliente_id ? propObraPortal_(p, o, q.tipo) : '';
-  return { msg: 'Obra ' + o.nome + ' criada com ' + plural_(etapas.length, 'frente geral', 'frentes gerais') + ', ' + plural_(nServ, 'serviço', 'serviços') + ' e ' + plural_(nMat, 'material', 'materiais') + ' no orçamento da obra.'
-    + (cli ? ' ' + cli + ' já acompanha a obra pelo portal.' : ''), obra_id: String(o.id), portal: cli };
+  return { nServ: nServ, nMat: nMat, frentes: etapas.length };
 }
 
 /* ---------- painel da empresa (tela Início, fora de obra) ---------- */
@@ -364,6 +404,8 @@ function empObraResumo_(o) {
     });
     obraTab_(ctx, 'Diarios').all().forEach(d => { const s = baseData_(d.data); if (s > r.ultimo_diario) r.ultimo_diario = s; });
     r.frentes_exec = obraTab_(ctx, 'Etapas').all().filter(e => !/^n/i.test(String(e.ativa))).length;
+    // prazo em dias úteis (o mesmo cálculo do cartão do cliente)
+    try { r.prazo = prazoObra_(Object.assign(ctx, { obra: o, u: { id: '', nome: 'Início' }, perms: [], admin: true })); } catch (e) { r.prazo = null; }
   } catch (e) { r.erro = 'não consegui abrir a planilha da obra'; }
   cache.put(k, JSON.stringify(r), 180);
   return r;
