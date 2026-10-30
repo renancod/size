@@ -265,7 +265,7 @@ function propExcluir_(q, ctx) {
  * conferir (sem gravar) ou aplicar: atualiza a base de preços com as composições do arquivo e cria o orçamento em rascunho,
  * com uma etapa por grupo da planilha, cada item ligado à composição e na quantidade da planilha; BDI e gestão vêm do arquivo */
 function propImportar_(q, ctx) {
-  const P = baseLerPlanilha_(q.abas), plano = basePlanoImport_(P, q.atualizar !== false && q.atualizar !== 'false');
+  const P = baseLerPlanilha_(q.abas), plano = basePlanoImport_(P, q.atualizar !== false && q.atualizar !== 'false', { fonte: q.fonte, substituir: q.substituir });
   const itens = [];
   let et = null, precoPlan = 0;
   P.blocos.forEach(b => {
@@ -276,11 +276,11 @@ function propImportar_(q, ctx) {
     precoPlan += (num_(b.qtd) || 1) * (b.unit == null ? 0 : b.unit);
   });
   const sugestao = { empreendimento: P.titulo, bdi_pct: P.taxas.bdi == null ? '' : P.taxas.bdi, bdi_base: P.taxas.bdi_base || 'servicos', gestao_pct: P.taxas.gestao == null ? '' : P.taxas.gestao, gestao_base: P.taxas.gestao_base || 'total' };
-  const resumo = { base: plano.resumo, etapas: itens.filter(i => i.tipo === 'E').length, itens: itens.filter(i => i.tipo === 'I').length, custo_planilha: propR2_(precoPlan), sugestao: sugestao, avisos: plano.avisos,
+  const resumo = { base: plano.resumo, etapas: itens.filter(i => i.tipo === 'E').length, itens: itens.filter(i => i.tipo === 'I').length, custo_planilha: propR2_(precoPlan), sugestao: sugestao, avisos: plano.avisos, conflitos: plano.conflitos,
     sem_bdi: itens.filter(i => i.sem_bdi).map(i => i.descricao), sem_gestao: itens.filter(i => i.sem_gestao).map(i => i.descricao) };
   if (!q.aplicar) return resumo;
   // 1º a base (mesmo plano: os códigos das composições são os mesmos), depois o orçamento
-  baseImportar_({ abas: q.abas, atualizar: q.atualizar, aplicar: true, data_preco: q.data_preco, fonte: q.fonte }, ctx);
+  baseImportar_({ abas: q.abas, atualizar: q.atualizar, aplicar: true, data_preco: q.data_preco, fonte: q.fonte, substituir: q.substituir }, ctx);
   const d = Object.assign({}, sugestao, q.proposta || {});
   ['bdi_pct', 'gestao_pct'].forEach(k => { if (d[k] === '' || d[k] == null) d[k] = 0; });
   if (!d.data_base) d.data_base = q.data_preco;

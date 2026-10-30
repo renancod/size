@@ -175,7 +175,7 @@ function bpGrupos(aqui) {
     { k: 'comp', t: 'Composições', i: 'layers', n: D ? D.composicoes.length : null, on: aqui === 'comp' },
     { k: 'ins', t: 'Insumos', i: 'box', n: D ? D.insumos.length : null, on: aqui === 'ins' }, { k: 'sinapi', t: 'SINAPI (Caixa)', i: 'grid2', on: aqui === 'sinapi' }] }];
   if (bpGere()) g.push({ t: 'Ações', itens: [{ k: 'a:prop', t: 'Novo orçamento', i: 'plus', cl: 'acao' }, { k: 'a:comp', t: 'Nova composição', i: 'plus', cl: 'acao' }, { k: 'a:ins', t: 'Novo insumo', i: 'plus', cl: 'acao' },
-    { k: 'a:imp', t: 'Importar orçamento', i: 'upload', cl: 'acao', on: aqui === 'imp' }] });
+    { k: 'a:imp', t: 'Importar composições', i: 'upload', cl: 'acao', on: aqui === 'imp' }] });
   return g;
 }
 function bpTela(aqui, html) {
@@ -224,7 +224,7 @@ async function vBase() {
   const recentes = C.slice().sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em))).slice(0, 5);
   bpTela('painel', `${bpHero('Base de preços', 'Insumos e composições que alimentam os orçamentos dos novos clientes. Os custos são recalculados na hora a partir dos preços dos insumos.',
     `<div class="bp-hero-n"><div><b>${C.length}</b><small>composições</small></div><div><b>${I.length}</b><small>insumos</small></div><div><b>${maisAntiga ? fd(maisAntiga).slice(3) : '—'}</b><small>preço mais antigo em uso</small></div></div>`,
-    g ? `<a class="btn bp-ac" href="#/orc/composicao/nova">${ic('plus')} Nova composição</a><a class="btn sec" href="#/orc/importar">${ic('upload')} Importar orçamento</a>` : '')}
+    g ? `<a class="btn bp-ac" href="#/orc/composicao/nova">${ic('plus')} Nova composição</a><a class="btn sec" href="#/orc/importar">${ic('upload')} Importar composições</a>` : '')}
     <div class="bp-kpis">
       <div class="card"><small>Insumos por tipo</small><div class="bp-barra grossa">${porTipo.filter(t => t.q).map(t => `<i class="k-${t.k}" style="width:${t.q / totI * 100}%"></i>`).join('')}</div>
         <div class="bp-leg">${porTipo.filter(t => t.q).map(t => `<span><i class="bp-dot k-${t.k}"></i>${t.n} <b>${t.q}</b></span>`).join('')}</div></div>
@@ -285,7 +285,7 @@ async function vBaseComps(qs) {
   const desenhar = () => {
     const l = filtrar();
     $('#bpN').textContent = plural(l.length, 'composição', 'composições');
-    $('#bpLista').innerHTML = l.slice(0, F.lim).map(bpFicha).join('') || `<div class="card vazio" style="grid-column:1/-1"><p>Nenhuma composição ${F.q ? 'com “' + esc(F.q) + '”' : 'aqui'}.</p>${bpGere() && !D.composicoes.length ? `<a class="btn" href="#/orc/importar">${ic('upload')} Importar orçamento</a>` : ''}</div>`;
+    $('#bpLista').innerHTML = l.slice(0, F.lim).map(bpFicha).join('') || `<div class="card vazio" style="grid-column:1/-1"><p>Nenhuma composição ${F.q ? 'com “' + esc(F.q) + '”' : 'aqui'}.</p>${bpGere() && !D.composicoes.length ? `<a class="btn" href="#/orc/importar">${ic('upload')} Importar composições</a>` : ''}</div>`;
     $('#bpMais').hidden = l.length <= F.lim;
   };
   let tm;
@@ -771,12 +771,13 @@ function bpScript(u) {
   return new Promise((ok, no) => { const s = document.createElement('script'); s.src = u; s.onload = ok; s.onerror = () => no(new Error('Não consegui carregar o leitor de planilhas. Confira a internet e tente de novo.')); document.head.appendChild(s); });
 }
 async function vBaseImportar() {
-  titulo('Importar orçamento');
+  titulo('Importar composições');
   if (!bpGere()) return bpSem('Gerir');
   await bpCarregar();
   BP.imp = { abas: null, nome: '', plano: null, data: hoje(), atualizar: true };
   bpTela('imp', `<div class="bp-hero bp-hero-imp"><div class="bp-hero-t"><span class="bp-selo">${ic('upload')} Importação</span><h2>Trazer composições de uma planilha</h2>
-      <p>Use a planilha de composições: a aba <b>Composições</b> (Item, Tipo, Código, Descrição, Un, Quant. e Custo unitário). Se a aba do orçamento vier junto, cada composição já entra com o nome da etapa. Nada é gravado antes de você conferir.</p></div>
+      <p>Use a planilha de composições: a aba <b>Composições</b> (Item, Tipo, Código, Descrição, Un, Quant. e Custo unitário). Se a aba do orçamento vier junto, cada composição já entra com o nome da etapa. Nada é gravado antes de você conferir.</p>
+      <p><b>Aqui não cria orçamento.</b> Para criar o orçamento do cliente com as quantidades da planilha, use <a href="#/orc/orcamento/importar">Orçamentos de clientes → Importar orçamento</a>.</p></div>
       <ol class="bp-passos" id="bpPassos"><li class="on"><b>1</b>Arquivo</li><li><b>2</b>Conferir</li><li><b>3</b>Pronto</li></ol></div>
     <div id="bpImp"></div>`);
   bpImpArquivo();
@@ -801,7 +802,7 @@ function bpImpArquivo() {
   $('#bpTxtOk').onclick = () => {
     const t = $('#bpTxt').value;
     if (!t.trim()) return toast('Cole as linhas da planilha.', 1);
-    M.nome = 'linhas coladas';
+    M.nome = 'linhas coladas'; M.substituir = [];
     M.abas = [{ nome: 'Colado', linhas: t.split(/\r?\n/).map(l => l.split('\t').map(s => { const v = s.trim(); return /^-?[\d.]+(,\d+)?$/.test(v) ? bpPn(v) : v; })) }];
     bpImpConferir();
   };
@@ -813,8 +814,10 @@ async function bpLerPlanilha(f) {
   return wb.SheetNames.map(n => ({ nome: n, linhas: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }).slice(0, 6000).map(r => r.slice(0, 24)) }))
     .map(a => { while (a.linhas.length && a.linhas[a.linhas.length - 1].every(x => x === '')) a.linhas.pop(); return a; });
 }
+const bpFonte = nome => ('Planilha · ' + nome).slice(0, 80);
 async function bpImpLer(f) {
   const M = BP.imp;
+  M.substituir = [];
   $('#bpImp').innerHTML = `<div class="card bp-lendo"><span class="spin"></span><b>Lendo ${esc(f.name)}…</b></div>`;
   try {
     M.abas = await bpLerPlanilha(f);
@@ -822,12 +825,22 @@ async function bpImpLer(f) {
     await bpImpConferir();
   } catch (e) { toast(e.message, 1); bpImpArquivo(); }
 }
+/* mesmo código já na base com composição de outra planilha: por padrão entra com outro código; marcando, substitui a da base */
+function bpConflitos(L) {
+  if (!L || !L.length) return '';
+  return `<div class="card bp-conf" id="bpConf"><h3>${ic('alert')} ${L.length === 1 ? '1 código já está' : L.length + ' códigos já estão'} na base com outra composição</h3>
+    <small>O RDObras repete o mesmo código em obras diferentes. Sem marcar, o item entra com outro código e a composição da base continua como está. Marque só se esta planilha deve substituir a da base.</small>
+    ${L.map(c => `<label class="chk"><input type="checkbox" data-sub="${esc(c.codigo)}" ${c.substituir ? 'checked' : ''}><span><b>${esc(c.codigo)}</b> · substituir a da base
+      <small>Na base: ${esc(c.descricao_base)} (${esc(c.fonte_base.split(' · ').pop() || 'sem origem')})</small>
+      <small>Nesta planilha, item ${esc(c.item)}: ${esc(c.descricao)} → <b>${c.substituir ? 'substitui ' + esc(c.codigo) : 'entra como ' + esc(c.vai)}</b></small></span></label>`).join('')}</div>`;
+}
+const bpConflitosLiga = fn => $$('#bpConf [data-sub]').forEach(i => { i.onchange = () => fn($$('#bpConf [data-sub]').filter(x => x.checked).map(x => x.dataset.sub)); });
 const BP_ST = { novo: ['novo', 'ok'], nova: ['nova', 'ok'], atualizar: ['atualizar', 'atu'], igual: ['igual', 'igual'], manter: ['mantém a base', 'igual'] };
 const bpSt = s => `<span class="bp-st k-${(BP_ST[s] || [s, ''])[1]}">${(BP_ST[s] || [s])[0]}</span>`;
 async function bpImpConferir() {
   const M = BP.imp;
   $('#bpImp').innerHTML = `<div class="card bp-lendo"><span class="spin"></span><b>Conferindo ${esc(M.nome)}…</b></div>`;
-  try { M.plano = await api('base_importar', { abas: M.abas, atualizar: M.atualizar }); }
+  try { M.plano = await api('base_importar', { abas: M.abas, atualizar: M.atualizar, fonte: bpFonte(M.nome), substituir: M.substituir || [] }); }
   catch (e) { toast(e.message, 1); return bpImpArquivo(); }
   bpPasso(1);
   const P = M.plano, R = P.resumo, grava = R.comp_novas + R.comp_atualizar + R.insumos_novos + R.insumos_atualizar;
@@ -836,6 +849,7 @@ async function bpImpConferir() {
       <div class="bp-tiles">${tile(R.comp_novas, 'composições novas', '', 'ok')}${tile(R.comp_atualizar, 'composições a atualizar', 'mesmo código já na base', 'atu')}${tile(R.insumos_novos, 'insumos novos', '', 'ok')}${tile(R.insumos_atualizar, 'insumos a atualizar', 'preço ou descrição mudou', 'atu')}
         ${tile(R.insumos_iguais + R.insumos_manter + R.comp_manter, 'sem mudança', 'já estão iguais na base')}${tile(R.comp_repetidas, 'repetidas no arquivo', 'mesmo serviço em outro item: entra uma vez')}${tile(R.precos_proprios, 'preços próprios', 'item com preço diferente do cadastro')}${tile(R.diferencas, 'custos diferentes', 'planilha × calculado', R.diferencas ? 'warn' : '')}</div>
       ${P.avisos.length ? `<details class="bp-avisos" ${P.avisos.length <= 6 ? 'open' : ''}><summary>${ic('alert')} ${plural(P.avisos.length, 'observação', 'observações')}</summary><ul>${P.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}</div>
+    ${bpConflitos(P.conflitos)}
     <div class="card"><div class="bp-seg" id="bpAba"><button type="button" data-a="c" class="on">${ic('layers')} Composições <b>${P.composicoes.length}</b></button><button type="button" data-a="i">${ic('box')} Insumos <b>${P.insumos.length}</b></button></div>
       <div class="rolar" id="bpTab"></div></div>
     <div class="barra-acoes"><div class="acoes"><button class="btn sec" id="bpVolta">${ic('back')} Voltar</button><button class="btn bp-ac" id="bpGo" ${grava ? '' : 'disabled'}>${ic('check')} ${grava ? `Importar ${plural(R.comp_novas + R.comp_atualizar, 'composição', 'composições')} e ${plural(R.insumos_novos + R.insumos_atualizar, 'insumo', 'insumos')}` : 'Nada para importar: a base já está igual'}</button></div></div>`;
@@ -849,11 +863,12 @@ async function bpImpConferir() {
   const aba = a => { $$('#bpAba button').forEach(b => b.classList.toggle('on', b.dataset.a === a)); $('#bpTab').innerHTML = a === 'c' ? tabC() : tabI(); };
   $$('#bpAba button').forEach(b => { b.onclick = () => aba(b.dataset.a); });
   aba('c');
+  bpConflitosLiga(l => { M.substituir = l; bpImpConferir(); });
   $('#bpOutro').onclick = $('#bpVolta').onclick = () => bpImpArquivo();
   $('#bpGo').onclick = async () => {
     const b = $('#bpGo'); b.disabled = true; b.textContent = 'Importando…';
     try {
-      const r = await api('base_importar', { abas: M.abas, atualizar: M.atualizar, aplicar: true, data_preco: M.data, fonte: ('Planilha · ' + M.nome).slice(0, 80) });
+      const r = await api('base_importar', { abas: M.abas, atualizar: M.atualizar, aplicar: true, data_preco: M.data, fonte: bpFonte(M.nome), substituir: M.substituir || [] });
       await bpCarregar(true);
       bpImpPronto(r);
     } catch (e) { toast(e.message, 1); b.disabled = false; b.textContent = 'Tentar de novo'; }

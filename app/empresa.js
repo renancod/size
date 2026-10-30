@@ -30,7 +30,7 @@ async function vEmpresa() {
     D.nivel && ['#/orc/orcamentos', 'file', 'Orçamentos'],
     gere && ['#/orc/composicao/nova', 'layers', 'Nova composição'],
     gere && ['ins', 'box', 'Novo insumo'],
-    gere && ['#/orc/importar', 'upload', 'Importar orçamento'],
+    gere && ['#/orc/orcamento/importar', 'upload', 'Importar orçamento'],
     D.admin && ['#/admin/obras', 'building', 'Nova obra'],
     D.admin && ['#/admin/usuarios', 'users', 'Usuários e acessos']
   ].filter(Boolean);

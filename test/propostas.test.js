@@ -146,6 +146,31 @@ test('importar orçamento em planilha: etapas, quantidades, BDI e gestão do arq
   assert.ok(t.adm('base_dados').insumos.some(i => i.codigo === 'MOB1'));
 });
 
+test('importar: mesmo código de OUTRA planilha com outra composição não sobrescreve a base (entra como variante, ou substitui se marcado)', () => {
+  const t = preparar();
+  const comp = (cod, mat, qtd) => [{ nome: 'Composições', linhas: [COMP[0], ['1.1', '', cod, 'RECALQUE', 'VB', 1, '', 0], ['1.1', 'Material', mat, 'Tubo ' + mat, 'M', qtd, '', 10]] }];
+  const itensDe = c => t.adm('base_dados').composicoes.find(x => x.codigo === c).itens.map(x => x.ref + ':' + x.coef);
+  t.adm('base_importar', { abas: comp('10075', 'T63', 100), aplicar: true, fonte: 'Planilha · AVA.xlsx' });
+  // a mesma planilha de novo (preço/quantidade revisados): atualiza normalmente
+  const mesma = t.adm('base_importar', { abas: comp('10075', 'T63', 120), fonte: 'Planilha · AVA.xlsx' });
+  assert.deepEqual([mesma.conflitos.length, mesma.composicoes[0].codigo, mesma.composicoes[0].status], [0, '10075', 'atualizar']);
+  // outra planilha, mesmo código, outra composição: vira 10075-2 e a do AVA fica intacta
+  const joy = t.adm('base_importar', { abas: comp('10075', 'T110', 900), fonte: 'Planilha · JOY.xlsx' });
+  assert.deepEqual(joy.conflitos.map(c => [c.codigo, c.vai, c.substituir]), [['10075', '10075-2', false]]);
+  t.adm('base_importar', { abas: comp('10075', 'T110', 900), aplicar: true, fonte: 'Planilha · JOY.xlsx' });
+  assert.deepEqual(itensDe('10075'), ['T63:100']);
+  assert.deepEqual(itensDe('10075-2'), ['T110:900']);
+  // importar o JOY de novo (ex: agora como orçamento): reaproveita o 10075-2, sem criar outra variante
+  const de2 = t.adm('base_importar', { abas: comp('10075', 'T110', 900), fonte: 'Planilha · JOY.xlsx' });
+  assert.deepEqual([de2.composicoes[0].codigo, de2.conflitos.length], ['10075-2', 0]);
+  const orc = t.adm('prop_importar', { abas: comp('10075', 'T110', 900), aplicar: true, fonte: 'Planilha · JOY.xlsx', proposta: { cliente: 'XGL2', empreendimento: 'JOY' } });
+  assert.equal(t.adm('prop_detalhe', { id: orc.id }).itens.find(i => i.tipo === 'I').comp_cod, '10075-2');
+  // marcado "substituir": a do arquivo toma o lugar da base
+  const sub = t.adm('base_importar', { abas: comp('10075', 'T110', 900), aplicar: true, fonte: 'Planilha · JOY.xlsx', substituir: ['10075'] });
+  assert.equal(sub.composicoes[0].status, 'atualizar');
+  assert.deepEqual(itensDe('10075'), ['T110:900']);
+});
+
 test('obra: localização escolhida no mapa ao criar; excluir pede a sigla, tira do sistema e guarda a pasta em "Obras excluídas"', () => {
   const t = preparar();
   const r = t.adm('admin_obra_criar', { nome: 'AVA Residence', sigla: 'AVA', endereco: 'Maquiné/RS', lat: '-29,78378', lng: -50.07392 });

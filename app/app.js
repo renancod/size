@@ -302,7 +302,7 @@ const MODULOS = [
       { h: '#/orc/composicoes', t: 'Composições', i: 'layers', ok: () => !!baseNivel() },
       { h: '#/orc/insumos', t: 'Insumos', i: 'box', ok: () => !!baseNivel() },
       { h: '#/orc/sinapi', t: 'SINAPI (Caixa)', i: 'grid2', ok: () => !!baseNivel() },
-      { h: '#/orc/importar', t: 'Importar orçamento', i: 'upload', ok: () => baseNivel() === 'Gerir' }
+      { h: '#/orc/importar', t: 'Importar composições', i: 'upload', ok: () => baseNivel() === 'Gerir' }
     ]
   }
 ];

@@ -866,7 +866,7 @@ async function vPropImportar() {
   };
   const ler = async f => {
     $('#ppImp').innerHTML = `<div class="card bp-lendo"><span class="spin"></span><b>Lendo ${esc(f.name)}…</b></div>`;
-    try { M.abas = await bpLerPlanilha(f); M.nome = f.name; M.pre = await api('prop_importar', { abas: M.abas }); conferir(); }
+    try { M.abas = await bpLerPlanilha(f); M.nome = f.name; M.substituir = []; M.pre = await api('prop_importar', { abas: M.abas, fonte: bpFonte(M.nome), substituir: [] }); conferir(); }
     catch (e) { toast(e.message, 1); arquivo(); }
   };
   const conferir = () => {
@@ -877,6 +877,7 @@ async function vPropImportar() {
         <div class="bp-tiles">${tile(R.etapas, 'etapas')}${tile(R.itens, 'itens')}${tile(bpM(R.custo_planilha), 'custo na planilha', 'sem BDI e gestão')}${tile(B.comp_novas, 'composições novas na base', '', 'ok')}${tile(B.comp_atualizar, 'composições a atualizar', '', 'atu')}${tile(B.insumos_novos, 'insumos novos', '', 'ok')}</div>
         ${R.sem_bdi.length || R.sem_gestao.length ? `<div class="aviso info" style="margin-top:12px">${R.sem_bdi.length ? `<b>Sem BDI na planilha:</b> ${esc(R.sem_bdi.join(' · '))}. ` : ''}${R.sem_gestao.length ? `<b>Sem gestão:</b> ${esc(R.sem_gestao.join(' · '))}.` : ''}</div>` : ''}
         ${R.avisos.length ? `<details class="bp-avisos"><summary>${ic('alert')} ${plural(R.avisos.length, 'observação', 'observações')} da base</summary><ul>${R.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}</div>
+      ${bpConflitos(R.conflitos)}
       <div class="card"><h3>${ic('user')} Orçamento</h3>
         <div class="bp-g3"><label class="bp-span2">Cliente<input name="cliente" required placeholder="ex: AVA Residences"></label><label>Local<input name="local" placeholder="cidade/UF"></label></div>
         <label>Empreendimento / obra<input name="empreendimento" required value="${esc(S.empreendimento || M.nome.replace(/\.\w+$/, ''))}"></label>
@@ -884,11 +885,20 @@ async function vPropImportar() {
         <div class="g2"><label>Data-base dos preços<input type="date" name="data" value="${hoje()}"></label><label class="ck" style="align-self:end"><input type="checkbox" name="atu" checked> Atualizar na base as composições e os insumos que já existem (mesmo código)</label></div></div>
       <div class="barra-acoes"><div class="acoes"><button type="button" class="btn sec" id="ppVolta">${ic('back')} Voltar</button><button class="btn bp-ac" id="ppGo">${ic('check')} Criar orçamento com ${plural(R.itens, 'item', 'itens')}</button></div></div></form>`;
     $('#ppOutro').onclick = $('#ppVolta').onclick = arquivo;
+    // marcou/desmarcou "substituir": confere de novo sem perder o que já foi digitado
+    bpConflitosLiga(async l => {
+      const f = $('#ppIf'), vals = {};
+      [...f.elements].forEach(x => { if (x.name) vals[x.name] = x.type === 'checkbox' ? x.checked : x.value; });
+      M.substituir = l;
+      try { M.pre = await api('prop_importar', { abas: M.abas, fonte: bpFonte(M.nome), substituir: l }); } catch (x) { return toast(x.message, 1); }
+      conferir();
+      [...$('#ppIf').elements].forEach(x => { if (x.name && x.name in vals) { if (x.type === 'checkbox') x.checked = vals[x.name]; else x.value = vals[x.name]; } });
+    });
     $('#ppIf').onsubmit = async e => {
       e.preventDefault();
       const f = e.target, b = $('#ppGo'); b.disabled = true; b.textContent = 'Importando…';
       try {
-        const r = await api('prop_importar', { abas: M.abas, aplicar: true, atualizar: f.atu.checked, data_preco: f.data.value, fonte: ('Planilha · ' + M.nome).slice(0, 80),
+        const r = await api('prop_importar', { abas: M.abas, aplicar: true, atualizar: f.atu.checked, data_preco: f.data.value, fonte: bpFonte(M.nome), substituir: M.substituir || [],
           proposta: { cliente: f.cliente.value, empreendimento: f.empreendimento.value, local: f.local.value, bdi_pct: bpPn(f.bdi_pct.value), bdi_base: f.bdi_base.value, gestao_pct: bpPn(f.gestao_pct.value), gestao_base: f.gestao_base.value } });
         toast(r.msg);
         await bpCarregar(true);

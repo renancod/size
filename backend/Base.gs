@@ -414,8 +414,16 @@ function baseLerPlanilha_(abas) {
   if (!blocos.length) throw new Error('A aba "' + comp.nome + '" não tem nenhuma composição.');
   return { aba: comp.nome, blocos: blocos, avisos: avisos, etapas: Object.keys(etapas).length, etapasNomes: etapas, taxas: taxas, semTaxa: semTaxa, titulo: titulo.slice(0, 200) };
 }
-/* o que a importação vai fazer: insumos e composições novos, atualizados, mantidos ou repetidos */
-function basePlanoImport_(P, atualizar) {
+/* arquivo de origem de uma composição ("Planilha · AVA.xlsx" e "RDObras · AVA.xlsx" são o mesmo arquivo) */
+const baseArq_ = s => norm_(String(s || '').split(' · ').pop());
+/* o que a importação vai fazer: insumos e composições novos, atualizados, mantidos ou repetidos.
+ * op.fonte = arquivo desta importação; op.substituir = códigos da base que o usuário mandou substituir.
+ * O RDObras repete o mesmo código para serviços diferentes em obras diferentes: a composição que veio de OUTRA
+ * planilha, com outros itens, não é sobrescrita (entra como variante), a não ser que o usuário marque para substituir */
+function basePlanoImport_(P, atualizar, op) {
+  op = op || {};
+  const arq = baseArq_(op.fonte), subst = {};
+  [].concat(op.substituir || []).forEach(c => { subst[String(c)] = 1; });
   const ix = baseIndice_(), avisos = P.avisos.slice();
   const novoI = baseGerador_(Object.keys(ix.I), 'INS-'), novoC = baseGerador_(Object.keys(ix.C), 'CMP-');
   const chave = (d, u) => norm_(d) + '|' + norm_(u);
@@ -437,8 +445,10 @@ function basePlanoImport_(P, atualizar) {
     return Object.assign(f, { status: igual ? 'igual' : atualizar ? 'atualizar' : 'manter', preco_atual: num_(db.preco) });
   });
   // 2. composições: pelo código; o mesmo código com itens diferentes vira variante (código-2, código-3…); itens iguais = repetida
-  const porCod = {}, composicoes = [];
+  const porCod = {}, tomado = {}, composicoes = [], conflitos = [];
   let proprios = 0;
+  const assinBase = k => norm_(ix.C[k].unidade) + '#' + (ix.itens[k] || []).map(x => x.ref + ':' + baseR8_(num_(x.coef)) + ':' + (basePrecoProprio_(x) ? baseR4_(num_(x.preco)) : '')).sort().join('|');
+  const deOutra = (k, assin) => arq && baseArq_(ix.C[k].fonte) !== arq && assinBase(k) !== assin;
   P.blocos.forEach(b => {
     const Q = num_(b.qtd);
     const its = b.itens.map(x => ({ ref_tipo: 'I', ref: x.codigo, coef: baseR8_(Q ? x.qtd / Q : x.qtd), preco: Math.abs(x.preco - insF[x.codigo].preco) > 0.005 ? baseR4_(x.preco) : '' }));
@@ -449,27 +459,38 @@ function basePlanoImport_(P, atualizar) {
         Object.keys(porCod).find(k => chave(porCod[k].descricao, porCod[k].unidade) === chave(b.descricao, b.unidade));
       base = mesma || novoC();
     }
-    let cod = base, n = 1, rep = null;
-    while (porCod[cod]) {
-      if (porCod[cod].assin === assin) { rep = porCod[cod]; break; }
-      cod = base + '-' + (++n);
-    }
+    const rep = composicoes.find(c => c.base === base && c.assin === assin);
     if (rep) { rep.repetidas.push(b.item || b.descricao.slice(0, 30)); b.cod_final = rep.codigo; return; }
+    // n-ésimo serviço diferente com este código no arquivo → código-n (o código que foi para variante continua "tomado")
+    let cod = base, n = 1, forcar = false, cf = null;
+    while (porCod[cod] || tomado[cod]) cod = base + '-' + (++n);
+    // esta mesma composição já entrou antes como variante (ex: base importada e depois o orçamento): usa ela
+    const ja = ix.C[cod] && !subst[cod] && deOutra(cod, assin) && Object.keys(ix.C).find(k => k.indexOf(base + '-') === 0 && /^\d+$/.test(k.slice(base.length + 1)) && !porCod[k] && assinBase(k) === assin);
+    if (ja) { tomado[cod] = 1; cod = ja; n = parseInt(ja.slice(base.length + 1), 10); }
+    else if (ix.C[cod] && deOutra(cod, assin)) {
+      const c0 = ix.C[cod];
+      cf = { codigo: cod, descricao_base: c0.descricao, fonte_base: String(c0.fonte || ''), descricao: b.descricao, item: b.item, substituir: !!subst[cod] };
+      if (cf.substituir) forcar = true;
+      else { tomado[cod] = 1; do { cod = base + '-' + (++n); } while (porCod[cod] || tomado[cod] || ix.C[cod]); }
+      cf.vai = cod;
+      conflitos.push(cf);
+    }
     b.cod_final = cod;   // composição da base que este item da planilha usa (para montar o orçamento do cliente)
     const calc = b.itens.reduce((s, x, i) => s + its[i].coef * x.preco, 0);
     const o = {
-      codigo: cod, item: b.item, descricao: b.descricao, unidade: b.unidade, grupo: b.grupo, itens: its, assin: assin, variante: n > 1,
-      unit_planilha: b.unit == null ? '' : baseR4_(b.unit), unit_calc: baseR4_(calc), status: ix.C[cod] ? (atualizar ? 'atualizar' : 'manter') : 'nova', repetidas: [],
+      codigo: cod, base: base, item: b.item, descricao: b.descricao, unidade: b.unidade, grupo: b.grupo, itens: its, assin: assin, variante: n > 1,
+      unit_planilha: b.unit == null ? '' : baseR4_(b.unit), unit_calc: baseR4_(calc), status: ix.C[cod] ? (atualizar || forcar ? 'atualizar' : 'manter') : 'nova', repetidas: [],
       proprios: its.filter(i => i.preco !== '').length, n_itens: its.length
     };
     if (b.unit != null && Math.abs(b.unit - calc) > Math.max(0.02, Math.abs(b.unit) * 0.005)) o.aviso = 'Custo na planilha ' + brl_(b.unit) + ' × calculado ' + brl_(calc) + ' (o sistema usa o calculado).';
-    if (n > 1) avisos.push('Código ' + base + ' aparece com itens diferentes: o item ' + (b.item || b.descricao.slice(0, 30)) + ' entrou como ' + cod + '.');
+    if (cf && !forcar) avisos.push('Código ' + cf.codigo + ' já está na base com outra composição (de ' + (cf.fonte_base.split(' · ').pop() || 'outra planilha') + '): o item ' + (b.item || b.descricao.slice(0, 30)) + ' entrou como ' + cod + ', sem mexer na da base.');
+    else if (n > 1) avisos.push('Código ' + base + ' aparece com itens diferentes: o item ' + (b.item || b.descricao.slice(0, 30)) + ' entrou como ' + cod + '.');
     proprios += o.proprios;
     composicoes.push(porCod[cod] = o);
   });
   const conta = (l, s) => l.filter(x => x.status === s).length;
   return {
-    insumos: insumos, composicoes: composicoes, avisos: avisos,
+    insumos: insumos, composicoes: composicoes, avisos: avisos, conflitos: conflitos,
     resumo: {
       aba: P.aba, etapas: P.etapas, insumos: insumos.length, insumos_novos: conta(insumos, 'novo'), insumos_atualizar: conta(insumos, 'atualizar'), insumos_iguais: conta(insumos, 'igual'), insumos_manter: conta(insumos, 'manter'),
       composicoes: composicoes.length, comp_novas: conta(composicoes, 'nova'), comp_atualizar: conta(composicoes, 'atualizar'), comp_manter: conta(composicoes, 'manter'),
@@ -479,8 +500,8 @@ function basePlanoImport_(P, atualizar) {
 }
 function baseImportar_(q, ctx) {
   const atualizar = q.atualizar !== false && q.atualizar !== 'false';
-  const plano = basePlanoImport_(baseLerPlanilha_(q.abas), atualizar);
-  const saida = () => ({ resumo: plano.resumo, avisos: plano.avisos, insumos: plano.insumos, composicoes: plano.composicoes.map(c => { const o = Object.assign({}, c); delete o.assin; delete o.itens; return o; }) });
+  const plano = basePlanoImport_(baseLerPlanilha_(q.abas), atualizar, { fonte: q.fonte, substituir: q.substituir });
+  const saida = () => ({ resumo: plano.resumo, avisos: plano.avisos, conflitos: plano.conflitos, insumos: plano.insumos, composicoes: plano.composicoes.map(c => { const o = Object.assign({}, c); delete o.assin; delete o.itens; return o; }) });
   if (!q.aplicar) return saida();
   const T = central_('Insumos'), C = central_('Composicoes'), IT = central_('ComposicaoItens'), ix = baseIndice_();
   const agora = new Date(), data = baseDataIso_(q.data_preco) || baseHoje_(), fonte = String(q.fonte || 'Importação de planilha').slice(0, 80), quem = ctx.u.nome;
