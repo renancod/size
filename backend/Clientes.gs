@@ -339,7 +339,7 @@ function cliAdmin_(q, ctx) {
       // na lista: todos os orçamentos ligados ao cliente (inclusive rascunho) e a logo publicada (com a versão)
       orc_total: Object.keys(props.filter(p => String(p.cliente_id) === String(c.id)).reduce((o, p) => { o[String(p.numero)] = 1; return o; }, {})).length,
       url: c.slug && c.publicado_em ? cliUrl_(c.slug) : '', logo_url: c.slug && c.publicado_em && sim_(c.logo) ? cliUrl_(c.slug) + 'logo.png' + cliVer_(c) : '',
-      usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso), portal: cliAcesso_(u) }))
+      usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso), portal: cliAcesso_(u), enviado_em: fmtVal_(u.acesso_enviado_em) }))
     }); }),
     obras: obras.map(o => ({ id: String(o.id), nome: o.nome, ativa: sim_(o.ativa) })),
     modulos: CLI_MODULOS_, modelos: CLI_MODELOS_, tipos: CLI_TIPOS_, github: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'), app_url: cliUrl_('')
@@ -430,6 +430,34 @@ function cliUsuarioSalvar_(q, ctx) {
   if (novo) U.insert(u); else U.update(u);
   log_(ctx, 'cliente_usuario', c.id + ' · ' + login);
   return { msg: novo ? 'Acesso criado. Envie o link, o usuário e a senha provisória ao cliente.' : q.senha ? 'Senha provisória definida.' : 'Acesso salvo.', id: u.id };
+}
+
+/* manda o acesso por e-mail pelo sistema (igual aos pedidos): o texto da tela Compartilhar (com a senha provisória só quando
+ * acabou de ser definida, o app é que tem), com a logo e a cor do cliente e o botão do portal. O e-mail digitado fica no acesso. */
+function cliAcessoEmail_(q, ctx) {
+  const c = central_('Clientes').all().find(x => String(x.id) === String(q.cliente_id));
+  if (!c) throw new Error('Cliente não encontrado.');
+  const U = central_('Usuarios'), u = U.all().find(x => String(x.id) === String(q.id));
+  if (!u || String(u.cliente_id) !== String(c.id)) throw new Error('Este acesso não é deste cliente.');
+  const para = String(q.para || '').trim(), texto = String(q.mensagem || '').trim();
+  if (!para) throw new Error('Este acesso não tem e-mail cadastrado: digite o e-mail de quem vai receber.');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(para)) throw new Error('E-mail inválido: ' + para);
+  if (texto.length < 10) throw new Error('Escreva a mensagem.');
+  const link = c.slug && c.publicado_em ? cliUrl_(c.slug) : cliUrl_(''), cor = /^#[0-9a-f]{6}$/i.test(String(c.cor)) ? c.cor : CLI_COR_PADRAO_;
+  const logo = c.slug && c.publicado_em && sim_(c.logo) ? cliUrl_(c.slug) + 'logo.png' + cliVer_(c) : '';
+  const corpo = h_(texto).replace(/\n/g, '<br>');
+  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2433;max-width:560px">'
+    + '<div style="background:' + cor + ';padding:18px 20px;border-radius:12px 12px 0 0;color:#fff">'
+    + (logo ? '<img src="' + logo + '" alt="" width="56" height="56" style="border-radius:10px;background:#fff;vertical-align:middle;margin-right:12px">' : '')
+    + '<b style="font-size:18px;vertical-align:middle">' + h_(c.nome) + '</b></div>'
+    + '<div style="border:1px solid #e3e6ec;border-top:0;border-radius:0 0 12px 12px;padding:20px">' + corpo
+    + botaoPortal_(link, 'Acessar o portal') + '<p style="color:#6b7280;font-size:13px">' + h_(empresa_()) + ' · portal do cliente</p></div></div>';
+  GmailApp.sendEmail(para, 'Acesso ao portal ' + c.nome + ' · ' + empresa_(), texto, { htmlBody: html, name: empresa_() });
+  if (!u.email) u.email = para;
+  u.acesso_enviado_em = new Date();
+  U.update(u);
+  log_(ctx, 'cliente_acesso_email', c.id + ' · ' + u.login + ' → ' + para);
+  return { msg: 'Acesso enviado para ' + para + '.' };
 }
 
 /* excluir um login do cliente (teste ou criado por engano): some do sistema e dos avisos no celular; considerações e

@@ -81,7 +81,7 @@ async function vCliente(id) {
     </form>
     ${novo ? '' : `<div class="card"><div class="bp-h"><h3>${ic('users')} Acessos do cliente</h3><button type="button" class="btn sec peq" id="clNovoU">${ic('plus')} Novo acesso</button></div>
       ${!c.ativo ? `<div class="aviso warn">O acesso deste cliente está <b>encerrado</b>: nenhum destes logins consegue entrar. <button type="button" class="btn peq" id="clReativar">Reativar acesso</button></div>` : ''}
-      ${c.usuarios.map(u => `<div class="cl-u"><span><b>${esc(u.nome)}</b> ${u.ativo ? '' : '<span class="bp-flag">desativado</span>'}<br><small>${esc(u.login)}${u.email ? ' · ' + esc(u.email) : ''}${u.ultimo_acesso ? ' · último acesso ' + esc(u.ultimo_acesso) : ' · ainda não entrou'}</small>
+      ${c.usuarios.map(u => `<div class="cl-u"><span><b>${esc(u.nome)}</b> ${u.ativo ? '' : '<span class="bp-flag">desativado</span>'}<br><small>${esc(u.login)}${u.email ? ' · ' + esc(u.email) : ' · <span class="atrasado">sem e-mail</span>'}${u.ultimo_acesso ? ' · último acesso ' + esc(u.ultimo_acesso) : ' · ainda não entrou'}${u.enviado_em ? ' · acesso enviado por e-mail em ' + esc(u.enviado_em) : ''}</small>
         <span class="cl-u-ve">${clVeResumo(c, u.portal).map(x => `<span class="pc-chip">${esc(x)}</span>`).join('')}</span></span>
         <span class="acoes"><button type="button" class="btn sec peq" data-share="${esc(u.id)}" title="Mandar o link e o usuário">${ic('send')} Compartilhar</button><button type="button" class="btn sec peq" data-u="${esc(u.id)}">Editar</button></span></div>`).join('') || '<p class="mute">Nenhum acesso ainda. Crie um login para cada pessoa do cliente (dono, engenheiro, fiscal…) e escolha o que cada um vê.</p>'}</div>`}`);
 
@@ -215,6 +215,7 @@ function clUsuario(c, u) {
     <label>Nome<input id="cuNome" value="${esc(u ? u.nome : '')}" required placeholder="ex.: Eng. Paulo Lima"></label>
     <div class="g2"><label>Usuário (login)<input id="cuLogin" autocapitalize="none" value="${esc(u ? u.login : '')}" required placeholder="ex.: paulo.eng"></label><label>E-mail<input id="cuEmail" type="email" value="${esc(u ? u.email : '')}"></label></div>
     <label>${u ? 'Nova senha provisória <small>(deixe em branco para manter)</small>' : 'Senha provisória <small>(mín. 10; ele troca no primeiro acesso)</small>'}<input id="cuSenha" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="10"></label>
+    <label class="chk"><input type="checkbox" id="cuEnv" ${u ? '' : 'checked'}> Enviar o acesso por e-mail ${u ? 'com a senha nova' : 'agora'} <small>(link, usuário e senha provisória, para o e-mail acima)</small></label>
     <div class="cl-ve"><h4>${ic('eye')} O que esta pessoa vê</h4>
       <div class="cl-perfis">${Object.entries(CL_PERFIS).map(([k, [t, d]]) => `<button type="button" data-perfil="${k}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('')}</div>
       <div class="cl-ve-g"><div><label>Obras</label>
@@ -233,8 +234,16 @@ function clUsuario(c, u) {
       const senha = $('#cuSenha').value, dados = { id: u ? u.id : '', nome: $('#cuNome').value, login: $('#cuLogin').value.trim().toLowerCase(), email: $('#cuEmail').value, ativo: u ? $('#cuAtivo').checked : true };
       const r = await api('cli_usuario_salvar', { cliente_id: c.id, usuario: dados, senha, portal });
       CL.d = null;
-      // acesso novo (ou senha nova): já abre a mensagem pronta para mandar
-      if (!u || senha) { await vCliente(c.id); const c2 = CL.d.clientes.find(x => x.id === c.id); clCompartilhar(c2, c2.usuarios.find(x => x.login === dados.login), senha); return false; }
+      // acesso novo (ou senha nova): manda por e-mail (marcado e com e-mail) ou abre a mensagem pronta para mandar
+      if (!u || senha) {
+        await vCliente(c.id);
+        const c2 = CL.d.clientes.find(x => x.id === c.id), u2 = c2.usuarios.find(x => x.login === dados.login), para = String(dados.email || '').trim();
+        if ($('#cuEnv').checked && para) {
+          try { toast(r.msg.replace(/ Envie.*$/, '') + ' ' + (await api('cli_acesso_email', { cliente_id: c.id, id: u2.id, para, mensagem: clMsgAcesso(c2, u2, senha) })).msg); fecharModal(); CL.d = null; vCliente(c.id); return false; }
+          catch (x) { toast('Acesso salvo, mas o e-mail não foi: ' + x.message, 1); }
+        } else if ($('#cuEnv').checked) toast('Acesso salvo. Não há e-mail cadastrado para enviar: mande pela mensagem abaixo ou digite o e-mail.', 1);
+        clCompartilhar(c2, u2, senha); return false;
+      }
       else { toast(r.msg); vCliente(c.id); }
     }
   });
@@ -260,28 +269,38 @@ function clUsuario(c, u) {
 
 /* mensagem pronta para mandar o acesso (WhatsApp, e-mail ou copiar): o link do cliente, o usuário e, quando acabou de
  * ser definida, a senha provisória; o texto diz o que a pessoa vai acompanhar */
-function clCompartilhar(c, u, senha) {
-  if (!u) return;
+function clMsgAcesso(c, u, senha) {
   const link = c.url || CL.d.app_url, P = u.portal || { obras: 'todas', orcamentos: true, modulos: null };
   const nome = String(u.nome).split(' ').filter(w => !/^(eng|eng\.|sr|sra|dr|dra)\.?$/i.test(w))[0] || u.nome;
   const obras = (c.empreendimentos || []).filter(e => P.obras === 'todas' || P.obras.includes(e.obra)).map(e => e.nome);
   const ve = [P.orcamentos ? 'os orçamentos' : '', obras.length ? (obras.length === 1 ? 'a obra ' + obras[0] : 'as obras ' + obras.slice(0, -1).join(', ') + ' e ' + obras.slice(-1)) : P.obras === 'todas' ? 'as obras' : ''].filter(Boolean).join(' e ');
-  const txt = `Olá, ${nome}! Segue seu acesso ao portal ${c.nome} da Size Engenharia${ve ? ', onde você acompanha ' + ve : ''}:\n\n${link}\nUsuário: ${u.login}\n`
+  return `Olá, ${nome}! Segue seu acesso ao portal ${c.nome} da Size Engenharia${ve ? ', onde você acompanha ' + ve : ''}:\n\n${link}\nUsuário: ${u.login}\n`
     + (senha ? `Senha provisória: ${senha}\n\nNo primeiro acesso, crie sua própria senha.` : `Senha: a que você já usa (se esqueceu, peça uma nova à Size).`)
     + `\nNo celular, toque em "Instalar o app" para ficar com o ícone na tela.`;
+}
+function clCompartilhar(c, u, senha) {
+  if (!u) return;
+  const para0 = u.email || c.email || '';
   modal(`${ic('send')} Compartilhar o acesso de ${esc(u.nome)}`, `<div class="grid">
     ${c.url ? '' : '<div class="aviso warn">O endereço próprio deste cliente ainda não foi publicado: a mensagem leva o link do app da Size (ele entra com a cor do cliente). Publique para mandar o link com a logo dele.</div>'}
     ${senha ? '' : '<div class="aviso info">A senha não vai na mensagem. Para mandar uma senha nova, toque em Editar e defina uma senha provisória.</div>'}
-    <textarea id="cuMsg" rows="9" class="cl-msg">${esc(txt)}</textarea>
-    <div class="acoes"><button type="button" class="btn" id="cuCopiar">${ic('copy')} Copiar mensagem</button>
+    <textarea id="cuMsg" rows="9" class="cl-msg">${esc(clMsgAcesso(c, u, senha))}</textarea>
+    ${u.email ? '' : `<div class="aviso warn" id="cuSemMail">${ic('alert')} <b>Este acesso não tem e-mail cadastrado.</b> ${c.email ? 'Sugeri o e-mail do contato do cliente; confira antes de enviar.' : 'Digite o e-mail abaixo para enviar (ele fica salvo no acesso) ou mande pelo WhatsApp.'}</div>`}
+    <label>Enviar para<input id="cuPara" type="email" value="${esc(para0)}" placeholder="e-mail de ${esc(u.nome)}"></label>
+    <div class="acoes"><button type="button" class="btn" id="cuEnviar">${ic('mail')} Enviar por e-mail</button>
       <a class="btn sec" id="cuZap" target="_blank" rel="noopener">${ic('send')} Abrir no WhatsApp</a>
-      ${u.email ? `<a class="btn sec" id="cuMail">${ic('mail')} E-mail para ${esc(u.email)}</a>` : ''}</div></div>`, { semRodape: true, larga: true });
+      <button type="button" class="btn sec" id="cuCopiar">${ic('copy')} Copiar mensagem</button></div>
+    ${u.enviado_em ? `<small class="mute">Último envio por e-mail: ${esc(u.enviado_em)}</small>` : ''}</div>`, { semRodape: true, larga: true });
   const msg = () => $('#cuMsg').value;
-  const links = () => {
-    $('#cuZap').href = 'https://wa.me/?text=' + encodeURIComponent(msg());
-    if ($('#cuMail')) $('#cuMail').href = 'mailto:' + encodeURIComponent(u.email) + '?subject=' + encodeURIComponent('Acesso ao portal ' + c.nome + ' · Size Engenharia') + '&body=' + encodeURIComponent(msg());
-  };
+  const links = () => { $('#cuZap').href = 'https://wa.me/?text=' + encodeURIComponent(msg()); };
   $('#cuMsg').oninput = links; links();
+  $('#cuEnviar').onclick = async () => {
+    const para = $('#cuPara').value.trim(), b = $('#cuEnviar');
+    if (!para) { $('#cuPara').focus(); return toast('Sem e-mail cadastrado: digite o e-mail de quem vai receber.', 1); }
+    b.disabled = true; b.textContent = 'Enviando…';
+    try { toast((await api('cli_acesso_email', { cliente_id: c.id, id: u.id, para, mensagem: msg() })).msg); fecharModal(); CL.d = null; vCliente(c.id); }
+    catch (x) { toast(x.message, 1); b.disabled = false; b.innerHTML = ic('mail') + ' Enviar por e-mail'; }
+  };
   $('#cuCopiar').onclick = async () => { try { await navigator.clipboard.writeText(msg()); toast('Mensagem copiada: cole no WhatsApp ou no e-mail.'); } catch (e) { $('#cuMsg').select(); toast('Selecionei o texto: copie com Ctrl+C.', 1); } };
 }
 

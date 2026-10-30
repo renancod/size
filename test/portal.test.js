@@ -289,6 +289,28 @@ test('cadastro do cliente: CNPJ conferido, contato, contagem de orçamentos (com
   assert.deepEqual([c.orc_total, c.orcamentos.length], [1, 0]);   // no portal ainda não (rascunho)
 });
 
+test('acesso por e-mail pelo sistema: sem e-mail avisa, com e-mail envia com o botão do portal, guarda o e-mail e a data', () => {
+  const t = preparar();
+  const u = t.adm('cli_admin').clientes[0].usuarios[0];
+  assert.equal(u.email, '');
+  const msg = 'Olá, Dono! Segue seu acesso ao portal.\nUsuário: dono.ava';
+  assert.throws(() => t.adm('cli_acesso_email', { cliente_id: t.cli, id: u.id, para: '', mensagem: msg }), /não tem e-mail cadastrado/);
+  assert.throws(() => t.adm('cli_acesso_email', { cliente_id: t.cli, id: u.id, para: 'sem-arroba', mensagem: msg }), /E-mail inválido/);
+  const outro = t.adm('cli_salvar', { cliente: { nome: 'Outro', cor: '#2B4C7E', slug: 'outro' } }).id;
+  assert.throws(() => t.adm('cli_acesso_email', { cliente_id: outro, id: u.id, para: 'a@b.com', mensagem: msg }), /não é deste cliente/);
+  const n0 = t.G._enviados.length;
+  assert.match(t.adm('cli_acesso_email', { cliente_id: t.cli, id: u.id, para: 'dono@marazul.com', mensagem: msg }).msg, /enviado para dono@marazul\.com/);
+  const e = t.G._enviados[n0];
+  assert.equal(e.para, 'dono@marazul.com');
+  assert.match(e.assunto, /Acesso ao portal AVA Residence/);
+  assert.match(e.html, /Acessar o portal/);
+  assert.match(e.html, /Usuário: dono\.ava/);
+  const u2 = t.adm('cli_admin').clientes.find(c => c.id === t.cli).usuarios[0];
+  assert.equal(u2.email, 'dono@marazul.com');
+  assert.ok(u2.enviado_em);
+  assert.throws(() => t.cliente('cli_acesso_email', { cliente_id: t.cli, id: u.id, para: 'x@y.com', mensagem: msg }));   // só a Size envia
+});
+
 test('documentos da obra no portal: só os marcados "cliente vê", só para quem tem a área; ART e projeto não mexem no valor', () => {
   const t = preparar('gestao');
   assert.throws(() => t.adm('cc_salvar', { obra: t.obra, contrato: { tipo: 'ART', numero: 'ART 1' } }), /Anexe o arquivo/);

@@ -5,7 +5,7 @@
 const SCHEMA_CENTRAL = {
   Config: ['chave', 'valor', 'descricao'],
   // cliente_id preenchido = usuário do portal do cliente (só vê a obra desse cliente, só leitura)
-  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id', 'portal_json'],
+  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id', 'portal_json', 'acesso_enviado_em'],
   // portal do cliente: uma linha por cliente/obra; modulos = o que ele vê; slug = endereço próprio (c/<slug>/) com ícone e nome do empreendimento
   // obra_id vazio = cliente em negociação (só vê os orçamentos enviados a ele)
   Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em', 'capa', 'logo', 'emps_json',
