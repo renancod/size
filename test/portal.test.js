@@ -89,7 +89,7 @@ test('administrador: lista, endereço único e publicação exige a chave do Git
   const t = preparar();
   const A = t.adm('cli_admin');
   assert.equal(A.clientes[0].usuarios[0].login, 'dono.ava');
-  assert.deepEqual(A.clientes[0].empreendimentos[0].modulos, ['cronograma', 'diario', 'fvs', 'financeiro']);   // cadastro antigo (uma obra) vira o 1º empreendimento
+  assert.deepEqual(A.clientes[0].empreendimentos[0].modulos, ['cronograma', 'diario', 'fvs', 'financeiro', 'documentos']);   // cadastro antigo (uma obra) vira o 1º empreendimento
   assert.equal(A.github, false);
   assert.throws(() => t.adm('cli_salvar', { cliente: { nome: 'Outro', obra_id: t.obra, modelo: 'global', cor: '#000000', slug: 'ava-residence' } }), /outro cliente/);
   const img = 'data:image/png;base64,' + Buffer.from('png').toString('base64');
@@ -268,6 +268,48 @@ test('cada acesso vê o que foi liberado: obras escolhidas, sem orçamentos ou s
   assert.ok(t.cliente('cli_financeiro', { obra: t.obra }).total);
   const A = t.adm('cli_admin').clientes[0].usuarios.find(u => u.login === 'paulo.eng').portal;
   assert.deepEqual([A.obras, A.orcamentos, A.modulos], [[obra2], false, ['cronograma', 'diario', 'fvs']]);
+});
+
+test('cadastro do cliente: CNPJ conferido, contato, contagem de orçamentos (com rascunho) e o orçamento puxa os dados', () => {
+  const t = preparar();
+  const base = { id: t.cli, nome: 'AVA Residence', obra_id: t.obra, modelo: 'gestao', cor: '#1d6f5f', slug: 'ava-residence' };
+  assert.throws(() => t.adm('cli_salvar', { cliente: { ...base, cnpj: '11.222.333/0001-82' } }), /CNPJ inválido/);
+  assert.throws(() => t.adm('cli_salvar', { cliente: { ...base, cnpj: '123' } }), /14 números/);
+  t.adm('cli_salvar', { cliente: { ...base, razao_social: 'Mar Azul Ltda', cnpj: '11222333000181', contato: 'Paulo', cargo: 'diretor', email: 'paulo@marazul.com', telefone: '(51) 99999-0000', cidade: 'Xangri-lá/RS', obs: 'paga em 30 dias' } });
+  let c = t.adm('cli_admin').clientes[0];
+  assert.deepEqual([c.cnpj, c.contato, c.email, c.orc_total, c.logo_url], ['11.222.333/0001-81', 'Paulo', 'paulo@marazul.com', 0, '']);
+  assert.equal(t.adm('cli_salvar', { cliente: { ...base, cnpj: '52998224725' } }).id, t.cli);   // CPF também vale
+  // orçamento em rascunho ligado ao cliente: conta na lista e puxa CNPJ, contato, telefone, e-mail e cidade
+  const id = t.adm('prop_salvar', { proposta: { cliente: 'AVA', empreendimento: 'Praça', bdi_pct: 0 }, itens: [{ tipo: 'E', descricao: 'Praça' }, { descricao: 'Grama', unidade: 'm2', qtd: 1, unit_mat: 10 }] }).id;
+  t.adm('cli_salvar', { cliente: { ...base, cnpj: '11222333000181', contato: 'Paulo', telefone: '51 9', email: 'p@m.com', cidade: 'Xangri-lá/RS' } });
+  t.adm('prop_portal', { id, cliente_id: t.cli, modo: 'aberto' });
+  const p = t.adm('prop_detalhe', { id }).proposta;
+  assert.deepEqual([p.cliente, p.cliente_doc, p.contato, p.telefone, p.email, p.local], ['AVA', '11.222.333/0001-81', 'Paulo', '51 9', 'p@m.com', 'Xangri-lá/RS']);
+  c = t.adm('cli_admin').clientes[0];
+  assert.deepEqual([c.orc_total, c.orcamentos.length], [1, 0]);   // no portal ainda não (rascunho)
+});
+
+test('documentos da obra no portal: só os marcados "cliente vê", só para quem tem a área; ART e projeto não mexem no valor', () => {
+  const t = preparar('gestao');
+  assert.throws(() => t.adm('cc_salvar', { obra: t.obra, contrato: { tipo: 'ART', numero: 'ART 1' } }), /Anexe o arquivo/);
+  const art = t.adm('cc_salvar', { obra: t.obra, contrato: { tipo: 'ART', numero: 'ART 1', valor: '999', dias_uteis: 9 }, arquivo: FOTO }).id;
+  const proj = t.adm('cc_salvar', { obra: t.obra, contrato: { tipo: 'Projeto', numero: 'Projeto de drenagem', cliente: true }, arquivo: FOTO }).id;
+  const ad = t.adm('cc_salvar', { obra: t.obra, contrato: { tipo: 'Aditivo', numero: 'Aditivo 01', valor: '500', dias_uteis: 3 }, arquivo: FOTO }).id;
+  const L = t.adm('cc_listar', { obra: t.obra });
+  assert.equal(L.valor_total, 500);
+  assert.deepEqual(L.contratos.filter(c => !c.contrato).map(c => [c.numero, c.valor, c.dias_uteis, c.cliente]), [['ART 1', 0, 0, false], ['Projeto de drenagem', 0, 0, true]]);
+  assert.equal(t.G.rodar(`ccAditivoDias_({ ss: SpreadsheetApp.openById(central_('Obras').all()[0].planilha_id), obra: central_('Obras').all()[0] })`), 3);
+  // cliente: aditivo (marcado por padrão) e projeto; a ART interna não aparece nem abre
+  const D = t.cliente('cli_documentos', { obra: t.obra }).documentos;
+  assert.deepEqual(D.map(d => [d.numero, d.valor]), [['Aditivo 01', 500], ['Projeto de drenagem', null]]);
+  assert.ok(t.cliente('cli_doc_arquivo', { obra: t.obra, id: proj }).b64);
+  assert.match(t.bruto('cli_doc_arquivo', { id: art }).erro, /não disponível/);
+  assert.ok(t.cliente('notificacoes').itens.some(i => i.etapa === 'cli_doc' && /Aditivo 01/.test(i.texto)));
+  // engenheiro do cliente sem a área Documentos
+  t.adm('cli_usuario_salvar', { cliente_id: t.cli, usuario: { nome: 'Eng', login: 'eng.cli' }, senha: 'Engenheiro#26', portal: { obras: 'todas', orcamentos: false, modulos: ['cronograma', 'diario', 'fvs'] } });
+  const s = t.G.chamar({ acao: 'login', login: 'eng.cli', senha: 'Engenheiro#26' }).dados;
+  assert.match(t.G.chamar({ acao: 'cli_documentos', token: s.token, obra: t.obra }).erro, /não está liberada/);
+  assert.ok(ad);
 });
 
 test('endereço do cliente: ícone, logo e fundo com versão (o navegador não fica com a imagem antiga)', () => {

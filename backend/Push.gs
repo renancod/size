@@ -16,7 +16,7 @@ const PUSH_ETAPAS = {
   exec_aviso: 'Aviso do engenheiro', exec_diario: 'Diário de obra', exec_alerta: 'Alerta de produção', exec_revisar: 'Diário para revisar',
   fvs_aprovar: 'FVS para aprovar', fvs_devolvida: 'FVS devolvida', fvs_verificar: 'FVS para verificar',
   medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida', sinapi: 'SINAPI do mês novo',
-  cli_diario: 'Diário de obra', cli_med: 'Medição', cli_fvs: 'Qualidade', cli_orc: 'Orçamento', cli_obra: 'Obra iniciada', prop_cli: 'Portal do cliente'
+  cli_diario: 'Diário de obra', cli_med: 'Medição', cli_fvs: 'Qualidade', cli_orc: 'Orçamento', cli_obra: 'Obra iniciada', cli_doc: 'Documento da obra', prop_cli: 'Portal do cliente'
 };
 
 function pushConta_() {

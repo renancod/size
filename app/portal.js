@@ -115,7 +115,7 @@ function portalIniciar() {
 function pcNav() {
   const C = pcCli(), E = pcEmp(), ob = !!E, orc = C.ve_orcamentos !== false && (!ob || C.orcamentos > 0), vs = pcVarios();
   const nav = [['#/c', 'Início', 'home', true], ['#/c/orcamentos', 'Orçamentos', 'file', orc], ['#/c/cronograma', 'Cronograma', 'cal', ob && pcTem('cronograma')], ['#/c/diario', 'Diário', 'camera', ob && pcTem('diario')],
-    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')],
+    ['#/c/qualidade', 'Qualidade', 'shield', ob && pcTem('fvs')], ['#/c/financeiro', 'Financeiro', 'money', ob && pcTem('financeiro')], ['#/c/documentos', 'Documentos', 'book', ob && pcTem('documentos')],
     ['#/c/relatorios', 'Relatórios', 'pdf', ob && (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro'))], ['#/c/conta', 'Conta', 'user', true]].filter(x => x[3]);
   const n = $('.pc-nav');
   if (!n) return;
@@ -137,7 +137,7 @@ function pcTrocar() {
   modal('Empreendimentos', `<div class="pc-troca">${pcEmps().map(e => `<button type="button" class="pc-lin ${e.id === (pcEmp() || {}).id ? 'on' : ''}" data-ob="${esc(e.id)}"><span><b>${esc(e.nome)}</b><br><small>${esc(e.tipo || '')}${e.endereco ? ' · ' + esc(e.endereco) : ''}</small></span>${ic('chevron')}</button>`).join('')}</div>`, { semRodape: true });
   $$('#modal [data-ob]').forEach(b => { b.onclick = () => {
     fecharModal(); pcEscolher(b.dataset.ob);
-    const aba = (location.hash.match(/^#\/c\/(cronograma|diario|qualidade|financeiro|relatorios)/) || [])[1], mod = { cronograma: 'cronograma', diario: 'diario', qualidade: 'fvs', financeiro: 'financeiro' }[aba];
+    const aba = (location.hash.match(/^#\/c\/(cronograma|diario|qualidade|financeiro|documentos|relatorios)/) || [])[1], mod = { cronograma: 'cronograma', diario: 'diario', qualidade: 'fvs', financeiro: 'financeiro', documentos: 'documentos' }[aba];
     const ir = aba && (aba === 'relatorios' ? (pcTem('cronograma') || pcTem('diario') || pcTem('financeiro')) : pcTem(mod)) ? '#/c/' + aba : '#/c/obra/' + enc(b.dataset.ob);
     if (location.hash === ir) portalRotear(); else location.hash = ir;
   }; });
@@ -152,7 +152,7 @@ async function portalRotear() {
   fecharModal();
   const R = [[/^#\/c$/, pcInicio], [/^#\/c\/obra\/([\w-]+)$/, pcObra], [/^#\/c\/relatorios$/, pcRels], [/^#\/c\/rel\/andamento\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})$/, pcRelAnd],
     [/^#\/c\/rel\/rdo\/(\d{4}-\d{2}-\d{2})$/, pcRelRdo], [/^#\/c\/rel\/financeiro$/, pcRelFin], [/^#\/c\/orcamentos$/, pcOrcs], [/^#\/c\/orcamento\/([\w-]+)$/, pcOrc], [/^#\/c\/cronograma$/, pcCrono], [/^#\/c\/diario$/, pcDiarios], [/^#\/c\/diario\/(\d{4}-\d{2}-\d{2})$/, pcDiario],
-    [/^#\/c\/qualidade$/, pcFvs], [/^#\/c\/financeiro$/, pcFin], [/^#\/c\/conta$/, pcConta]];
+    [/^#\/c\/qualidade$/, pcFvs], [/^#\/c\/financeiro$/, pcFin], [/^#\/c\/documentos$/, pcDocs], [/^#\/c\/conta$/, pcConta]];
   const r = R.find(([re]) => re.test(h));
   if (!r) { location.hash = '#/c'; return; }
   carregandoView();
@@ -177,7 +177,7 @@ async function pcPdf(acao, id) {
   try {
     const r = await pcApi(acao, { id }), bin = atob(r.b64), u8 = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+    const url = URL.createObjectURL(new Blob([u8], { type: r.mime || 'application/pdf' }));
     if (w) w.location = url; else location.href = url;
   } catch (e) { if (w) w.close(); toast(e.message, 1); }
 }
@@ -400,6 +400,16 @@ async function pcFin() {
       <span class="pc-dir"><b>${brl(m.valor)}</b>${m.pdf ? `<button type="button" class="btn sec peq" data-med="${esc(m.id)}">${ic('pdf')} PDF</button>` : ''}</span></div>`).join('') || '<div>Nenhuma medição aprovada ainda.</div>'}</section>
     ${pcTem('fvs') ? `<a class="pc-card pc-lnk" href="#/c/qualidade"><div class="pc-lin"><span>${ic('shield')} Qualidade (FVS aprovadas)</span>${ic('chevron')}</div></a>` : ''}`);
   $$('[data-med]').forEach(b => { b.onclick = () => pcPdf('cli_med_pdf', b.dataset.med); });
+}
+/* contratos, aditivos e outros documentos que a Size liberou (PDF ou imagem) */
+async function pcDocs() {
+  pcTit('Documentos');
+  const L = (await pcApi('cli_documentos')).documentos, ct = L.filter(d => d.valor != null), ou = L.filter(d => d.valor == null);
+  const lin = d => `<div class="pc-lin"><span><b>${esc(d.numero)}</b> <small>${esc(d.tipo)}</small><br><small>${pcData(d.data)}${d.descricao ? ' · ' + esc(d.descricao) : ''}${d.valor ? ' · ' + brl(d.valor) : ''}${d.dias_uteis ? ' · +' + d.dias_uteis + ' dias úteis' : ''}</small></span>
+    <button type="button" class="btn sec peq" data-doc="${esc(d.id)}">${ic('pdf')} Abrir</button></div>`;
+  view(`<section class="pc-card"><div class="pc-k">Contratos e aditivos</div>${ct.map(lin).join('') || '<div class="mute">Nenhum contrato disponível ainda.</div>'}</section>
+    ${ou.length ? `<section class="pc-card"><div class="pc-k">Outros documentos</div>${ou.map(lin).join('')}</section>` : ''}`);
+  $$('[data-doc]').forEach(b => { b.onclick = () => pcPdf('cli_doc_arquivo', b.dataset.doc); });
 }
 function pcConta() {
   pcTit('Minha conta');

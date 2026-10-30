@@ -8,7 +8,8 @@ const SCHEMA_CENTRAL = {
   Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id', 'portal_json'],
   // portal do cliente: uma linha por cliente/obra; modulos = o que ele vê; slug = endereço próprio (c/<slug>/) com ícone e nome do empreendimento
   // obra_id vazio = cliente em negociação (só vê os orçamentos enviados a ele)
-  Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em', 'capa', 'logo', 'emps_json'],
+  Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em', 'capa', 'logo', 'emps_json',
+    'razao_social', 'cnpj', 'cidade', 'contato', 'cargo', 'email', 'telefone', 'obs'],
   Acessos: ['usuario_id', 'usuario', 'obra_id', 'obra', 'perfil', 'permissoes'],
   Obras: ['id', 'sigla', 'nome', 'endereco', 'ativa', 'planilha_id', 'pasta_id', 'criada_em', 'email_financeiro', 'lat', 'lng', 'feriados'],
   Perfis: ['perfil', 'permissoes', 'descricao'],
@@ -50,7 +51,7 @@ const SCHEMA_OBRA = {
   // frente geral; os valores (preço cobrado do cliente e custos orçados) são do orçamento do empreendimento; inicio/fim = cronograma físico-financeiro
   Frentes: ['codigo', 'nome', 'descricao', 'ativa', 'preco', 'custo_direto', 'adm_local', 'indiretas', 'tributos', 'inicio', 'fim', 'contrato'],
   // contratos com o cliente: o principal (Gerar obra), aditivos e contratos novos, com o PDF e os dias úteis de prazo a mais
-  ContratosCliente: ['id', 'tipo', 'numero', 'data', 'descricao', 'valor', 'dias_uteis', 'proposta_id', 'proposta', 'arquivo_id', 'arquivo_nome', 'criado_em', 'criado_por'],
+  ContratosCliente: ['id', 'tipo', 'numero', 'data', 'descricao', 'valor', 'dias_uteis', 'proposta_id', 'proposta', 'arquivo_id', 'arquivo_nome', 'criado_em', 'criado_por', 'cliente'],
   Recebimentos: ['id', 'pedido', 'item', 'material_cod', 'descricao', 'qtd', 'unidade', 'data', 'usuario', 'nf', 'obs', 'frente'],
   Estoque: ['id', 'data', 'tipo', 'material_cod', 'descricao', 'unidade', 'qtd', 'pedido', 'frente', 'usuario', 'obs'],
   Arquivos: ['id', 'pedido', 'tipo', 'nome', 'url', 'file_id', 'data', 'usuario', 'origem'],

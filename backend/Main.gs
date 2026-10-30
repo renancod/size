@@ -205,6 +205,8 @@ const ROTAS = {
   cli_fvs_pdf: { cli: 'fvs', fn: cliFvsPdf_ },
   cli_financeiro: { cli: 'financeiro', fn: cliFinanceiro_ },
   cli_med_pdf: { cli: 'financeiro', fn: cliMedPdf_ },
+  cli_documentos: { cli: 'documentos', fn: cliDocumentos_ },
+  cli_doc_arquivo: { cli: 'documentos', fn: cliDocArquivo_ },
   cli_emp_foto: { cli: 'obra', fn: cliEmpFoto_ },
   // cadastro dos clientes do portal (administrador)
   cli_admin: { admin: true, fn: cliAdmin_ },

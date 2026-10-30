@@ -10,8 +10,8 @@
  *   (contratado, medido, pago, saldo) e medições aprovadas/pagas, com o PDF arquivado.
  */
 const CLI_GERAIS_ = ['sessao', 'trocarSenha', 'notificacoes', 'push_registrar', 'push_remover', 'push_teste'];
-const CLI_MODULOS_ = { cronograma: 'Cronograma', diario: 'Diário de obra', fvs: 'Qualidade (FVS)', financeiro: 'Financeiro (contratos, medições e pagamentos)' };
-const CLI_MODELOS_ = { gestao: ['cronograma', 'diario', 'fvs', 'financeiro'], global: ['cronograma', 'diario', 'fvs'] };
+const CLI_MODULOS_ = { cronograma: 'Cronograma', diario: 'Diário de obra', fvs: 'Qualidade (FVS)', financeiro: 'Financeiro (contratos, medições e pagamentos)', documentos: 'Documentos (contratos, aditivos, ART, projetos…)' };
+const CLI_MODELOS_ = { gestao: ['cronograma', 'diario', 'fvs', 'financeiro', 'documentos'], global: ['cronograma', 'diario', 'fvs', 'documentos'] };
 const CLI_COR_PADRAO_ = '#1D6F5F';
 
 const CLI_TIPOS_ = { gestao: 'Gerenciamento', global: 'Execução', personalizado: 'Personalizado' };
@@ -51,9 +51,11 @@ function cliObra_(id) {
   if (!o || !o.planilha_id) throw new Error('A obra deste acesso não foi encontrada. Fale com a Size.');
   return o;
 }
+/* versão das imagens publicadas (muda a cada publicação): '?v=…' ou '' */
+function cliVer_(c) { const v = c.publicado_em instanceof Date ? c.publicado_em.getTime().toString(36) : String(c.publicado_em || '').replace(/\W/g, ''); return v ? '?v=' + v : ''; }
 function cliPub_(c, u) {
   const E = cliEmpsU_(c, u), A = cliAcesso_(u), obras = E.length ? central_('Obras').all() : [], pre = c.slug && c.publicado_em ? 'c/' + c.slug + '/' : '';
-  const v = c.publicado_em instanceof Date ? c.publicado_em.getTime().toString(36) : String(c.publicado_em || '').replace(/\W/g, ''), q = v ? '?v=' + v : '';
+  const v = cliVer_(c).slice(3), q = cliVer_(c);
   const emps = E.map(e => { const o = obras.find(x => String(x.id) === String(e.obra)) || {}; return { id: e.obra, nome: o.nome || e.obra, sigla: o.sigla || '', endereco: o.endereco || '', modelo: e.modelo, tipo: CLI_TIPOS_[e.modelo], modulos: e.modulos }; });
   return {
     id: String(c.id), nome: c.nome, empresa: c.empresa || '', cor: c.cor || CLI_COR_PADRAO_, slug: c.slug || '', empreendimentos: emps,
@@ -228,6 +230,16 @@ function cliMedPdf_(q, ctx) {
   return medPdfVer_(q, ctx);
 }
 
+/* ---------- documentos: contratos, aditivos e outros PDFs da obra marcados "o cliente vê" (ContratosCliente.gs) ---------- */
+function cliDocumentos_(q, ctx) {
+  return { documentos: ccDoCliente_(ctx).map(c => ({ id: String(c.id), tipo: c.tipo, numero: c.numero, data: ymd_(c.data), descricao: c.descricao || '',
+    valor: ccEContrato_(c.tipo) ? num_(c.valor) : null, dias_uteis: ccEContrato_(c.tipo) ? num_(c.dias_uteis) : 0, arquivo: !!c.arquivo_id, arquivo_nome: c.arquivo_nome || '' })) };
+}
+function cliDocArquivo_(q, ctx) {
+  if (!ccDoCliente_(ctx).some(c => String(c.id) === String(q.id))) throw new Error('Documento não disponível.');
+  return ccArquivo_(q, ctx);
+}
+
 /* ---------- início ---------- */
 /* sem q.obra e com mais de um empreendimento: um cartão por empreendimento (andamento guardado 10 min por obra);
  * com q.obra (ou um só empreendimento): o painel daquela obra */
@@ -294,6 +306,7 @@ function cliNotif_(ctx) {
     if (mods.indexOf('diario') >= 0) cliDiariosLib_(cx).filter(d => novo(d.cliente_em)).forEach(d => add(op + 'd|' + d._dia, 'cli_diario', 'Diário de ' + fmtBr_(d._dia) + ' disponível', d.condicao, '#/c/diario/' + d._dia, d.cliente_em));
     if (mods.indexOf('financeiro') >= 0) obraTab_(cx, 'Medicoes').all().filter(m => (m.status === MED_ST_.ok && novo(m.aprovado_em)) || (m.status === MED_ST_.paga && novo(m.pago_em)))
       .forEach(m => add(op + 'm|' + m.id + '|' + m.status, 'cli_med', 'Medição ' + (m.numero || '') + ' · ' + (m.empreiteiro_nome || ''), m.status === MED_ST_.paga ? 'paga' : 'aprovada', '#/c/financeiro', m.status === MED_ST_.paga ? m.pago_em : m.aprovado_em));
+    if (mods.indexOf('documentos') >= 0) ccDoCliente_(cx).filter(d => novo(d.criado_em)).forEach(d => add(op + 'doc|' + d.id, 'cli_doc', d.tipo + ' ' + d.numero + ' disponível', d.descricao, '#/c/documentos', d.criado_em));
     if (mods.indexOf('fvs') >= 0) cliFvsLista_(cx).filter(f => novo(f.aprovado_em)).forEach(f => add(op + 'f|' + f.id, 'cli_fvs', 'FVS ' + (f.numero || '') + ' aprovada', f.servico || f.modelo_nome, '#/c/qualidade', f.aprovado_em));
   });
   return itens;
@@ -311,17 +324,36 @@ function execCliente_(q, ctx) {
 
 /* ---------- cadastro (administrador) ---------- */
 function cliAdmin_(q, ctx) {
-  const U = central_('Usuarios').all(), obras = central_('Obras').all();
+  const U = central_('Usuarios').all(), obras = central_('Obras').all(), props = central_('Propostas').all();
   return {
     clientes: central_('Clientes').all().map(c => { const E = cliEmps_(c); return Object.assign(pub_(c), {
       empreendimentos: E.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos, foto: !!e.foto, nome: (obras.find(o => String(o.id) === e.obra) || {}).nome || e.obra })),
       ativo: sim_(c.ativo), estagio: !sim_(c.ativo) ? 'Inativo' : E.length ? 'Obra' : 'Negociação', orcamentos: cliOrcResumo_(c.id), logo: sim_(c.logo), capa: sim_(c.capa),
-      url: c.slug && c.publicado_em ? cliUrl_(c.slug) : '',
+      // na lista: todos os orçamentos ligados ao cliente (inclusive rascunho) e a logo publicada (com a versão)
+      orc_total: Object.keys(props.filter(p => String(p.cliente_id) === String(c.id)).reduce((o, p) => { o[String(p.numero)] = 1; return o; }, {})).length,
+      url: c.slug && c.publicado_em ? cliUrl_(c.slug) : '', logo_url: c.slug && c.publicado_em && sim_(c.logo) ? cliUrl_(c.slug) + 'logo.png' + cliVer_(c) : '',
       usuarios: U.filter(u => String(u.cliente_id) === String(c.id)).map(u => ({ id: String(u.id), nome: u.nome, login: u.login, email: u.email || '', ativo: sim_(u.ativo), ultimo_acesso: fmtVal_(u.ultimo_acesso), portal: cliAcesso_(u) }))
     }); }),
     obras: obras.map(o => ({ id: String(o.id), nome: o.nome, ativa: sim_(o.ativa) })),
     modulos: CLI_MODULOS_, modelos: CLI_MODELOS_, tipos: CLI_TIPOS_, github: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'), app_url: cliUrl_('')
   };
+}
+/* CNPJ (14 dígitos, com os dígitos verificadores) ou CPF (11), guardado formatado; vazio é aceito */
+function cliCnpj_(v) {
+  const s = String(v || '').replace(/\D/g, '');
+  if (!s) return '';
+  const dv = (b, pesos) => { const r = b.split('').reduce((t, x, i) => t + Number(x) * pesos[i], 0) % 11; return r < 2 ? 0 : 11 - r; };
+  if (s.length === 14) {
+    const p1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], p2 = [6].concat(p1);
+    if (/^(\d)\1+$/.test(s) || dv(s.slice(0, 12), p1) !== +s[12] || dv(s.slice(0, 13), p2) !== +s[13]) throw new Error('CNPJ inválido: confira os números.');
+    return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  }
+  if (s.length === 11) {
+    const cpf = n => { const r = s.slice(0, n).split('').reduce((t, x, i) => t + Number(x) * (n + 1 - i), 0) * 10 % 11; return r === 10 ? 0 : r; };
+    if (/^(\d)\1+$/.test(s) || cpf(9) !== +s[9] || cpf(10) !== +s[10]) throw new Error('CPF inválido: confira os números.');
+    return s.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  }
+  throw new Error('CNPJ deve ter 14 números (ou CPF, 11).');
 }
 function cliUrl_(slug) { return String(config_().APP_URL || APP_URL_PADRAO).replace(/\/?$/, '/') + (slug ? 'c/' + slug + '/' : ''); }
 function cliSalvar_(q, ctx) {
@@ -348,6 +380,11 @@ function cliSalvar_(q, ctx) {
   const antes = novo ? [] : cliEmps_(c);
   novosE.forEach(e => { const a = antes.find(x => x.obra === e.obra) || {}; e.foto = a.foto || ''; e.desde = a.desde || ''; e.orcamento = a.orcamento || ''; });
   c.nome = nome; c.empresa = String(d.empresa || '').trim(); c.cor = cor.toUpperCase();
+  // dados cadastrais: preenchem o orçamento quando ele é ligado a este cliente
+  c.cnpj = cliCnpj_(d.cnpj);
+  ['razao_social', 'cidade', 'contato', 'cargo', 'email', 'telefone'].forEach(k => { c[k] = String(d[k] || '').trim().slice(0, 150); });
+  c.obs = String(d.obs || '').trim().slice(0, 1000);
+  if (c.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email)) throw new Error('E-mail do contato inválido.');
   c.emps_json = JSON.stringify(novosE);
   // colunas antigas = primeiro empreendimento (leitura de quem ainda usa uma obra só)
   c.obra_id = novosE.length ? novosE[0].obra : ''; c.modelo = novosE.length ? novosE[0].modelo : ''; c.modulos = novosE.length ? novosE[0].modulos.join(',') : '';
@@ -628,6 +665,10 @@ function propPortal_(q, ctx) {
   const T = central_('Propostas'), p = propAchar_(q.id);
   if (q.cliente_id && !central_('Clientes').all().some(c => String(c.id) === String(q.cliente_id))) throw new Error('Cliente não encontrado.');
   p.cliente_id = q.cliente_id ? String(q.cliente_id) : '';
+  // ligou ao cliente: o que estiver vazio no orçamento vem do cadastro dele (CNPJ, contato, telefone, e-mail, cidade)
+  const cc = p.cliente_id ? central_('Clientes').all().find(c => String(c.id) === p.cliente_id) : null;
+  if (cc) [['cliente', cc.razao_social || cc.nome], ['cliente_doc', cc.cnpj], ['contato', cc.contato], ['telefone', cc.telefone], ['email', cc.email], ['local', cc.cidade]]
+    .forEach(([k, v]) => { if (!String(p[k] || '').trim() && v) p[k] = v; });
   p.portal_modo = q.modo === 'fechado' ? 'fechado' : 'aberto';
   // o que a Size vai fazer quando virar obra (define o que o cliente acompanha: Gerenciamento com financeiro, Execução sem)
   if (q.tipo !== undefined) p.portal_tipo = CLI_MODELOS_[q.tipo] ? q.tipo : '';

@@ -598,7 +598,7 @@ function ppGerarObra(d) {
 function ppIncluirObra(d) {
   const p = d.proposta, obras = (S.sess.obras || []).filter(o => o.ativa);
   if (!obras.length) return toast('Nenhuma obra ativa para incluir.', 1);
-  modal(`${ic('plus')} Incluir ${esc(p.rotulo)} em obra existente`, `<p><small>Para <b>aditivo</b> ou <b>novo contrato</b> na mesma obra. Cada etapa deste orçamento vira uma <b>frente geral nova</b> (ex: "Pavimentação · Aditivo 1") com os serviços, materiais e datas; o valor e o prazo a mais ficam em Orçamento da obra → Contratos e aditivos.</small></p>
+  modal(`${ic('plus')} Incluir ${esc(p.rotulo)} em obra existente`, `<p><small>Para <b>aditivo</b> ou <b>novo contrato</b> na mesma obra. Cada etapa deste orçamento vira uma <b>frente geral nova</b> (ex: "Pavimentação · Aditivo 1") com os serviços, materiais e datas; o valor e o prazo a mais ficam em Orçamento da obra → Contratos e documentos.</small></p>
     <label>Obra<select name="obra" required>${obras.map(o => `<option value="${esc(o.id)}">${esc(o.nome)}</option>`).join('')}</select></label>
     <div class="g2"><label>Tipo<select name="tipo"><option>Aditivo</option><option>Novo contrato</option></select></label>
       <label>Número ou nome <small>(vazio = automático)</small><input name="numero" placeholder="ex: Aditivo 01"></label></div>

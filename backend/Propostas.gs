@@ -342,7 +342,7 @@ function propIncluirObra_(q, ctx) {
   const tipo = q.tipo === 'Novo contrato' ? 'Novo contrato' : 'Aditivo';
   const octx = { u: ctx.u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
   const C = obraTab_(octx, 'ContratosCliente'), n = C.all().filter(x => x.tipo === tipo).length + 1;
-  const rotulo = String(q.numero || '').trim() || (tipo === 'Aditivo' ? 'Aditivo ' + n : 'Contrato ' + (C.all().filter(x => x.tipo !== 'Aditivo').length + 1));
+  const rotulo = String(q.numero || '').trim() || (tipo === 'Aditivo' ? 'Aditivo ' + n : 'Contrato ' + (C.all().filter(x => x.tipo === 'Contrato' || x.tipo === 'Novo contrato').length + 1));
   const cc = ccCriar_(octx, { tipo: tipo, numero: rotulo, data: ymd_(q.data) || hojeYmd_(), descricao: String(q.descricao || '').trim() || (p.empreendimento || propRotulo_(p)),
     valor: calc.total.preco, dias_uteis: Math.max(0, parseInt(q.dias_uteis, 10) || 0), proposta_id: p.id, proposta: propRotulo_(p), arquivo_id: p.contrato_id || (propAceite_(p) || {}).arquivo_id || '', arquivo_nome: p.contrato_nome || '' });
   const Fr = obraTab_(octx, 'Frentes');

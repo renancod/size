@@ -18,9 +18,14 @@ async function vClientes() {
       <div class="g2"><label>Chave (token)<input name="chave" type="password" autocomplete="off" required></label><label>Repositório<input name="repo" value="renancod/size" required></label></div>
       <button class="btn">Guardar chave</button></form>`}
     <div class="cl-lista">${A.clientes.map(c => `<a class="card cl-item" href="#/admin/cliente/${enc(c.id)}" style="text-decoration:none;color:inherit">
-      <span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>
-      <span><b>${esc(c.nome)}</b> <span class="pc-chip ${c.estagio === 'Obra' ? 'ok' : c.estagio === 'Inativo' ? 'err' : 'warn'}">${esc(c.estagio)}</span><br><small>${c.empreendimentos.length ? c.empreendimentos.map(e => esc(e.nome) + ' (' + esc(A.tipos[e.modelo]) + ')').join(', ') : 'sem obra'} · ${c.orcamentos.length} ${c.orcamentos.length === 1 ? 'orçamento' : 'orçamentos'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
+      ${c.logo_url ? `<span class="cl-cor cl-logo" style="border-color:${esc(c.cor)}"><img src="${esc(c.logo_url)}" alt="" loading="lazy" data-cor="${esc(c.cor)}"></span>` : `<span class="cl-cor" style="background:${esc(c.cor)}">${ic('building')}</span>`}
+      <span><b>${esc(c.nome)}</b> <span class="pc-chip ${c.estagio === 'Obra' ? 'ok' : c.estagio === 'Inativo' ? 'err' : 'warn'}">${esc(c.estagio)}</span>
+        ${c.razao_social || c.cnpj ? `<br><small>${esc([c.razao_social, c.cnpj].filter(Boolean).join(' · '))}</small>` : ''}
+        ${c.contato || c.telefone || c.email ? `<br><small>${ic('user')} ${esc([c.contato + (c.cargo ? ' (' + c.cargo + ')' : ''), c.telefone, c.email].filter(x => x && x.trim()).join(' · '))}</small>` : ''}
+        <br><small>${c.empreendimentos.length ? c.empreendimentos.map(e => esc(e.nome) + ' (' + esc(A.tipos[e.modelo]) + ')').join(', ') : 'sem obra'} · ${c.orc_total} ${c.orc_total === 1 ? 'orçamento' : 'orçamentos'} · ${c.usuarios.length} ${c.usuarios.length === 1 ? 'acesso' : 'acessos'}${c.url ? ' · publicado' : ' · endereço não publicado'}</small></span>
       ${ic('chevron')}</a>`).join('') || '<div class="card vazio"><p>Nenhum cliente ainda.</p></div>'}</div>`);
+  // logo que não carregou (endereço ainda subindo): volta ao quadrado na cor do cliente
+  $$('.cl-logo img').forEach(im => { im.onerror = () => { const s = im.parentNode; s.className = 'cl-cor'; s.style.background = im.dataset.cor; s.innerHTML = ic('building'); }; });
   if ($('#clGh')) $('#clGh').onsubmit = async e => {
     e.preventDefault();
     // "chave", nunca "token": token é o login do app na chamada (sobrescrever derrubava a sessão)
@@ -38,8 +43,15 @@ async function vCliente(id) {
   view(`<a class="linkbtn" href="#/admin/clientes">${ic('back')} Clientes</a>
     <form class="card grid" id="clF"><h3>Cliente</h3>
       <div class="g2"><label>Nome do app <small>(nome do cliente)</small><input name="nome" required maxlength="40" value="${esc(c.nome)}" placeholder="Mar Azul Incorporadora"></label>
-      <label>Empresa <small>(razão social ou contato)</small><input name="empresa" value="${esc(c.empresa)}" placeholder="Construtora Mar Azul"></label></div>
+      <label>Empresa <small>(nome fantasia; aparece embaixo do nome no app)</small><input name="empresa" value="${esc(c.empresa)}" placeholder="Construtora Mar Azul"></label></div>
       <label>Endereço <small>(${esc(A.app_url)}c/…)</small><input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,39}" value="${esc(c.slug)}" placeholder="mar-azul"></label>
+      <h3 style="margin:6px 0 0">${ic('file')} Dados cadastrais <small class="mute">(preenchem o orçamento quando ele é ligado a este cliente)</small></h3>
+      <div class="g2"><label>Razão social<input name="razao_social" value="${esc(c.razao_social || '')}" placeholder="Construtora Mar Azul Ltda"></label>
+        <label>CNPJ <small>(ou CPF)</small><input name="cnpj" inputmode="numeric" value="${esc(c.cnpj || '')}" placeholder="00.000.000/0000-00"></label></div>
+      <div class="g2"><label>Contato principal<input name="contato" value="${esc(c.contato || '')}" placeholder="ex: Eng. Paulo Lima"></label><label>Cargo<input name="cargo" value="${esc(c.cargo || '')}" placeholder="ex: diretor, engenheiro"></label></div>
+      <div class="g2"><label>E-mail<input name="email" type="email" value="${esc(c.email || '')}"></label><label>Telefone / WhatsApp<input name="telefone" type="tel" value="${esc(c.telefone || '')}" placeholder="(51) 99999-9999"></label></div>
+      <label>Cidade / UF<input name="cidade" value="${esc(c.cidade || '')}" placeholder="Xangri-lá/RS"></label>
+      <label>Observações <small>(internas: o cliente não vê)</small><textarea name="obs" rows="2">${esc(c.obs || '')}</textarea></label>
       <div class="bp-h" style="margin-top:6px"><h3 style="margin:0">${ic('building')} Empreendimentos</h3><button type="button" class="btn sec peq" id="clEmpN">${ic('plus')} Adicionar empreendimento</button></div>
       <small class="mute">As obras que a Size gerencia ou executa para este cliente. Sem nenhuma, ele está em negociação e só vê os orçamentos enviados.</small>
       <div id="clEmps" class="cl-emps"></div>
@@ -103,6 +115,9 @@ async function vCliente(id) {
   const f = $('#clF');
   f.nome.oninput = () => { $('#clTn').textContent = f.nome.value || 'Nome do cliente'; if (novo && !f.slug.dataset.mexeu) f.slug.value = clSlug(f.nome.value); };
   f.slug.oninput = () => { f.slug.dataset.mexeu = '1'; };
+  // máscara: 14 números = CNPJ, 11 = CPF
+  f.cnpj.onblur = () => { const s = f.cnpj.value.replace(/\D/g, '');
+    if (s.length === 14) f.cnpj.value = s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5'); else if (s.length === 11) f.cnpj.value = s.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4'); };
   $('#clImg').onchange = async e => {
     const arq = e.target.files[0];
     if (!arq) return;
@@ -120,7 +135,8 @@ async function vCliente(id) {
   if ($('#clCop')) $('#clCop').onclick = async () => { try { await navigator.clipboard.writeText(c.url); toast('Endereço copiado.'); } catch (e) { toast('Não consegui copiar.', 1); } };
   const salvar = async () => {
     if (E.emps.some(e => !e.obra)) throw new Error('Escolha a obra de cada empreendimento (ou retire a linha vazia).');
-    const r = await api('cli_salvar', { cliente: { id: novo ? '' : c.id, nome: f.nome.value, empresa: f.empresa.value, slug: f.slug.value.trim(), empreendimentos: E.emps.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos })), cor: pcCor(E.cor), ativo: E.ativo } });
+    const r = await api('cli_salvar', { cliente: { id: novo ? '' : c.id, nome: f.nome.value, empresa: f.empresa.value, slug: f.slug.value.trim(),
+      ...Object.fromEntries(['razao_social', 'cnpj', 'contato', 'cargo', 'email', 'telefone', 'cidade', 'obs'].map(k => [k, f[k].value])), empreendimentos: E.emps.map(e => ({ obra: e.obra, modelo: e.modelo, modulos: e.modulos })), cor: pcCor(E.cor), ativo: E.ativo } });
     CL.d = null;
     return r;
   };
@@ -177,9 +193,9 @@ function clVeResumo(c, P) {
 }
 /* login de uma pessoa do cliente: novo (com senha provisória) ou edição (nova senha opcional) e o que ela vê */
 const CL_PERFIS = {
-  tudo: ['Dono / diretoria', 'Todas as obras, orçamentos e todas as áreas', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'diario', 'fvs', 'financeiro'] }],
-  tecnico: ['Engenheiro / fiscal', 'Acompanha as obras (cronograma, diário e FVS), sem orçamentos e sem financeiro', { obras: 'todas', orcamentos: false, modulos: ['cronograma', 'diario', 'fvs'] }],
-  financeiro: ['Financeiro', 'Orçamentos e o financeiro das obras', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'financeiro'] }]
+  tudo: ['Dono / diretoria', 'Todas as obras, orçamentos e todas as áreas', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'diario', 'fvs', 'financeiro', 'documentos'] }],
+  tecnico: ['Engenheiro / fiscal', 'Acompanha as obras (cronograma, diário e FVS), sem orçamentos, financeiro e documentos', { obras: 'todas', orcamentos: false, modulos: ['cronograma', 'diario', 'fvs'] }],
+  financeiro: ['Financeiro', 'Orçamentos, o financeiro e os documentos das obras', { obras: 'todas', orcamentos: true, modulos: ['cronograma', 'financeiro', 'documentos'] }]
 };
 function clUsuario(c, u) {
   // acesso novo começa como Engenheiro / fiscal: orçamentos e financeiro só para quem o senhor liberar
