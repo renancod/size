@@ -376,7 +376,7 @@ test('migração da planilha antiga para Prime Beach', () => {
   const v = t.G.SpreadsheetApp.create('Pedidos Size');
   v.insertSheet('Como usar').getRange(1, 1, 2, 2).setValues([['Pedidos Size', ''], ['Pedidos', 'Preenchida pelo app']]);
   const pe = v.insertSheet('Pedidos'), fo = v.insertSheet('Fornecedores'), ma = v.insertSheet('Materiais'), li = v.insertSheet('Listas');
-  v.insertSheet('Acessos').getRange(1, 1, 4, 5).setValues([['Nome (login)', 'Senha', 'Perfil', 'Ativo', 'Último acesso'], ['RENAN', 789852123, 'Compras', 'Sim', ''], ['BARBARA', '123456', 'Compras', 'Sim', ''], ['jean', '12345', 'Solicitante', 'Sim', '']]);
+  v.insertSheet('Acessos').getRange(1, 1, 4, 5).setValues([['Nome (login)', 'Senha', 'Perfil', 'Ativo', 'Último acesso'], ['RENAN', 102030405, 'Compras', 'Sim', ''], ['BARBARA', '123456', 'Compras', 'Sim', ''], ['jean', '12345', 'Solicitante', 'Sim', '']]);
   v.insertSheet('Obras').getRange(1, 1, 3, 2).setValues([['Edificação / Centro de custo', 'Ativa'], ['Torre A', 'Sim'], ['INFRA', 'Sim']]);
   const cab = Array.from({ length: 25 }, (_, i) => 'c' + i);
   const linha = (num, st, extra = {}) => { const r = Array(25).fill(''); Object.assign(r, { 0: num, 2: 'Zé', 3: 'Torre A', 4: 'Fundação', 5: 'Cimento', 6: 50, 7: 'sc', 8: 'Normal', 11: st }, extra); return r; };
@@ -403,7 +403,7 @@ test('migração da planilha antiga para Prime Beach', () => {
   assert.equal(ps.find(p => p.numero === 'PED-0001').frente, 'Torre A');
   assert.equal(ps.find(p => p.numero === 'PED-0001').itens[0].descricao, 'Cimento');
   // usuários antigos entram com a mesma senha (número na planilha também) e precisam trocar
-  const r = t.call('login', { login: 'renan', senha: '789852123' });
+  const r = t.call('login', { login: 'renan', senha: '102030405' });
   assert.equal(r.usuario.trocar_senha, true);
   assert.deepEqual(r.obras.map(o => o.nome), ['Prime Beach']);
   assert.ok(r.obras[0].permissoes.includes('compras_definir'));
