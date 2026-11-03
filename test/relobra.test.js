@@ -12,7 +12,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const raiz = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const obra = raiz('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X', frentes: ['Rede de Esgoto', 'Rede de Água'] }).id;
+  const obra = raiz('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X', frentes: ['Rede de Esgoto', 'Rede de Água'] }).id;
   const adm = (acao, d = {}) => raiz(acao, { obra, ...d });
   const p = raiz('admin_dados').perfis.find(x => x.perfil === 'Engenheiro');
   raiz('admin_usuario_salvar', { usuario: { nome: 'eng', login: 'eng', ativo: true }, senha: 'Senha-Forte-26', acessos: [{ obra_id: obra, perfil: 'Engenheiro', permissoes: p.permissoes }] });
@@ -27,7 +27,7 @@ function preparar() {
   const it = (f, n) => d.frentes.find(x => x.codigo === f).itens[n];
   return { adm, eng, rede: it('FR01', 0), pv: it('FR01', 1), agua: it('FR02', 0) };
 }
-const etapa = (t, nome, orcItem, qtd, ini, fim) => t.eng('exec_etapa_salvar', { nome, local: nome, contrato_id: '-', itens: [{ orc_item: orcItem, servico: 'x', qtd_prevista: qtd, inicio: ini, termino: fim, fvs_modelo: 'FVS.03' }] });
+const etapa = (t, nome, orcItem, qtd, ini, fim) => t.eng('exec_etapa_salvar', { nome, local: nome, contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', itens: [{ orc_item: orcItem, servico: 'x', qtd_prevista: qtd, inicio: ini, termino: fim, fvs_modelo: 'FVS.03' }] });
 const itemDe = (t, cod) => t.eng('exec_dados').etapas.find(e => e.codigo === cod).itens[0];
 
 test('relatório de andamento: % igual ao painel, sem valores, curva S e prazos', () => {

@@ -16,8 +16,8 @@ const adm = (acao, d = {}) => call(acao, { token: tk, ...d });
 ['Cimento CP-II 50kg|sc|Estrutura', 'Areia média|m³|Agregados', 'Brita 1|m³|Agregados', 'Vergalhão CA-50 10mm|barra|Estrutura', 'Tijolo 6 furos|un|Alvenaria',
   'Cabo flexível 2,5mm|rolo|Elétrica', 'Tubo PVC 100mm|barra|Hidráulica', 'Argamassa AC-II|sc|Revestimentos', 'Tinta acrílica branca 18L|lata|Pintura']
   .forEach(l => { const [descricao, unidade, categoria] = l.split('|'); adm('admin_padrao_salvar', { descricao, unidade, categoria }); });
-const obra = adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar, 1000 — Capão da Canoa/RS' }).id;
-adm('admin_obra_criar', { nome: 'Residencial Jardins', sigla: 'RJ', endereco: 'Rua das Flores, 50' });
+const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar, 1000 — Capão da Canoa/RS' }).id;
+adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Residencial Jardins', sigla: 'RJ', endereco: 'Rua das Flores, 50' });
 adm('admin_config_salvar', { config: { REGRAS_ORCAMENTO: '5000:2; 20000:3' } });
 const perfis = adm('admin_dados').perfis;
 const usuario = (login, nome, perfil) => {
@@ -80,7 +80,7 @@ const e1 = eng('exec_etapa_salvar', { nome: 'Pavimentação · Rua A', local: 'R
   { servico: 'Base', qtd_prevista: 600, inicio: d(-12), termino: d(6), fvs_modelo: 'FVS.05' },
   { servico: 'Asfalto (CBUQ)', qtd_prevista: 600, inicio: d(-4), termino: d(12), fvs_modelo: '-' },
   { servico: 'Meio-fio', qtd_prevista: 300, inicio: d(-12), termino: d(4), fvs_modelo: 'FVS.18.1' }] }).codigo;
-const e2 = eng('exec_etapa_salvar', { nome: 'Drenagem pluvial · Rua B', local: 'Rua B', empreiteiro: eqDre, contrato_tipo: 'Sem contrato', itens: [
+const e2 = eng('exec_etapa_salvar', { nome: 'Drenagem pluvial · Rua B', local: 'Rua B', empreiteiro: eqDre, contrato_tipo: 'Sem contrato', sem_contrato_motivo: 'Equipe própria da Size (teste)', itens: [
   { servico: 'Tubulação de concreto DN 600', qtd_prevista: 200, inicio: d(-15), termino: d(2), fvs_modelo: 'FVS.03' },
   { servico: 'Poço de visita', qtd_prevista: 8, inicio: d(-15), termino: d(4), fvs_modelo: 'FVS.03' },
   { servico: 'Boca de lobo', qtd_prevista: 10, inicio: d(-6), termino: d(8), fvs_modelo: '-' }] }).codigo;
@@ -130,7 +130,7 @@ console.log('Execução: etapas', e1, e2, '· diários', eng('exec_dados').diari
   o('orc_material_salvar', { orc_item: pv.id, material_cod: tampao, coef: 1 });
   o('orc_material_salvar', { frente: esg, material_cod: anel, qtd: 420 });
   o('orc_material_salvar', { orc_item: o('orc_dados').frentes.find(f => f.codigo === agua).itens[0].id, material_cod: pead, coef: 1.03 });
-  const ex = eng('exec_etapa_salvar', { nome: 'Esgoto · Rua das Flores', local: 'Rua das Flores', frente: 'Rede de Esgoto', contrato_id: '-', itens: [
+  const ex = eng('exec_etapa_salvar', { nome: 'Esgoto · Rua das Flores', local: 'Rua das Flores', frente: 'Rede de Esgoto', contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', itens: [
     { orc_item: rede.id, qtd_prevista: 250, inicio: d(-6), termino: d(10), fvs_modelo: 'FVS.03' }, { orc_item: pv.id, qtd_prevista: 4, inicio: d(-6), termino: d(10), fvs_modelo: 'FVS.03' }] }).codigo;
   const ie = eng('exec_dados').etapas.find(e => e.codigo === ex).itens;
   [-3, -2, -1].forEach(n => { const w = new Date(d(n) + 'T12:00').getDay(); if (w > 0 && w < 6) eng('exec_diario_salvar', { data: d(n), motivo: 'dados de exemplo', lancamentos: [{ item_id: ie[0].id, qtd: 30 }, { item_id: ie[1].id, qtd: n === -1 ? 1 : 0 }] }); });
@@ -211,6 +211,9 @@ console.log(G.rodar('criarObraAvaResidence()'));
   tania.f('topo_lancar', { demanda: b, data: d(-1), qtd: 160, terminou: true, fotos: F, croquis: [IMG(240, 240, 235)], arquivo_usado: 'Levantamento_Dunas_Q1-3.txt (estação)' });
   nova({ tipo: 'Locação', servico: 'Lotes', local: 'Quadra 7', unidade: 'un', qtd_prevista: 24, topografo_id: tania.id, data: d(2) });
   tiago.f('topo_data', { id: nova({ tipo: 'Nivelamento', servico: 'Rua / pavimento', local: 'Rua 15', qtd_prevista: 400, topografo_id: tiago.id, data: d(2) }), data: d(4), motivo: 'Frente não liberada pela terraplenagem' });
+  // localização enviada pelo celular ao abrir o app (Tiago andou entre duas ruas, Tânia num ponto só)
+  [[-29.7458, -50.0089], [-29.7489, -50.0121], [-29.7512, -50.0154]].forEach(([lat, lng]) => tiago.f('topo_local', { lat, lng, precisao: 9 }));
+  tania.f('topo_local', { lat: -29.6402, lng: -49.9921, precisao: 14 });
   console.log('Topografia: login topo / Obra#Teste26 (Tiago) · topo2 (Tânia) · admin gere');
 }
 

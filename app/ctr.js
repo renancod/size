@@ -368,7 +368,8 @@ async function vCtrDet(id) {
       ${d.frentes.map(f => `<a class="ct-fr" href="#/exec/etapa/${esc(f.codigo)}"><span><b>${esc(f.nome)}</b><small>${esc(f.local || '')} · ${plural(f.servicos, 'serviço', 'serviços')}</small></span><b>${pct(f.pct)}</b></a>`).join('') || '<small>Nenhuma frente aberta com este contrato ainda.</small>'}
       ${d.status === 'Vigente' && can('exec_planejar') ? `<div class="acoes" style="margin-top:8px"><button class="btn" id="ctFrente">${ic('plus')} Abrir frente de trabalho deste contrato</button></div>` : ''}</div>
     <div class="card"><h3>Aditivos</h3>
-      ${d.aditivos.map(a => `<div class="alt"><b>Aditivo nº ${a.numero}</b> · ${esc(a.tipo)} · ${fd(a.data)}${a.valor ? ' · <b>' + ctM(a.valor) + '</b>' : ''}${a.nova_vigencia ? ' · nova vigência até ' + fd(a.nova_vigencia) : ''}<br><small>${esc(a.descricao)} — ${esc(a.criado_por)}</small></div>`).join('') || '<small>Nenhum aditivo registrado.</small>'}
+      ${d.aditivos.map(a => `<div class="alt"><b>Aditivo nº ${a.numero}</b> · ${esc(a.tipo)} · ${fd(a.data)}${a.valor ? ' · <b>' + ctM(a.valor) + '</b>' : ''}${a.nova_vigencia ? ' · nova vigência até ' + fd(a.nova_vigencia) : ''}<br><small>${esc(a.descricao)} — ${esc(a.criado_por)}</small>
+        ${a.arquivo ? ` <button type="button" class="linkbtn" data-adver="${esc(a.id)}">${ic('download')} ${esc(a.arquivo_nome || 'aditivo assinado')}</button>` : ' <small class="atrasado">sem documento assinado</small>'}</div>`).join('') || '<small>Nenhum aditivo registrado.</small>'}
       ${d.status === 'Vigente' && d.pode_gerir ? `<div class="acoes" style="margin-top:8px"><button class="btn sec" id="ctAditivo">${ic('plus')} Registrar aditivo</button></div>` : ''}</div>
     <div class="card" id="ctRt"></div>
     <div class="card" id="ctAcao"></div>`);
@@ -437,11 +438,12 @@ function ctAcoes(d) {
       ${ger ? `<button class="btn sec" id="ctAnexo">${ic('send')} ${d.tem_pdf ? 'Trocar o contrato assinado' : 'Anexar contrato assinado'}</button>` : ''}
       ${d.pasta_url ? `<a class="btn sec" href="${esc(d.pasta_url)}" target="_blank" rel="noopener">${ic('pasta')} Abrir pasta no Drive</a>` : ''}
       ${d.editavel ? `<a class="btn sec" href="#/ctr/editar/${esc(d.id)}">${ic('edit')} Editar contrato e planilha</a>` : ''}
-      ${ger && d.status === 'Rascunho' ? `<button class="btn ${bloq ? 'sec' : ''}" id="ctAtivar">${ic('check')} Ativar contrato${bloq ? ' (bloqueado)' : ''}</button><button class="btn perigo" id="ctCancelar">Cancelar rascunho</button>` : ''}
+      ${ger && d.status === 'Rascunho' ? `<button class="btn ${bloq || !d.tem_pdf ? 'sec' : ''}" id="ctAtivar">${ic('check')} Ativar contrato${bloq ? ' (bloqueado)' : !d.tem_pdf ? ' (falta o assinado)' : ''}</button><button class="btn perigo" id="ctCancelar">Cancelar rascunho</button>` : ''}
       ${ger && d.status === 'Vigente' ? `<button class="btn sec" id="ctEncerrar">Encerrar contrato</button><button class="btn perigo" id="ctRescindir">Rescindir</button>` : ''}
       ${ger && ['Encerrado', 'Rescindido', 'Cancelado'].includes(d.status) ? `<button class="btn sec" id="ctReabrir">Reabrir</button>` : ''}
     </div>
     <small>${d.minuta_em ? `Minuta guardada no Drive em ${esc(fdh(d.minuta_em))}.` : 'A minuta é guardada no Drive (pasta Contratos) ao ativar o contrato e a cada vez que for baixada.'}</small>
+    ${d.status === 'Rascunho' ? `<div class="aviso ${d.tem_pdf ? 'ok' : 'warn'}">${d.tem_pdf ? ic('check') + ' Contrato assinado anexado: pode ativar.' : ic('alert') + ' Caminho: baixe a minuta → colha as assinaturas → <b>anexe o contrato assinado</b> → ative. Só o contrato assinado libera as frentes de trabalho.'}</div>` : ''}
     ${d.status === 'Vigente' ? '<small>Contrato vigente: pode ser escolhido nas frentes de trabalho do empreiteiro. Alterações exigem motivo e ficam no histórico.</small>' : ''}
     <details class="fv-hist"><summary>Histórico (${hist.length})</summary>${hist.map(h => `<div class="alt"><b>${esc(h.acao)}</b>${h.nota ? ': ' + esc(h.nota) : ''}<br><small>${esc(h.por)} · ${esc(fdh(h.q))}</small></div>`).join('')}</details>`;
   const lig = (id, fn) => { const b = $('#' + id); if (b) b.onclick = async e => { const bt = e.currentTarget, t = bt.innerHTML; bt.disabled = true; try { await fn(); } catch (x) { toast(x.message, 1); } if (document.body.contains(bt)) { bt.disabled = false; bt.innerHTML = t; } }; };
@@ -460,6 +462,7 @@ function ctAcoes(d) {
   }));
   lig('ctAtivar', async () => {
     if (bloq) throw new Error(motivoBloq);
+    if (!d.tem_pdf) throw new Error('Anexe o contrato assinado antes de ativar (botão "Anexar contrato assinado").');
     if (!confirm('Ativar este contrato? Ele passa a aparecer ao abrir frentes de trabalho do empreiteiro, e a minuta é guardada no Drive.')) return;
     toast((await api('contrato_status', { id: d.id, op: 'ativar' })).msg);
     try { const n = await api('contrato_detalhe', { id: d.id }); await ctGuardaMinuta(n, await ctMinutaPdf(n)); toast('Minuta guardada no Drive (pasta Contratos).'); }
@@ -476,9 +479,11 @@ function ctAcoes(d) {
       <label>O que muda<textarea name="descricao" required minlength="5" rows="3" placeholder="ex: mais 20 registros e 300 m de rede na Rua B"></textarea></label>
       <div class="g2"><label>Valor do aditivo (R$) <small>(use − para redução)</small><input name="valor" inputmode="decimal" placeholder="0,00"></label><label>Data<input type="date" name="data" value="${hoje()}"></label></div>
       <label>Nova data de fim da vigência <small>(se mudar)</small><input type="date" name="nv"></label>
-      <small>O valor soma ao contrato. Para mudar quantidades ou preços da planilha, use <b>Editar contrato</b> informando o aditivo no motivo.</small>`, {
-    ok: 'Registrar', onOk: async f => { toast((await api('contrato_aditivo', { id: d.id, tipo: f.tipo.value, descricao: f.descricao.value, valor: ctPn(f.valor.value), data: f.data.value, nova_vigencia: f.nv.value })).msg); await vCtrDet(d.id); }
+      ${campoArquivo('arq', 'Aditivo assinado (PDF ou foto)', true)}
+      <small>Sem o aditivo assinado ele não vale. O valor soma ao contrato. Para mudar quantidades ou preços da planilha, use <b>Editar contrato</b> informando o aditivo no motivo.</small>`, {
+    ok: 'Registrar', onOk: async f => { const arquivo = await lerArquivo(f.arq); toast((await api('contrato_aditivo', { id: d.id, tipo: f.tipo.value, descricao: f.descricao.value, valor: ctPn(f.valor.value), data: f.data.value, nova_vigencia: f.nv.value, arquivo })).msg); await vCtrDet(d.id); }
   });
+  $$('[data-adver]').forEach(b => { b.onclick = async () => { try { const r = await api('contrato_anexo_ver', { id: d.id, aditivo: b.dataset.adver }); baixarBlob(new Blob([Uint8Array.from(atob(r.b64), c => c.charCodeAt(0))], { type: r.mime }), r.nome); } catch (x) { toast(x.message, 1); } }; });
 }
 
 /* ---------- rotas ---------- */

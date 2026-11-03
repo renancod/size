@@ -17,7 +17,7 @@ function preparar() {
   const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const tk = call('login', { login: 'admin', senha }).token, adm = (acao, d = {}) => call(acao, { token: tk, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
   const pessoa = (login, nome, topografia) => {
     const id = adm('admin_usuario_salvar', { usuario: { nome, login, ativo: true, topografia }, senha: 'Obra#Teste26', acessos: [] }).id;
     const t = call('login', { login, senha: 'Obra#Teste26' }).token;
@@ -154,6 +154,21 @@ test('lembrete da véspera, diários separados do RDO e produção do mês', () 
   assert.equal(t.t1.f('topo_producao', { mes }).topografos.length, 1);
   // o RDO da obra não recebe nada da topografia
   assert.equal(t.adm('exec_dados', { obra: t.obra }).diarios.length, 0);
+});
+
+test('localização: o celular do topógrafo manda ao abrir; quem gere vê o último ponto e o caminho do dia', () => {
+  const t = preparar();
+  assert.throws(() => t.t1.f('topo_local', { lat: 0, lng: 0 }), /inválida/);
+  t.t1.f('topo_local', { lat: -29.75, lng: -50.01, precisao: 30 });
+  t.t1.f('topo_local', { lat: -29.7502, lng: -50.0101, precisao: 12 });     // ~25 m: mesmo lugar, só renova o horário
+  t.t1.f('topo_local', { lat: -29.76, lng: -50.02, precisao: 8 });          // andou ~1,4 km: ponto novo
+  assert.equal(t.eng.f('topo_local', { lat: -29.7, lng: -50 }).ignorado, true);   // quem gere não é rastreado
+  const L = t.eng.f('topo_dados').locais;
+  assert.equal(L.length, 1);
+  assert.equal(L[0].nome, 'Tiago Topógrafo'); assert.equal(L[0].lat, -29.76); assert.equal(L[0].hoje.length, 2);
+  assert.equal(L[0].hoje[0][0], -29.7502);                                    // o ponto parado guardou a leitura mais precisa
+  assert.deepEqual(t.t1.f('topo_dados').locais, []);                          // o topógrafo não vê a equipe
+  assert.throws(() => t.semAcesso.f('topo_local', { lat: -29.7, lng: -50 }), /não tem acesso à Topografia/);
 });
 
 test('cancelar e reabrir (quem gere)', () => {

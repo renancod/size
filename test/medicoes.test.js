@@ -14,7 +14,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const adm = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const todas = adm('admin_dados').perfis.find(p => p.perfil === 'Engenheiro').permissoes;
   const usuario = (nome, perfil, extras = []) => {
     const p = adm('admin_dados').perfis.find(x => x.perfil === perfil);
@@ -65,7 +65,7 @@ test('empreiteiro com dados da empresa, empreiteiro e contrato na frente de trab
   assert.equal(et.empreiteiro, emp); assert.equal(et.contrato_tipo, 'Com contrato'); assert.equal(et.contrato_numero, '015/2026');
   assert.throws(() => t.eng('exec_equipe_salvar', { nome: 'Outra', email: 'sem-arroba' }), /E-mail/);
   assert.throws(() => t.eng('exec_etapa_salvar', { codigo: cod, nome: 'Pluvial · Rua A', contrato_tipo: 'Com contrato', contrato_numero: '' }), /número do contrato/);
-  t.eng('exec_etapa_salvar', { codigo: cod, nome: 'Pluvial · Rua A', contrato_tipo: 'Sem contrato' });
+  t.eng('exec_etapa_salvar', { codigo: cod, nome: 'Pluvial · Rua A', contrato_tipo: 'Sem contrato', sem_contrato_motivo: 'Equipe própria da Size (teste)' });
   assert.equal(t.eng('exec_dados').etapas.find(x => x.codigo === cod).contrato_numero, '');
 });
 
@@ -90,7 +90,7 @@ test('só serviço concluído e com FVS aprovada entra; o resto aparece como pen
   assert.equal(vazio.elegiveis.length + vazio.pendentes.length, 0);
   assert.throws(() => t.lanc('medicao_prever', { empreiteiro: emp, de: dia(0), ate: dia(-3) }), /antes/);
   // sem FVS nenhuma: também fica pendente
-  const e2 = t.eng('exec_etapa_salvar', { nome: 'Sem ficha', empreiteiro: emp, itens: [{ servico: 'Meio-fio', qtd_prevista: 20, inicio: dia(-9), termino: dia(5), fvs_modelo: '-' }] });
+  const e2 = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Sem ficha', empreiteiro: emp, itens: [{ servico: 'Meio-fio', qtd_prevista: 20, inicio: dia(-9), termino: dia(5), fvs_modelo: '-' }] });
   const mf = t.eng('exec_dados').etapas.find(x => x.codigo === e2.codigo).itens[0];
   lancar(t, mf, dia(-3), 20);
   assert.match(t.lanc('medicao_prever', { empreiteiro: emp, de: dia(-6), ate: dia(0) }).pendentes.find(x => x.servico === 'Meio-fio').motivo, /sem FVS/);
@@ -99,7 +99,7 @@ test('só serviço concluído e com FVS aprovada entra; o resto aparece como pen
 test('verba (VB) em %: 10% + 20% = 30%; mede em parcelas por período, sem FVS; aviso passa de 100%', () => {
   const t = preparar();
   const emp = t.eng('exec_equipe_salvar', { nome: 'Equipe Topo', pessoas: 2 }).codigo;
-  const r = t.eng('exec_etapa_salvar', { nome: 'Acompanhamento', empreiteiro: emp, itens: [{ servico: 'Acompanhamento técnico', unidade: 'VB', qtd_prevista: 1, inicio: dia(-30), termino: dia(30), fvs_modelo: '-' }] });
+  const r = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Acompanhamento', empreiteiro: emp, itens: [{ servico: 'Acompanhamento técnico', unidade: 'VB', qtd_prevista: 1, inicio: dia(-30), termino: dia(30), fvs_modelo: '-' }] });
   const vb = t.eng('exec_dados').etapas.find(x => x.codigo === r.codigo).itens[0];
   lancar(t, vb, dia(-12), 0.1);
   lancar(t, vb, dia(-4), 0.2);
@@ -175,7 +175,7 @@ test('complemento: serviço medido que recebe mais lançamento entra de novo só
   assert.equal(t.apr('medicao_detalhe', { id: m2 }).itens[0].complemento, true);
   // outro empreiteiro começa de novo na 001
   const e2 = t.eng('exec_equipe_salvar', { nome: 'Outra empresa', empresa: 'Outra Ltda' }).codigo;
-  const r2 = t.eng('exec_etapa_salvar', { nome: 'Esgoto', empreiteiro: e2, itens: [{ servico: 'Poço de visita de esgoto', qtd_prevista: 4, inicio: dia(-9), termino: dia(5), fvs_modelo: 'FVS.04' }] });
+  const r2 = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Esgoto', empreiteiro: e2, itens: [{ servico: 'Poço de visita de esgoto', qtd_prevista: 4, inicio: dia(-9), termino: dia(5), fvs_modelo: 'FVS.04' }] });
   const it = t.eng('exec_dados').etapas.find(x => x.codigo === r2.codigo).itens[0];
   lancar(t, it, dia(-1), 4); aprovarFvs(t, it.id);
   const m3 = t.lanc('medicao_criar', { empreiteiro: e2, de: dia(-1), ate: dia(0) }).id;
@@ -210,7 +210,7 @@ test('devolver, cancelar libera os serviços, pagar e proteções', () => {
   assert.throws(() => t.apr('medicao_cancelar', { id, motivo: 'engano total' }), /não pode ser alterada/);   // paga não cancela
   // outra medição: cancelar devolve os serviços
   const e2 = t.eng('exec_equipe_salvar', { nome: 'Equipe B' }).codigo;
-  const r2 = t.eng('exec_etapa_salvar', { nome: 'Frente B', empreiteiro: e2, itens: [{ servico: 'Poço de visita', qtd_prevista: 4, inicio: dia(-9), termino: dia(5), fvs_modelo: 'FVS.03' }] });
+  const r2 = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Frente B', empreiteiro: e2, itens: [{ servico: 'Poço de visita', qtd_prevista: 4, inicio: dia(-9), termino: dia(5), fvs_modelo: 'FVS.03' }] });
   const it = t.eng('exec_dados').etapas.find(x => x.codigo === r2.codigo).itens[0];
   lancar(t, it, dia(-2), 4); aprovarFvs(t, it.id);
   const m2 = t.lanc('medicao_criar', { empreiteiro: e2, de: dia(-3), ate: dia(0) }).id;

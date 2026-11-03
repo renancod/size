@@ -73,6 +73,7 @@ test('orçamento: item do SINAPI no regime escolhido, custo congelado e "atualiz
   assert.deepEqual([d.itens[1].unit_mat, d.itens[1].unit_mo, d.itens[2].unit_mat], [220, 100, 110]);   // agosto, sem desoneração
   // vira obra: o serviço entra com a anotação do SINAPI
   t.adm('prop_status', { id, op: 'aprovar' });
+  t.adm('prop_contrato', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   const obra = t.adm('prop_gerar_obra', { id, sigla: 'DU' }).obra_id;
   assert.match(t.adm('orc_dados', { obra }).frentes.find(f => f.nome === 'Fundação').itens[0].obs, /^SINAPI 94962/);
 });

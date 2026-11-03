@@ -73,8 +73,8 @@ test('sessão nova vale 14 dias', () => {
 
 test('backup: copia central e obras para a pasta Backups, não duplica no mesmo dia, guarda só os últimos dias e só admin faz', () => {
   const t = preparar();
-  t.adm('admin_obra_criar', { nome: 'Obra A', sigla: 'OA', endereco: 'x' });
-  t.adm('admin_obra_criar', { nome: 'Obra B', sigla: 'OB', endereco: 'y' });
+  t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra A', sigla: 'OA', endereco: 'x' });
+  t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra B', sigla: 'OB', endereco: 'y' });
   const r = t.adm('admin_backup');
   assert.equal(r.backup.feitos, 3);                                              // central + 2 obras
   assert.equal(r.backup.total, 3);
@@ -98,7 +98,7 @@ test('backup: copia central e obras para a pasta Backups, não duplica no mesmo 
 });
 test('memória do login: segunda chamada não relê usuários e acessos; desativar ou tirar o acesso vale na hora', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
   const ac = [{ obra_id: obra, perfil: 'Estoque', permissoes: ['estoque_ver'] }];
   t.adm('admin_usuario_salvar', { usuario: { nome: 'Joca', login: 'joca', ativo: true }, senha: 'Obra#Teste26', acessos: ac });
   const tk = t.call('login', { login: 'joca', senha: 'Obra#Teste26' }).token;

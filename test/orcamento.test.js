@@ -14,7 +14,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const raiz = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const criada = raiz('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X', frentes: ['Rede de Esgoto', 'Rede de Água', ' rede de esgoto '] });
+  const criada = raiz('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X', frentes: ['Rede de Esgoto', 'Rede de Água', ' rede de esgoto '] });
   const obra = criada.id;
   const adm = (acao, d = {}) => raiz(acao, { obra, ...d });
   const usuario = (nome, perfil, extras = []) => {
@@ -41,7 +41,7 @@ function orcar(t) {
   return { fr, rede, pv, tubo, anel };
 }
 function etapa(t, nome, orcItem, qtd, extra = {}) {
-  return t.eng('exec_etapa_salvar', Object.assign({ nome, local: nome, contrato_id: '-', itens: [{ orc_item: orcItem, servico: 'qualquer', qtd_prevista: qtd, inicio: dia(-5), termino: dia(20), fvs_modelo: 'FVS.03' }] }, extra));
+  return t.eng('exec_etapa_salvar', Object.assign({ nome, local: nome, contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', itens: [{ orc_item: orcItem, servico: 'qualquer', qtd_prevista: qtd, inicio: dia(-5), termino: dia(20), fvs_modelo: 'FVS.03' }] }, extra));
 }
 /* compra aprovada, liberada e (parcialmente) recebida */
 function comprar(t, frenteNome, itens, receber, frenteRec) {
@@ -168,6 +168,7 @@ test('contrato puxa o valor de mão de obra do orçamento e a frente do contrato
   ] });
   const { rt_id } = t.ctr('contrato_rt_salvar', { id, tipo: 'ART', descricao: 'Rede de esgoto', numero: '123' });
   t.ctr('contrato_rt_arquivo', { id, rt_id, arquivo: PDF });
+  t.ctr('contrato_anexo', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   t.ctr('contrato_status', { id, op: 'ativar' });
   const det = t.ctr('contrato_detalhe', { id });
   assert.equal(det.itens[0].orc_unit_mo, 18);
@@ -210,7 +211,7 @@ test('trocar o nome da frente geral acompanha pedidos, estoque e frentes de exec
 test('obra desativada: sem atraso, sem alerta e sem pendência de material (o histórico continua)', () => {
   const t = preparar();
   const { rede } = orcar(t);
-  t.eng('exec_etapa_salvar', { nome: 'Atrasada', local: 'Rua X', contrato_id: '-', itens: [{ orc_item: rede.id, qtd_prevista: 100, inicio: dia(-30), termino: dia(-10), fvs_modelo: 'FVS.03' }] });
+  t.eng('exec_etapa_salvar', { nome: 'Atrasada', local: 'Rua X', contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', itens: [{ orc_item: rede.id, qtd_prevista: 100, inicio: dia(-30), termino: dia(-10), fvs_modelo: 'FVS.03' }] });
   assert.equal(t.adm('exec_dados').etapas[0].situacao, 'atrasado');
   assert.ok(t.adm('exec_dados').alertas.length);
   assert.ok(t.adm('orc_dados').alertas.length);

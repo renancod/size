@@ -616,6 +616,8 @@ async function iniciar() {
   if (typeof iniciarExec === 'function') iniciarExec();
   // contador do menu da Topografia (demandas de hoje / atrasadas)
   if (typeof topoNivel === 'function' && topoNivel() && !/^#\/topo/.test(location.hash)) setTimeout(() => topoCarregar().catch(() => {}), 3000);
+  // topógrafo (celular da empresa): manda a localização ao abrir o app
+  if (typeof topoLocalIniciar === 'function') setTimeout(topoLocalIniciar, 1500);
 }
 async function boot() {
   const qs = new URLSearchParams(location.search);
@@ -1660,12 +1662,14 @@ async function vObras() {
     <label>Endereço (vai nos e-mails aos fornecedores)<input name="endereco"></label>
     <label>E-mail do financeiro desta obra <small>(opcional — recebe os avisos de pagamento)</small><input name="email_financeiro" placeholder="financeiro@…"></label>
     <h3 style="margin:8px 0 0">Localização <small>(busque o endereço ou toque no mapa)</small></h3>${mapaLocalHtml('', '')}
+    <label>Contrato assinado com o cliente <small>(PDF · pode anexar depois em Orçamento da obra → Contratos; sem ele o diário de obra não abre)</small><input type="file" name="contrato" accept="application/pdf,image/*"></label>
     <label>Frentes gerais da obra <small>(uma por linha · ex: Rede de Esgoto, Rede de Água, Pavimentação)</small><textarea name="frentes" rows="5" placeholder="Rede de Esgoto&#10;Rede de Água&#10;Drenagem pluvial&#10;Pavimentação">${esc((A.frentes_padrao || []).join('\n'))}</textarea></label>
     <small>Depois de criar, você monta o orçamento de cada frente (o que executar, valores de material e mão de obra) em <b>Orçamento da obra</b>.</small>
     <div class="aviso info">Cria a planilha da obra (pedidos, fornecedores, materiais, estoque, frentes) já com os ${A.padrao.length} materiais padrão e as frentes gerais acima. Leva uns segundos.</div>`, {
     ok: 'Criar obra', larga: true,
     onOk: async f => {
-      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, lat: f.lat.value, lng: f.lng.value, frentes: f.frentes.value.split(/\r?\n|;/).map(s => s.trim()).filter(Boolean) });
+      const contrato = await lerArquivo(f.contrato);
+      const r = await api('admin_obra_criar', { nome: f.nome.value, sigla: f.sigla.value, endereco: f.endereco.value, email_financeiro: f.email_financeiro.value, lat: f.lat.value, lng: f.lng.value, frentes: f.frentes.value.split(/\r?\n|;/).map(s => s.trim()).filter(Boolean), contrato });
       toast(r.msg);
       await recarregarSessao();
       if (!S.obraId || confirm('Obra criada. Abrir agora para montar o orçamento?')) { await trocarObra(r.id); location.hash = '#/obra/orcamento'; } else vObras();

@@ -26,7 +26,7 @@ function equipeRetroativoBacia02_(ctxAdmin) {
   if (!C.all().some(r => r.chave === 'RETRO_BACIA02')) return 'aguardando diários';
   const o = central_('Obras').all().find(x => String(x.sigla).toUpperCase() === 'PB');
   const u = (ctxAdmin && ctxAdmin.u) || central_('Usuarios').all().find(x => norm_(x.login) === 'renan');
-  const ctx = { u: u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
+  const ctx = { u: u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id), historico: true };
   const L = LockService.getScriptLock();
   L.waitLock(30000);
   try {
@@ -47,7 +47,7 @@ function lancarRetroativoBacia02Diarios_(ctxAdmin) {
   const o = central_('Obras').all().find(x => String(x.sigla).toUpperCase() === 'PB');
   if (!o) return 'obra PB não encontrada';
   const u = (ctxAdmin && ctxAdmin.u) || central_('Usuarios').all().find(x => norm_(x.login) === 'renan');
-  const ctx = { u: u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
+  const ctx = { u: u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id), historico: true };
   const it = obraTab_(ctx, 'EtapaItens').all().find(i => String(i.etapa) === 'ET001' && /tee coletor/i.test(String(i.servico)));
   if (!it) return 'serviço Tee Coletor (ET001) não encontrado';
   const L = LockService.getScriptLock();

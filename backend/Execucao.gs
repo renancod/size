@@ -214,6 +214,7 @@ function calcExec_(ctx, ate) {
     return {
       codigo: e.codigo, nome: e.nome, local: e.local, frente: e.frente, responsavel: e.responsavel, obs: e.obs, ativa: !/^n/i.test(String(e.ativa)),
       empreiteiro: String(e.empreiteiro || ''), contrato_tipo: e.contrato_tipo || '', contrato_numero: e.contrato_numero || '', contrato_data: ymd_(e.contrato_data), contrato_id: String(e.contrato_id || ''),
+      sem_contrato_motivo: e.sem_contrato_motivo || '', contrato_ok: frenteContratoOk_(e),
       pct: li.length ? r2_(li.reduce((t, i) => t + Math.min(100, i.pct), 0) / li.length) : 0,
       planejado: li.length ? r2_(li.reduce((t, i) => t + i.planejado, 0) / li.length) : 0,
       inicio: li.map(i => i.inicio).filter(Boolean).sort()[0] || '', termino: li.map(i => i.termino).filter(Boolean).sort().pop() || '',
@@ -253,6 +254,8 @@ function execDados_(q, ctx) {
     })).sort((a, b) => b.data.localeCompare(a.data)),
     feriados: listaFeriados_(ctx.obra, y - 1, y + 1),
     obra: { lat: ctx.obra.lat, lng: ctx.obra.lng, endereco: ctx.obra.endereco },
+    // início da obra: o diário só abre com o contrato assinado com o cliente
+    contrato_obra: !!ccPrincipal_(ctx),
     limite_chuva: limiteChuva_()
   };
 }
@@ -293,6 +296,11 @@ function execEtapaSalvar_(q, ctx) {
       e.contrato_id = c.id; e.contrato_tipo = 'Com contrato'; e.contrato_numero = ctrRotulo_(c); e.contrato_data = c.data_assinatura || '';
     } else { e.contrato_id = ''; e.contrato_tipo = 'Sem contrato'; e.contrato_numero = ''; e.contrato_data = ''; }
   }
+  // sem contrato só com a explicação (ex: equipe própria da Size); a frente nova tem que dizer qual é o caso
+  if (q.sem_contrato_motivo !== undefined) e.sem_contrato_motivo = String(q.sem_contrato_motivo || '').trim().slice(0, 500);
+  if (e.contrato_tipo === 'Sem contrato' && String(e.sem_contrato_motivo || '').length < 10) throw new Error('Frente sem contrato: explique o porquê (ex: equipe própria da Size, serviço por administração).');
+  if (e.contrato_tipo !== 'Sem contrato') e.sem_contrato_motivo = '';
+  if (nova && !e.contrato_id && !e.contrato_tipo) throw new Error('Escolha o contrato da frente ou marque "Sem contrato" com a explicação.');
   if (q.ativa !== undefined) e.ativa = q.ativa ? 'Sim' : 'Não';
   const novos = [].concat(q.itens || []).filter(x => x && !x.id);
   if (nova && !novos.length) throw new Error('Inclua pelo menos um serviço na etapa.');
@@ -414,7 +422,22 @@ function execDiario_(q, ctx) {
     pode_editar: dia >= addDias_(hojeYmd_(), -1) || pode_(ctx, 'exec_planejar')
   };
 }
+/* frente de execução liberada: contrato do empreiteiro (vigente e assinado ao ativar), número de contrato antigo,
+ * ou "sem contrato" com a explicação */
+const frenteContratoOk_ = e => !!(e.contrato_id || (e.contrato_tipo === 'Com contrato' && e.contrato_numero) || (e.contrato_tipo === 'Sem contrato' && String(e.sem_contrato_motivo || '').length >= 10));
+function execExigeContratos_(ctx, q) {
+  if (ctx.historico) return;   // lançamento histórico montado no servidor (Retroativos.gs); nunca vem do app
+  exigirContratoObra_(ctx);
+  const its = {}, ets = {};
+  obraTab_(ctx, 'EtapaItens').all().forEach(i => { its[i.id] = i.etapa; });
+  [].concat(q.lancamentos || []).forEach(l => { if (its[l.item_id]) ets[its[l.item_id]] = 1; });
+  [].concat(q.equipes || []).forEach(e => { if (e && e.etapa) ets[e.etapa] = 1; });
+  obraTab_(ctx, 'Etapas').all().filter(e => ets[e.codigo] && !frenteContratoOk_(e)).slice(0, 1).forEach(e => {
+    throw new Error('A frente ' + e.nome + ' não tem contrato: ligue a um contrato assinado ou marque "Sem contrato" com a explicação (Execução → editar a frente).');
+  });
+}
 function execDiarioSalvar_(q, ctx) {
+  execExigeContratos_(ctx, q);
   const dia = ymd_(q.data) || hojeYmd_(), regra = regraData_(ctx, dia, q.motivo), motivo = String(q.motivo || '').trim();
   const d = diarioDo_(ctx, dia, true), D = obraTab_(ctx, 'Diarios');
   if (d.status === 'Revisado' && !regra.eng) throw new Error('Este diário já foi revisado pelo engenheiro. Peça a ele para corrigir.');

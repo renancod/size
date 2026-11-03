@@ -13,7 +13,7 @@ function preparar(modelo) {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const tk = call('login', { login: 'admin', senha }).token;
   const adm = (acao, d = {}) => call(acao, { token: tk, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const p = adm('admin_dados').perfis.find(x => x.perfil === 'Engenheiro');
   adm('admin_usuario_salvar', { usuario: { nome: 'eng', login: 'eng', ativo: true }, senha: 'Obra#Teste26', acessos: [{ obra_id: obra, perfil: 'Engenheiro', permissoes: p.permissoes }] });
   const se = call('login', { login: 'eng', senha: 'Obra#Teste26' });
@@ -52,7 +52,7 @@ test('modelo Global: sem financeiro; desativar o cliente corta o acesso na hora'
 
 test('diário: só aparece depois que o engenheiro libera, sem ocorrências; foto só de dia liberado; aviso no sino', () => {
   const t = preparar();
-  const cod = t.eng('exec_etapa_salvar', { nome: 'Pavimentação', local: 'Rua X', itens: [{ servico: 'Base', qtd_prevista: 500, inicio: dia(-10), termino: dia(10) }] }).codigo;
+  const cod = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Pavimentação', local: 'Rua X', itens: [{ servico: 'Base', qtd_prevista: 500, inicio: dia(-10), termino: dia(10) }] }).codigo;
   const item = t.eng('exec_dados').etapas.find(e => e.codigo === cod).itens[0];
   t.eng('exec_diario_salvar', { data: dia(0), lancamentos: [{ item_id: item.id, qtd: 40 }], equipes: [{ etapa: cod, equipe: 'Equipe A', pessoas: 6 }], ocorrencias: 'Briga interna na equipe', enviar: true });
   const foto = t.eng('exec_foto', { data: dia(0), etapa: cod, legenda: 'Base compactada', foto: FOTO }).id;
@@ -77,7 +77,8 @@ test('diário: só aparece depois que o engenheiro libera, sem ocorrências; fot
   assert.deepEqual(rel.ocorrencias, []);
   assert.equal(rel.fotos.length, 1);
   assert.ok(!JSON.stringify(rel).includes('Briga'));
-  const n = t.cliente('notificacoes').itens;
+  // o contrato principal da obra (anexado ao criar) também chega como documento
+  const n = t.cliente('notificacoes').itens.filter(i => i.etapa !== 'cli_doc');
   assert.equal(n.length, 1);
   assert.match(n[0].url, /^\.\/(c\/ava-residence\/)?#\/c\/diario\//);
   // recolher: some do portal
@@ -171,7 +172,7 @@ test('negociação: cliente sem obra vê só o orçamento enviado, comenta, rece
 
 test('vários empreendimentos: cartões no início, cada obra com o seu tipo, foto do cadastro e aviso que abre na obra certa', () => {
   const t = preparar('gestao');
-  const obra2 = t.adm('admin_obra_criar', { nome: 'Condomínio Norte', sigla: 'CN', endereco: 'Rua Y' }).id;
+  const obra2 = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Condomínio Norte', sigla: 'CN', endereco: 'Rua Y' }).id;
   const emps = [{ obra: t.obra, modelo: 'gestao' }, { obra: obra2, modelo: 'global' }];
   assert.throws(() => t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', obra_id: '', empreendimentos: [emps[0], emps[0]], cor: '#1D6F5F', slug: 'ava-residence' } }), /duas vezes/);
   t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', empresa: 'Mar Azul', empreendimentos: emps, cor: '#1D6F5F', slug: 'ava-residence' } });
@@ -184,7 +185,7 @@ test('vários empreendimentos: cartões no início, cada obra com o seu tipo, fo
   assert.match(t.G.chamar({ acao: 'cli_financeiro', token: t.sessao.token, obra: obra2 }).erro, /não está liberada/);
   assert.ok(t.cliente('cli_financeiro', { obra: t.obra }).total);
   // obra que não é dele
-  const outra = t.adm('admin_obra_criar', { nome: 'Outra', sigla: 'OT', endereco: 'Z' }).id;
+  const outra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Outra', sigla: 'OT', endereco: 'Z' }).id;
   assert.match(t.G.chamar({ acao: 'cli_cronograma', token: t.sessao.token, obra: outra }).erro, /não está liberado/);
   // foto do cartão: sem foto nem diário → vazia; com a foto do cadastro → a imagem; salvar o cadastro mantém a foto
   assert.equal(t.cliente('cli_emp_foto', { obra: obra2 }).b64, '');
@@ -193,7 +194,7 @@ test('vários empreendimentos: cartões no início, cada obra com o seu tipo, fo
   assert.ok(t.cliente('cli_emp_foto', { obra: obra2 }).b64);
   assert.equal(t.adm('cli_admin').clientes[0].empreendimentos[1].foto, true);
   // aviso de diário liberado leva o empreendimento na rota
-  const cod = t.eng('exec_etapa_salvar', { nome: 'Pavimentação', local: 'Rua X', itens: [{ servico: 'Base', qtd_prevista: 500, inicio: dia(-10), termino: dia(10) }] }).codigo;
+  const cod = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Pavimentação', local: 'Rua X', itens: [{ servico: 'Base', qtd_prevista: 500, inicio: dia(-10), termino: dia(10) }] }).codigo;
   const item = t.eng('exec_dados').etapas.find(e => e.codigo === cod).itens[0];
   t.eng('exec_diario_salvar', { data: dia(0), lancamentos: [{ item_id: item.id, qtd: 40 }], enviar: true });
   t.eng('exec_cliente', { data: dia(0), mostrar: true });
@@ -223,7 +224,8 @@ test('do orçamento à obra: tipo e foto no orçamento, o cliente vê a foto e o
   assert.equal(o.foto, true);
   assert.equal(o.tipo, 'Execução');
   assert.ok(cliente('cli_orc_foto', { id }).b64);
-  cliente('cli_orc_aceitar', { id, nome: 'Maria da Silva', concordo: true });
+  // o cliente aceita pelo portal mandando o contrato assinado: é ele que libera o Gerar obra
+  cliente('cli_orc_aceitar', { id, nome: 'Maria da Silva', concordo: true, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   const r = adm('prop_gerar_obra', { id, nome: 'Residencial Dunas', sigla: 'RD', endereco: 'Xangri-lá/RS', portal: true });
   assert.match(r.msg, /Dunas já acompanha a obra/);
   const s = cliente('sessao').cliente;
@@ -249,7 +251,7 @@ test('excluir acesso do cliente: só o login daquele cliente, e ele não entra m
 
 test('cada acesso vê o que foi liberado: obras escolhidas, sem orçamentos ou sem financeiro', () => {
   const t = preparar('gestao');
-  const obra2 = t.adm('admin_obra_criar', { nome: 'Condomínio Norte', sigla: 'CN', endereco: 'Rua Y' }).id;
+  const obra2 = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Condomínio Norte', sigla: 'CN', endereco: 'Rua Y' }).id;
   t.adm('cli_salvar', { cliente: { id: t.cli, nome: 'Mar Azul', empreendimentos: [{ obra: t.obra, modelo: 'gestao' }, { obra: obra2, modelo: 'gestao' }], cor: '#1D6F5F', slug: 'ava-residence' } });
   // engenheiro: só a obra 2, sem orçamentos e sem financeiro
   const eng = t.adm('cli_usuario_salvar', { cliente_id: t.cli, usuario: { nome: 'Eng. Paulo', login: 'paulo.eng' }, senha: 'Engenheiro#26', portal: { obras: [obra2], orcamentos: false, modulos: ['cronograma', 'diario', 'fvs'] } }).id;
@@ -323,7 +325,7 @@ test('documentos da obra no portal: só os marcados "cliente vê", só para quem
   assert.equal(t.G.rodar(`ccAditivoDias_({ ss: SpreadsheetApp.openById(central_('Obras').all()[0].planilha_id), obra: central_('Obras').all()[0] })`), 3);
   // cliente: aditivo (marcado por padrão) e projeto; a ART interna não aparece nem abre
   const D = t.cliente('cli_documentos', { obra: t.obra }).documentos;
-  assert.deepEqual(D.map(d => [d.numero, d.valor]), [['Aditivo 01', 500], ['Projeto de drenagem', null]]);
+  assert.deepEqual(D.map(d => [d.numero, d.valor]), [['Contrato principal', 0], ['Aditivo 01', 500], ['Projeto de drenagem', null]]);
   assert.ok(t.cliente('cli_doc_arquivo', { obra: t.obra, id: proj }).b64);
   assert.match(t.bruto('cli_doc_arquivo', { id: art }).erro, /não disponível/);
   assert.ok(t.cliente('notificacoes').itens.some(i => i.etapa === 'cli_doc' && /Aditivo 01/.test(i.texto)));
@@ -357,6 +359,10 @@ test('contratos do cliente: principal no Gerar obra, aditivo pelo orçamento (fr
     return id;
   };
   const id = orc('Residencial Dunas', 'Pavimentação');
+  // sem o contrato assinado não gera a obra nem inclui o aditivo
+  assert.throws(() => adm('prop_gerar_obra', { id, sigla: 'RD' }), /contrato assinado/);
+  const assina = x => adm('prop_contrato', { id: x, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
+  assina(id);
   const obra = adm('prop_gerar_obra', { id, nome: 'Residencial Dunas', sigla: 'RD', endereco: 'X' }).obra_id;
   let L = adm('cc_listar', { obra });
   assert.deepEqual(L.contratos.map(c => [c.tipo, c.valor]), [['Contrato', 1000]]);
@@ -366,6 +372,8 @@ test('contratos do cliente: principal no Gerar obra, aditivo pelo orçamento (fr
   assert.equal(P0.situacao, 'andamento');
   // aditivo vindo de outro orçamento aprovado: frente geral nova e +10 dias úteis
   const id2 = orc('Dunas · praça', 'Paisagismo');
+  assert.throws(() => adm('prop_incluir_obra', { id: id2, obra_id: obra, tipo: 'Aditivo', dias_uteis: 10 }), /aditivo \/ contrato assinado/);
+  assina(id2);
   assert.match(adm('prop_incluir_obra', { id: id2, obra_id: obra, tipo: 'Aditivo', dias_uteis: 10 }).msg, /Aditivo 1 incluído.*\+10 dias úteis/);
   L = adm('cc_listar', { obra });
   assert.equal(L.contratos.length, 2);

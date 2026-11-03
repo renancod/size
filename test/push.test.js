@@ -12,7 +12,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const adm = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const usuario = (nome, perfil) => {
     const p = adm('admin_dados').perfis.find(x => x.perfil === perfil);
     adm('admin_usuario_salvar', { usuario: { nome, login: nome, ativo: true }, senha: 'Senha-Forte-26', acessos: [{ obra_id: obra, perfil, permissoes: p.permissoes }] });

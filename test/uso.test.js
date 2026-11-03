@@ -22,7 +22,7 @@ test('gatilho dos avisos: fora do horário não roda; no horário só varre quan
   t.G.rodar('pushVarrer({ triggerUid: "x" })');                          // nada mudou: pula
   let p = tarefa(t.adm('uso_cotas'), 'push');
   assert.deepEqual([p.rodadas, p.puladas], [1, 2]);
-  t.adm('admin_obra_criar', { nome: 'Obra Nova', sigla: 'ON', endereco: 'Rua Y' });   // gravou algo
+  t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra Nova', sigla: 'ON', endereco: 'Rua Y' });   // gravou algo
   t.G.rodar('pushVarrer({ triggerUid: "x" })');
   p = tarefa(t.adm('uso_cotas'), 'push');
   assert.equal(p.rodadas, 2);
@@ -40,7 +40,7 @@ test('telas guardadas no aparelho: resposta de gravação vem com w; versão da 
   assert.equal(raw('empresa_dados').w, undefined);                 // leitura
   const b1 = raw('base_dados').dados.ger, n1 = raw('notificacoes').dados.ger_base;
   assert.ok(b1); assert.equal(n1, b1);
-  const r = raw('admin_obra_criar', { nome: 'Obra Nova', sigla: 'ON', endereco: 'Rua Y' });
+  const r = raw('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra Nova', sigla: 'ON', endereco: 'Rua Y' });
   assert.equal(r.w, 1);                                             // gravou
   assert.equal(raw('notificacoes').dados.ger_base, b1);            // obra nova não mexe na base
   raw('base_insumo_salvar', { insumo: { codigo: 'AREIA', descricao: 'Areia média', unidade: 'm3', tipo: 'Material', preco: 120 } });

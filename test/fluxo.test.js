@@ -37,18 +37,18 @@ test('obra nova nasce com materiais padrão e frentes', () => {
   const t = preparar();
   t.adm('admin_padrao_salvar', { descricao: 'Cimento CP-II 50kg', unidade: 'sc' });
   t.adm('admin_padrao_salvar', { descricao: 'Areia média', unidade: 'm³' });
-  const { id } = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'pb', endereco: 'Rua A, 1' });
+  const { id } = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'pb', endereco: 'Rua A, 1' });
   const d = t.adm('obra_dados', { obra: id });
   assert.equal(d.obra.sigla, 'PB');
   assert.deepEqual(d.materiais.map(m => m.descricao), ['Cimento CP-II 50kg', 'Areia média']);
   assert.ok(d.frentes.length >= 5);
-  falha(() => t.adm('admin_obra_criar', { nome: 'Outra', sigla: 'PB' }), /sigla PB/);
+  falha(() => t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Outra', sigla: 'PB' }), /sigla PB/);
 });
 
 test('permissões: só vê a obra liberada e só faz o que o perfil permite', () => {
   const t = preparar();
-  const a = t.adm('admin_obra_criar', { nome: 'Obra A', sigla: 'OA' }).id;
-  const b = t.adm('admin_obra_criar', { nome: 'Obra B', sigla: 'OB' }).id;
+  const a = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra A', sigla: 'OA' }).id;
+  const b = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra B', sigla: 'OB' }).id;
   const sol = criarUsuario(t, 'joao', 'Solicitante', a);
   const sess = sol('sessao');
   assert.deepEqual(sess.obras.map(o => o.id), [a]);
@@ -64,7 +64,7 @@ test('permissões: só vê a obra liberada e só faz o que o perfil permite', ()
 
 test('fluxo FATURADO 30 dias: cotação → regra de orçamentos → aprovação → liberação → recebimento parcial/total → NF → financeiro → concluído', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
   t.adm('admin_config_salvar', { config: { MIN_ORCAMENTOS: 1, REGRAS_ORCAMENTO: '5000:2' } });
   const est = criarUsuario(t, 'estoque', 'Estoque', obra);
   const com = criarUsuario(t, 'compras', 'Compras', obra);
@@ -153,7 +153,7 @@ test('fluxo FATURADO 30 dias: cotação → regra de orçamentos → aprovação
 
 test('fluxo FATURAMENTO DIRETO: financeiro paga antes; liberação bloqueada até pagar', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Obra D', sigla: 'OD' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra D', sigla: 'OD' }).id;
   const com = criarUsuario(t, 'compras', 'Compras', obra);
   const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
   const est = criarUsuario(t, 'est', 'Estoque', obra);
@@ -183,7 +183,7 @@ test('fluxo FATURAMENTO DIRETO: financeiro paga antes; liberação bloqueada at�
 
 test('portal do fornecedor: orçamento pelo link, prazo de entrega e NF depois da entrega', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar' }).id;
   const com = criarUsuario(t, 'compras', 'Compras', obra);
   const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
   const est = criarUsuario(t, 'est', 'Estoque', obra);
@@ -244,8 +244,8 @@ test('portal do fornecedor: orçamento pelo link, prazo de entrega e NF depois d
 
 test('notificações por etapa e financeiro por obra', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', email_financeiro: 'fin.pb@size.com' }).id;
-  const outra = t.adm('admin_obra_criar', { nome: 'Outra', sigla: 'OT' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB', email_financeiro: 'fin.pb@size.com' }).id;
+  const outra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Outra', sigla: 'OT' }).id;
   const est = criarUsuario(t, 'est', 'Estoque', obra);
   const com = criarUsuario(t, 'compras', 'Compras', obra);
   const apr = criarUsuario(t, 'gestor', 'Aprovador', obra);
@@ -284,7 +284,7 @@ test('notificações por etapa e financeiro por obra', () => {
 
 test('lembretes de vencimento: aviso diário nos últimos 5 dias, e-mail das 8h e urgência só até chegar', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', email_financeiro: 'fin@size.com' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB', email_financeiro: 'fin@size.com' }).id;
   const fin = criarUsuario(t, 'fin', 'Financeiro', obra);
   t.adm('cad_salvar', { obra, tipo: 'fornecedores', dados: { nome: 'Casa', email: 'c@x.com' } });
   const n = t.adm('pedido_criar', { obra, prioridade: 'Urgente', itens: [{ descricao: 'Cimento', qtd: 20, unidade: 'sc' }] }).numero;
@@ -310,7 +310,7 @@ test('lembretes de vencimento: aviso diário nos últimos 5 dias, e-mail das 8h 
 
 test('almoxarife (Estoque) não vê valores nem pedidos já recebidos', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
   const alm = criarUsuario(t, 'jean', 'Estoque', obra);
   t.adm('cad_salvar', { obra, tipo: 'fornecedores', dados: { nome: 'Casa', email: 'c@x.com' } });
   const n = t.adm('pedido_criar', { obra, itens: [{ descricao: 'Cimento', qtd: 20, unidade: 'sc' }] }).numero;
@@ -334,7 +334,7 @@ test('almoxarife (Estoque) não vê valores nem pedidos já recebidos', () => {
 
 test('cancelamento e devolução respeitam a etapa', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Obra C', sigla: 'OC' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra C', sigla: 'OC' }).id;
   const com = criarUsuario(t, 'compras', 'Compras', obra);
   com('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'F' } });
   const n1 = com('pedido_criar', { itens: [{ descricao: 'Tinta', qtd: 2, unidade: 'lata' }] }).numero;
@@ -354,7 +354,7 @@ test('cancelamento e devolução respeitam a etapa', () => {
 
 test('perfis v2: instalação existente — Compras perde "aprovar" e surge o perfil Aprovador', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Obra V', sigla: 'OV' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Obra V', sigla: 'OV' }).id;
   // simula a instalação feita com a versão anterior
   t.G.rodar(`(function () {
     const C = central_('Config'); C.removeWhere(r => r.chave === 'PERFIS_V2');
@@ -417,7 +417,7 @@ test('migração da planilha antiga para Prime Beach', () => {
 
 test('captura de e-mail: resposta com PDF vira orçamento; NF encaminha ao financeiro', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
   t.adm('cad_salvar', { obra, tipo: 'fornecedores', dados: { nome: 'Casa', email: 'vendas@casa.com' } });
   const { numero } = t.adm('pedido_criar', { obra, itens: [{ descricao: 'Cal', qtd: 3, unidade: 'sc' }] });
   const msg = (assunto, de, arq = 'proposta.pdf', conteudo = '%PDF') => ({
@@ -453,7 +453,7 @@ test('captura de e-mail: resposta com PDF vira orçamento; NF encaminha ao finan
 
 test('avisos ao fornecedor e ao financeiro: ordem de compra, não escolhido, pagamento do faturado, boleto anexo, cancelamento e lembrete do antecipado', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar', email_financeiro: 'fin@size.com' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB', endereco: 'Av. Beira-Mar', email_financeiro: 'fin@size.com' }).id;
   const a = (acao, d = {}) => t.adm(acao, { obra, ...d });
   a('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Casa', email: 'casa@x.com' } });
   a('cad_salvar', { tipo: 'fornecedores', dados: { nome: 'Depósito', email: 'dep@x.com' } });

@@ -120,9 +120,18 @@ function adminObraCriar_(q, ctx) {
   if (q.email_financeiro) o.email_financeiro = String(q.email_financeiro).trim();
   obraLocal_(o, q);
   central_('Obras').update(o);
+  // contrato assinado com o cliente (opcional aqui): sem ele a obra fica aguardando contrato e o diário de obra não abre
+  const temCt = q.contrato && q.contrato.b64;
+  if (temCt) {
+    const octx = { u: ctx.u, admin: true, obra: o, perms: Object.keys(PERMISSOES), ss: SpreadsheetApp.openById(o.planilha_id) };
+    const c = { tipo: 'Contrato', numero: String(q.contrato_numero || '').trim().slice(0, 60) || 'Contrato principal', data: hojeYmd_(), descricao: 'Contrato principal · ' + o.nome, valor: num_(q.contrato_valor), dias_uteis: 0, cliente: 'Sim' };
+    ccGuardarArquivo_(octx, c, q.contrato);
+    ccCriar_(octx, c);
+  }
   log_(ctx, 'obra_criar', o.nome);
   const n = frentes ? frentes.length : 0;
-  return { msg: 'Obra ' + o.nome + ' criada com a planilha e a pasta no Drive' + (n ? ' e ' + n + (n === 1 ? ' frente geral' : ' frentes gerais') : '') + '.', id: o.id };
+  return { msg: 'Obra ' + o.nome + ' criada com a planilha e a pasta no Drive' + (n ? ' e ' + n + (n === 1 ? ' frente geral' : ' frentes gerais') : '') + '.' +
+    (temCt ? ' Contrato assinado anexado.' : ' Falta anexar o contrato assinado com o cliente para liberar o diário de obra.'), id: o.id };
 }
 
 function adminObraSalvar_(q, ctx) {

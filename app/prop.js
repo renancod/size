@@ -572,7 +572,14 @@ function ppInsumos(l, c) {
 }
 
 /* ---------- gerar a obra ---------- */
+/* gerar obra e incluir em obra existente só com o contrato assinado anexado (pela Size ou pelo cliente no aceite) */
+const ppAssinado = p => !!(p.contrato_id || (p.aceite && p.aceite.arquivo_id));
+function ppSemContrato(oQue) {
+  modal(`${ic('alert')} Falta o contrato assinado`, `<p>Para ${oQue}, anexe primeiro o <b>contrato assinado com o cliente</b> no orçamento (área <b>Portal do cliente → Anexar contrato</b>), ou o cliente anexa o assinado ao aceitar pelo portal.</p>
+    <small>O contrato assinado é a referência da obra: sem ele o início da obra e as execuções não são liberados.</small>`, { semRodape: true });
+}
 function ppGerarObra(d) {
+  if (!ppAssinado(d.proposta)) return ppSemContrato('gerar a obra');
   const p = d.proposta, cli = p.cliente_id ? (d.clientes || []).find(c => String(c.id) === String(p.cliente_id)) : null, sig = norm(p.empreendimento).toUpperCase().replace(/[^A-Z ]/g, '').split(/\s+/).filter(w => w.length > 2).map(w => w[0]).join('').slice(0, 4) || 'OB';
   modal(`${ic('building')} Gerar obra a partir de ${esc(p.rotulo)}`, `<p><small>Cria a obra com a planilha e a pasta no Drive. Cada etapa vira uma <b>frente geral</b> do Orçamento da obra, com os serviços (quantidade, material, mão de obra e preço de venda) e os <b>materiais</b> das composições. Depois é só liberar o acesso das pessoas.</small></p>
     <div class="bp-g3"><label class="bp-span2">Nome da obra<input name="nome" required value="${esc(p.empreendimento)}"></label><label>Sigla (2 a 5 letras)<input name="sigla" required maxlength="5" value="${esc(sig)}" style="text-transform:uppercase"></label></div>
@@ -596,6 +603,7 @@ function ppGerarObra(d) {
 
 /* ---------- aditivo ou novo contrato numa obra que já existe: as etapas viram frentes gerais novas ---------- */
 function ppIncluirObra(d) {
+  if (!ppAssinado(d.proposta)) return ppSemContrato('incluir o aditivo na obra');
   const p = d.proposta, obras = (S.sess.obras || []).filter(o => o.ativa);
   if (!obras.length) return toast('Nenhuma obra ativa para incluir.', 1);
   modal(`${ic('plus')} Incluir ${esc(p.rotulo)} em obra existente`, `<p><small>Para <b>aditivo</b> ou <b>novo contrato</b> na mesma obra. Cada etapa deste orçamento vira uma <b>frente geral nova</b> (ex: "Pavimentação · Aditivo 1") com os serviços, materiais e datas; o valor e o prazo a mais ficam em Orçamento da obra → Contratos e documentos.</small></p>

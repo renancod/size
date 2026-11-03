@@ -128,6 +128,15 @@ Módulo **Orçamento da obra** (`#/obra`, `Orcamento.gs` + `orc.js`). Cada **fre
 - **No orçamento:** a busca "Incluir serviço" mostra também o SINAPI; o regime (**não desonerado / desonerado**) é escolhido em cada orçamento. **Copiar para a base da Size:** a composição vira `SINAPI-<código>` para ajustar.
 - O índice da busca (~3 MB) fica guardado no aparelho (IndexedDB) até mudar o mês.
 
+## Contrato assinado como referência
+Tudo o que depende de contrato só libera com o **documento assinado anexado** (servidor e app):
+- **Gerar obra** e **Incluir em obra existente**: só com o contrato do cliente anexado no orçamento (pela Size ou pelo cliente no aceite). O cliente usa o contrato próprio; o app não gera minuta para ele.
+- **Início da obra**: o diário de obra só abre com o **Contrato** principal assinado em Orçamento da obra → Contratos e documentos (`ccPrincipal_`). Obra criada à mão pode receber o contrato já em "Nova obra".
+- **Contratos com o cliente**: contrato, aditivo e novo contrato só entram com o documento; prazo a mais só conta com o documento.
+- **Contrato de empreiteiro**: só fica **vigente** com o assinado anexado (rascunho → minuta → assinatura → anexar → ativar); **aditivo** só com o documento assinado (fica na pasta do contrato).
+- **Frente de execução**: contrato vigente do empreiteiro ou **Sem contrato com a explicação** (mín. 10 letras, ex: equipe própria). Frente sem nenhum dos dois não recebe lançamento no diário.
+- Lançamento histórico montado no servidor (`Retroativos.gs`, `ctx.historico`) não passa pela trava; pelo app não há como pular.
+
 ## Topografia
 `Topografia.gs` + `topo.js` (`#/topo`), na parte **Empresa** do menu (não depende de obra). Abas centrais `TopoDemandas` e `TopoDiarios`.
 - **Acesso** pelo cadastro do usuário (`Usuarios.topografia`): **Topógrafo** recebe as demandas dele e lança o dia; **Gerir** abre demandas e vê a agenda e a produção da equipe (o administrador é Gerir). Topógrafo sem obra entra direto em `#/topo`.
@@ -136,6 +145,7 @@ Módulo **Orçamento da obra** (`#/obra`, `Orcamento.gs` + `orc.js`). Cada **fre
 - **Mudar a data:** o topógrafo pode, sempre com o **motivo** (histórico e aviso a quem abriu).
 - **Agenda automática:** a média por dia (do histórico de cada topógrafo por tipo, a partir de 3 dias lançados; antes, o padrão `TOPO_PRODUTIVIDADE` = `m:400; pt:80; un:30`) estima a carga de cada demanda e enfileira nos dias úteis (seg–sex sem feriado nacional), em frações de dia; urgente passa na frente no mesmo dia. Atrasou, as próximas andam. Ao abrir a demanda, o app sugere o primeiro dia livre de cada topógrafo.
 - **Avisos** (sino e celular): nova demanda / data mudada para o topógrafo, lembrete da agenda do próximo dia útil a partir das 17h; data mudada pelo topógrafo e demanda concluída para quem abriu e o administrador.
+- **Localização** (celular da empresa): com o app aberto, o celular do **Topógrafo** manda a posição ao abrir e a cada 10 min (`topo_local`, aba `TopoLocais`, últimos 60 pontos; parado até 60 m só renova o horário). Aviso único no aparelho (LGPD). Quem gere vê no painel o mapa **Onde está a equipe** (último ponto, horário, caminho do dia). Com o app fechado nada é enviado.
 - **Telas:** painel (hoje, próximos dias, ocupação da equipe nos próximos 10 dias úteis), demandas, agenda da semana (dias × topógrafos), diários do topógrafo por mês e **produção** do mês (metros, pontos, unidades, dias trabalhados, média por dia, por tipo e por obra, concluídas sem mudar a data).
 
 ## Portal do cliente

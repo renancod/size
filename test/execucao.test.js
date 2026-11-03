@@ -15,7 +15,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const adm = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   adm('admin_obra_salvar', { id: obra, nome: 'Loteamento Sul', endereco: 'Rua X', ativa: true, lat: '-27.6', lng: '-48.5' });
   const usuario = (login, perfil) => {
     const p = adm('admin_dados').perfis.find(x => x.perfil === perfil);
@@ -26,7 +26,7 @@ function preparar() {
   return { G, adm, obra, eng: usuario('eng', 'Engenheiro'), enc: usuario('joao', 'Encarregado'), enc2: usuario('pedro', 'Encarregado') };
 }
 function criarEtapa(t, ini = dia(-10), fim = dia(10)) {
-  const cod = t.eng('exec_etapa_salvar', {
+  const cod = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', 
     nome: 'Pavimentação · Rua X', local: 'Rua X', itens: [
       { servico: 'Asfalto (CBUQ)', qtd_prevista: 500, inicio: ini, termino: fim },
       { servico: 'Base', qtd_prevista: 500, inicio: ini, termino: fim },
@@ -42,7 +42,7 @@ test('catálogo, perfis e etapa com vários serviços (unidade vem do catálogo;
   const A = t.adm('admin_dados');
   assert.ok(A.servicos.length >= 40);
   assert.ok(A.perfis.some(p => p.perfil === 'Encarregado') && A.perfis.some(p => p.perfil === 'Engenheiro'));
-  assert.throws(() => t.enc('exec_etapa_salvar', { nome: 'X', itens: [] }), /permissão/);
+  assert.throws(() => t.enc('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'X', itens: [] }), /permissão/);
   const { asf, base, sarj } = criarEtapa(t);
   assert.equal(asf.unidade, 'm²');
   assert.equal(base.unidade, 'm²');
@@ -120,7 +120,7 @@ test('acima do previsto não bloqueia e vira alerta para o engenheiro', () => {
 test('cálculos: média sem o dia parado por chuva, ritmo necessário, término projetado e % planejado', () => {
   const t = preparar();
   // 02/03/2026 (seg) a 13/03/2026 (sex) = 10 dias úteis, 100 m
-  const cod = t.eng('exec_etapa_salvar', { nome: 'Drenagem', itens: [{ servico: 'Meio-fio', qtd_prevista: 100, inicio: '2026-03-02', termino: '2026-03-13' }] }).codigo;
+  const cod = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Drenagem', itens: [{ servico: 'Meio-fio', qtd_prevista: 100, inicio: '2026-03-02', termino: '2026-03-13' }] }).codigo;
   const id = t.eng('exec_dados').etapas[0].itens[0].id;
   const m = 'lançamento retroativo do teste';
   t.eng('exec_diario_salvar', { data: '2026-03-02', motivo: m, lancamentos: [{ item_id: id, qtd: 10 }], equipes: [{ etapa: cod, equipe: 'A', pessoas: 5 }] });
@@ -184,7 +184,7 @@ test('avisos do engenheiro, fotos (sem duplicar), revisão e RDO', () => {
 
 test('relatório de execução/projeção: executado no período, chuva, meta × ritmo, reprogramação com motivo e envio por e-mail', () => {
   const t = preparar();
-  const cod = t.eng('exec_etapa_salvar', { nome: 'Drenagem', itens: [{ servico: 'Meio-fio', qtd_prevista: 100, inicio: '2026-03-02', termino: '2026-03-13' }] }).codigo;
+  const cod = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  nome: 'Drenagem', itens: [{ servico: 'Meio-fio', qtd_prevista: 100, inicio: '2026-03-02', termino: '2026-03-13' }] }).codigo;
   const id = t.eng('exec_dados').etapas[0].itens[0].id;
   const m = 'lançamento retroativo do teste';
   t.eng('exec_diario_salvar', { data: '2026-03-02', motivo: m, lancamentos: [{ item_id: id, qtd: 10 }], equipes: [{ etapa: cod, equipe: 'Empreiteiro A', pessoas: 5 }] });
@@ -245,8 +245,8 @@ test('retroativo Bacia 02 (Prime Beach): 8 diários, 75 T coletores, uma vez só
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const tk = call('login', { login: 'admin', senha }).token;
   const adm = (acao, d = {}) => call(acao, { token: tk, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
-  adm('exec_etapa_salvar', { obra, nome: 'Bacia 02 - Regularização Cloacal', itens: [
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
+  adm('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)',  obra, nome: 'Bacia 02 - Regularização Cloacal', itens: [
     { servico: 'Tee Coletor Predial 110mm Ocre', unidade: 'un', qtd_prevista: 102, inicio: '2026-09-28', termino: '2026-10-28' },
     { servico: 'Impermeabilização - PV', unidade: 'un', qtd_prevista: 4, inicio: '2026-10-16', termino: '2026-10-28' }] });
   const d = adm('exec_dados', { obra });

@@ -113,7 +113,7 @@ test('foto do insumo: vai para a pasta da base no Drive, aberta pelo link; troca
 test('contrato de empreiteiro escolhe serviços da base de preços (referência sem material) e guarda de qual composição veio', () => {
   const t = preparar();
   base(t);
-  const obra = t.adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const o = (acao, d = {}) => t.adm(acao, { obra, ...d });
   // quem gere contratos na obra enxerga a base, mesmo sem acesso ao módulo Orçamentos
   t.adm('admin_usuario_salvar', { usuario: { nome: 'ctr', login: 'ctr', ativo: true }, senha: 'Senha-Forte-26', acessos: [{ obra_id: obra, perfil: 'Personalizado', permissoes: ['contrato_gerir', 'contrato_ver'] }] });

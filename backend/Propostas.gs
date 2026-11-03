@@ -301,11 +301,14 @@ function propMateriais_(ix, cod, fator, acc, pilha) {
   });
   return acc;
 }
+/* contrato assinado do orçamento: anexado pela Size ou pelo cliente no aceite do portal */
+const propContratoAssinado_ = p => !!(p.contrato_id || (propAceite_(p) || {}).arquivo_id);
 function propGerarObra_(q, ctx) {
   if (!ctx.admin) throw new Error('Só administradores criam obras.');
   const T = central_('Propostas'), p = propAchar_(q.id);
   if (p.status !== 'Aprovado') throw new Error('Só o orçamento aprovado vira obra.');
   if (p.obra_id) throw new Error('Este orçamento já virou a obra ' + p.obra_id + '.');
+  if (!propContratoAssinado_(p)) throw new Error('Anexe o contrato assinado com o cliente no orçamento (Portal do cliente → Contrato) antes de gerar a obra.');
   const calc = propCalc_(p, propItens_(p.id));
   if (!calc.total.itens) throw new Error('O orçamento não tem itens.');
   const etapas = calc.etapas.filter(e => e.itens), nomes = etapas.map(e => e.descricao);
@@ -335,6 +338,7 @@ function propIncluirObra_(q, ctx) {
   const T = central_('Propostas'), p = propAchar_(q.id);
   if (p.status !== 'Aprovado') throw new Error('Só o orçamento aprovado entra na obra.');
   if (p.obra_id) throw new Error('Este orçamento já está na obra ' + p.obra_id + '.');
+  if (!propContratoAssinado_(p)) throw new Error('Anexe o aditivo / contrato assinado com o cliente no orçamento (Portal do cliente → Contrato) antes de incluir na obra.');
   const o = central_('Obras').all().find(x => String(x.id) === String(q.obra_id));
   if (!o || !o.planilha_id) throw new Error('Escolha a obra.');
   const calc = propCalc_(p, propItens_(p.id));

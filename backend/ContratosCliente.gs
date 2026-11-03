@@ -25,7 +25,19 @@ function ccCriar_(ctx, d) {
   C.insert(c);
   return c;
 }
-function ccAditivoDias_(ctx) { return obraTab_(ctx, 'ContratosCliente').all().reduce((t, c) => t + (ccEContrato_(c.tipo) && c.tipo !== 'Contrato' ? Math.max(0, parseInt(c.dias_uteis, 10) || 0) : 0), 0); }
+/* aditivo / novo contrato só soma prazo com o documento assinado anexado */
+function ccAditivoDias_(ctx) { return obraTab_(ctx, 'ContratosCliente').all().reduce((t, c) => t + (ccEContrato_(c.tipo) && c.tipo !== 'Contrato' && c.arquivo_id ? Math.max(0, parseInt(c.dias_uteis, 10) || 0) : 0), 0); }
+/* contrato principal com o cliente, assinado e anexado: é a referência que libera o início da obra (diário de obra) */
+function ccPrincipal_(ctx) { return obraTab_(ctx, 'ContratosCliente').all().find(c => c.tipo === 'Contrato' && c.arquivo_id) || null; }
+function exigirContratoObra_(ctx) {
+  if (!ccPrincipal_(ctx)) throw new Error('Obra aguardando o contrato assinado com o cliente: anexe em Orçamento da obra → Contratos e documentos para liberar o diário de obra.');
+}
+function ccGuardarArquivo_(ctx, c, a) {
+  const b64 = String(a.b64).replace(/^data:[^,]+,/, '');
+  if (b64.length > 14000000) throw new Error('Arquivo maior que ~10 MB.');
+  const f = ccPasta_(ctx).createFile(Utilities.newBlob(Utilities.base64Decode(b64), /^(application\/pdf|image\/(jpeg|png))$/.test(a.mime || '') ? a.mime : 'application/pdf', c.numero + ' - ' + String(a.nome || 'documento.pdf').replace(/[\\/:*?"<>|]/g, '-')));
+  c.arquivo_id = f.getId(); c.arquivo_nome = String(a.nome || f.getName()).slice(0, 120);
+}
 
 function ccListar_(q, ctx) {
   const fr = orcFrentes_(ctx);
@@ -36,7 +48,7 @@ function ccListar_(q, ctx) {
   let prazo = null;
   try { prazo = prazoObra_(ctx); } catch (e) { prazo = null; }
   return {
-    contratos: L, valor_total: r2_(L.filter(c => c.contrato).reduce((t, c) => t + c.valor, 0)), prazo: prazo, tipos: CC_TIPOS_,
+    contratos: L, assinado: !!ccPrincipal_(ctx), valor_total: r2_(L.filter(c => c.contrato).reduce((t, c) => t + c.valor, 0)), prazo: prazo, tipos: CC_TIPOS_,
     frentes: fr.map(f => ({ codigo: String(f.codigo), nome: f.nome, contrato: String(f.contrato || '') })), gere: pode_(ctx, 'orc_gerir')
   };
 }
@@ -59,13 +71,9 @@ function ccSalvar_(q, ctx) {
     valor: !ct || d.valor === '' || d.valor == null ? 0 : orcNum_(d.valor), dias_uteis: ct ? Math.max(0, parseInt(d.dias_uteis, 10) || 0) : 0,
     cliente: (d.cliente === undefined ? ct : d.cliente === true || d.cliente === 'Sim') ? 'Sim' : 'Não' });
   if (c.valor < 0) throw new Error('Valor negativo.');
-  if (!ct && !c.arquivo_id && !(q.arquivo && q.arquivo.b64)) throw new Error('Anexe o arquivo do documento (PDF ou imagem).');
-  if (q.arquivo && q.arquivo.b64) {
-    const a = q.arquivo, b64 = String(a.b64).replace(/^data:[^,]+,/, '');
-    if (b64.length > 14000000) throw new Error('Arquivo maior que ~10 MB.');
-    const f = ccPasta_(ctx).createFile(Utilities.newBlob(Utilities.base64Decode(b64), /^(application\/pdf|image\/(jpeg|png))$/.test(a.mime || '') ? a.mime : 'application/pdf', c.numero + ' - ' + String(a.nome || 'documento.pdf').replace(/[\\/:*?"<>|]/g, '-')));
-    c.arquivo_id = f.getId(); c.arquivo_nome = String(a.nome || f.getName()).slice(0, 120);
-  }
+  // contrato e aditivo só valem assinados: o documento é obrigatório para todos
+  if (!c.arquivo_id && !(q.arquivo && q.arquivo.b64)) throw new Error(ct ? 'Anexe o ' + tipo.toLowerCase() + ' assinado (PDF ou foto): sem o documento assinado ele não vale.' : 'Anexe o arquivo do documento (PDF ou imagem).');
+  if (q.arquivo && q.arquivo.b64) ccGuardarArquivo_(ctx, c, q.arquivo);
   if (novo) C.insert(c); else C.update(c);
   // frentes gerais deste contrato (as que estavam nele e saíram da lista ficam sem contrato)
   if (Array.isArray(d.frentes) && ct) {

@@ -15,7 +15,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const adm = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const usuario = (nome, perfil) => {
     const p = adm('admin_dados').perfis.find(x => x.perfil === perfil);
     adm('admin_usuario_salvar', { usuario: { nome, login: nome, ativo: true }, senha: 'Senha-Forte-26', acessos: [{ obra_id: obra, perfil, permissoes: p.permissoes }] });
@@ -25,7 +25,7 @@ function preparar() {
   return { G, adm, obra, eng: usuario('eng', 'Engenheiro'), eng2: usuario('fabiano', 'Engenheiro'), enc: usuario('joao', 'Encarregado') };
 }
 function etapaComFvs(t, modelo = 'FVS.04') {
-  const r = t.eng('exec_etapa_salvar', {
+  const r = t.eng('exec_etapa_salvar', { contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', 
     nome: 'Esgoto · Rua A', local: 'Rua A', itens: [
       { servico: 'Rede coletora PVC DN 150', qtd_prevista: 100, inicio: dia(-10), termino: dia(10), fvs_modelo: modelo },
       { servico: 'Boca de lobo', qtd_prevista: 10, inicio: dia(-10), termino: dia(10), fvs_modelo: '-' }

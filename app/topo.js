@@ -152,12 +152,14 @@ async function vTopo() {
     <div class="card emp-acoes"><div class="emp-ac">${acoes.map(([hr, i, t, cl]) => `<a class="emp-a tp-a ${cl || ''}" href="${hr}">${ic(i)}<span>${t}</span></a>`).join('')}</div></div>
     ${gere && !D.topografos.length ? `<div class="aviso warn">${ic('alert')} Nenhum topógrafo cadastrado. Em <a href="#/admin/usuarios">Usuários e acessos</a>, marque <b>Topografia: Topógrafo</b> no cadastro de cada um.</div>` : ''}
     ${gere ? tpEquipe(D) : ''}
+    ${tpLocaisHtml(D)}
     <div class="tp-col2">
       <div class="card"><div class="bp-h"><h3>${ic('estaca')} Hoje · ${fdc(h)}</h3><a class="linkbtn" href="#/topo/agenda">Agenda</a></div>
         <div class="tp-cards">${deHoje.map(d => tpCartao(d, { semTopo: !gere })).join('') || '<p class="vazio">Nada para hoje.</p>'}</div></div>
       <div class="card"><div class="bp-h"><h3>${ic('calendar')} Próximos dias</h3><a class="linkbtn" href="#/topo/demandas">Todas</a></div>
         <div class="tp-cards">${prox.slice(0, 8).map(d => tpCartao(d, { semTopo: !gere })).join('') || '<p class="vazio">Nada agendado.</p>'}</div></div>
     </div></div>`);
+  tpMapa(D);
 }
 /* equipe: ocupação dos próximos 10 dias úteis de cada topógrafo (agenda automática) */
 function tpEquipe(D) {
@@ -591,6 +593,61 @@ async function vTopoProducao(qs) {
       <p class="tp-sub">Com 3 ou mais dias lançados vale a média real do topógrafo naquele tipo de serviço; antes disso vale o padrão: ${Object.entries(R.padrao).map(([u, v]) => tpQ(v, u) + '/dia').join(' · ')} (Configurações → TOPO_PRODUTIVIDADE).</p>
       <table class="tp-tab"><tr><th>Topógrafo</th><th>Tipo</th><th class="n">Média/dia</th><th class="n">Dias</th></tr>${R.produtividade.filter(x => x.topografo_id && x.tipo).map(x => `<tr><td>${esc(nome(x.topografo_id))}</td><td>${tpTag(x.tipo)}</td><td class="n">${tpQ(x.media, x.unidade)}</td><td class="n">${x.dias}${x.dias < 3 ? ' <small>(ainda usa o padrão)</small>' : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="vazio">Sem lançamentos ainda.</td></tr>'}</table></details>
   </div>`);
+}
+
+/* ---------- localização do topógrafo (celular da empresa): manda ao abrir o app e a cada 10 min com ele aberto ---------- */
+const TP_LOC = { em: 0, timer: null };
+function topoLocalEnviar(forcar) {
+  if (topoNivel() !== 'Topógrafo' || !navigator.geolocation || document.hidden) return;
+  if (!forcar && Date.now() - TP_LOC.em < 9 * 60000) return;
+  TP_LOC.em = Date.now();
+  navigator.geolocation.getCurrentPosition(p => { api('topo_local', { lat: p.coords.latitude, lng: p.coords.longitude, precisao: p.coords.accuracy }).catch(() => {}); },
+    () => { TP_LOC.em = 0; }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
+}
+function topoLocalIniciar() {
+  if (topoNivel() !== 'Topógrafo' || !navigator.geolocation) return;
+  const ligar = () => {
+    topoLocalEnviar(true);
+    clearInterval(TP_LOC.timer);
+    TP_LOC.timer = setInterval(() => topoLocalEnviar(), 10 * 60000);
+    if (!TP_LOC.vis) { TP_LOC.vis = true; document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sess) topoLocalEnviar(); }); }
+  };
+  // aviso uma vez por aparelho (LGPD): o celular é da empresa e a localização é registrada com o app aberto
+  if (LS.get('cs_topo_loc')) return ligar();
+  modal(`${ic('pin')} Localização`, `<p>Este celular é da empresa. Com o app aberto, a <b>localização</b> dele é enviada para a Size (ao abrir e a cada 10 minutos), para a equipe saber onde a topografia está.</p>
+    <p><small>Com o app fechado nada é enviado. O celular vai pedir a permissão de localização: toque em <b>Permitir</b>.</small></p>`, {
+    ok: 'Entendi', onOk: () => { LS.set('cs_topo_loc', '1'); setTimeout(ligar, 50); }
+  });
+}
+/* mapa da equipe (quem gere): último ponto de cada topógrafo e o caminho de hoje */
+const tpHa = s => { if (!s) return ''; const m = Math.round((Date.now() - new Date(s.replace(' ', 'T')).getTime()) / 60000); return m < 2 ? 'agora' : m < 60 ? 'há ' + m + ' min' : m < 1440 ? 'há ' + Math.round(m / 60) + ' h' : fdh(s); };
+function tpLocaisHtml(D) {
+  if (!topoGere() || !D.topografos.length) return '';
+  const L = D.locais || [];
+  return `<div class="card"><div class="bp-h"><h3>${ic('pin')} Onde está a equipe</h3><small>localização enviada pelo celular ao abrir o app</small></div>
+    ${L.length ? '<div class="tp-mapa" id="tpMapa"></div>' : ''}
+    <div class="tp-loc">${D.topografos.map(t => { const x = L.find(l => l.id === t.id), rec = x && Date.now() - new Date(x.visto_em.replace(' ', 'T')).getTime() < 30 * 60000;
+      return `<div class="tp-loc-i"><span class="tp-loc-d ${rec ? 'on' : ''}"></span><span><b>${esc(t.nome)}</b><small>${x ? `${rec ? 'com o app aberto · ' : 'último acesso · '}${tpHa(x.visto_em)} (${fdh(x.visto_em)})${x.precisao ? ' · precisão ~' + Math.round(x.precisao) + ' m' : ''}` : 'ainda não enviou a localização'}</small></span>
+        ${x ? `<a class="linkbtn" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${x.lat},${x.lng}">${ic('pin')} abrir no mapa</a>` : ''}</div>`; }).join('')}</div></div>`;
+}
+async function tpMapa(D) {
+  const el = $('#tpMapa');
+  if (!el || typeof empLeaflet !== 'function') return;
+  try { await empLeaflet(); } catch (e) { el.remove(); return; }
+  if (!document.body.contains(el)) return;
+  const m = L.map(el, { scrollWheelZoom: false });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m);
+  const pts = [];
+  (D.locais || []).forEach((x, n) => {
+    const cor = ['#FF7A1A', '#14B8A6', '#2F6FEB', '#8B5CF6'][n % 4];
+    if (x.hoje.length > 1) L.polyline(x.hoje.map(p => [p[0], p[1]]), { color: cor, weight: 3, opacity: .7, dashArray: '6 6' }).addTo(m);
+    x.hoje.slice(0, -1).forEach(p => L.circleMarker([p[0], p[1]], { radius: 4, color: cor, fillOpacity: .8 }).bindTooltip(esc(x.nome.split(' ')[0]) + ' · ' + p[2] + (p[3] !== p[2] ? '–' + p[3] : '')).addTo(m));
+    L.marker([x.lat, x.lng], { icon: L.divIcon({ className: '', html: `<span class="tp-pin" style="--c:${cor}"><i>${esc(x.nome.slice(0, 2))}</i></span>`, iconSize: [36, 36], iconAnchor: [18, 34] }) })
+      .bindPopup(`<b>${esc(x.nome)}</b><br><small>${tpHa(x.visto_em)} · ${fdh(x.visto_em)}</small>${x.telefone ? `<br><a href="tel:${esc(x.telefone.replace(/\D/g, ''))}">${esc(x.telefone)}</a>` : ''}`).addTo(m);
+    pts.push([x.lat, x.lng]);
+  });
+  if (pts.length === 1) m.setView(pts[0], 15); else m.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+  if (window.ResizeObserver) new ResizeObserver(() => m.invalidateSize()).observe(el);
 }
 
 /* ---------- Início da empresa: cartão da topografia ---------- */

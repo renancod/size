@@ -11,7 +11,7 @@ function preparar() {
   const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const tk = call('login', { login: 'admin', senha }).token, adm = (acao, d = {}) => call(acao, { token: tk, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Prime Beach', sigla: 'PB' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Prime Beach', sigla: 'PB' }).id;
   adm('admin_config_salvar', { config: { MIN_ORCAMENTOS: 1, REGRAS_ORCAMENTO: '' } });
   const perfis = adm('admin_dados').perfis, p = perfis.find(x => x.perfil === 'Estoque');
   adm('admin_usuario_salvar', { usuario: { nome: 'mestre', login: 'mestre', ativo: true }, senha: 'Obra#Teste26', acessos: [{ obra_id: obra, perfil: 'Estoque', permissoes: p.permissoes }] });

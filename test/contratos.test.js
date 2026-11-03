@@ -14,7 +14,7 @@ function preparar() {
   const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
   const login = call('login', { login: 'admin', senha });
   const adm = (acao, d = {}) => call(acao, { token: login.token, ...d });
-  const obra = adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const usuario = (nome, perfil, extras = []) => {
     const p = adm('admin_dados').perfis.find(x => x.perfil === perfil);
     adm('admin_usuario_salvar', { usuario: { nome, login: nome, ativo: true }, senha: 'Senha-Forte-26', acessos: [{ obra_id: obra, perfil, permissoes: [...p.permissoes, ...extras] }] });
@@ -41,6 +41,7 @@ function contratoVigente(t, extra = {}) {
     pag_forma: 'Por medição', pag_periodicidade: 'Semanal', contratante_nome: 'SPE Prime Beach', itens: ITENS
   }, extra));
   liberar(t, id);
+  t.ctr('contrato_anexo', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   t.ctr('contrato_status', { id, op: 'ativar' });
   return { emp, id };
 }
@@ -88,6 +89,7 @@ test('cadastro do contrato: rascunho, totais da planilha e ativação com as reg
   assert.throws(() => t.ctr('contrato_status', { id, op: 'ativar' }), /bloqueado para assinatura.*responsabilidades técnicas/);
   assert.throws(() => t.ctr('contrato_minuta', { id, pdf: PDF }), /bloqueado para assinatura/);
   liberar(t, id);
+  t.ctr('contrato_anexo', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   t.ctr('contrato_status', { id, op: 'ativar' });
   assert.equal(t.ctr('contrato_detalhe', { id }).status, 'Vigente');
   // vigente: alteração só com motivo (fica no histórico)
@@ -96,7 +98,7 @@ test('cadastro do contrato: rascunho, totais da planilha e ativação com as reg
   assert.ok(t.ctr('contrato_detalhe', { id }).historico.some(h => /ajuste do objeto/.test(h.nota)));
   // aditivo soma ao valor e estende a vigência
   assert.throws(() => t.ctr('contrato_aditivo', { id, tipo: 'Prazo', descricao: 'x' }), /Descreva/);
-  t.ctr('contrato_aditivo', { id, tipo: 'Acréscimo de serviços', descricao: 'Mais 20 registros', valor: 6440, nova_vigencia: dia(400) });
+  t.ctr('contrato_aditivo', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, tipo: 'Acréscimo de serviços', descricao: 'Mais 20 registros', valor: 6440, nova_vigencia: dia(400) });
   const d2 = t.ctr('contrato_detalhe', { id });
   assert.equal(d2.resumo.contratado, 590738.48 + 6440);
   assert.equal(d2.vigencia_fim, dia(400));
@@ -142,7 +144,7 @@ test('frente de trabalho ligada ao contrato: serviços nascem da planilha, empre
   assert.throws(() => t.eng('exec_etapa_salvar', { nome: 'Y', empreiteiro: emp, contrato_id: id, itens: [{ contrato_item: i1.id, qtd_prevista: 10, inicio: dia(0), termino: dia(5), fvs_modelo: 'FVS.03' }] }), /não está vigente/);
   t.ctr('contrato_status', { id, op: 'reabrir', motivo: 'continua valendo' });
   // sem contrato continua valendo (e "-" desliga o vínculo)
-  const s = t.eng('exec_etapa_salvar', { nome: 'Avulsa', empreiteiro: emp, contrato_id: '-', itens: [{ servico: 'Hidrante', unidade: 'UN', qtd_prevista: 1, inicio: dia(0), termino: dia(3), fvs_modelo: 'FVS.03' }] });
+  const s = t.eng('exec_etapa_salvar', { nome: 'Avulsa', empreiteiro: emp, contrato_id: '-', sem_contrato_motivo: 'Equipe própria da Size (teste)', itens: [{ servico: 'Hidrante', unidade: 'UN', qtd_prevista: 1, inicio: dia(0), termino: dia(3), fvs_modelo: 'FVS.03' }] });
   assert.equal(t.eng('exec_dados').etapas.find(x => x.codigo === s.codigo).contrato_tipo, 'Sem contrato');
   // trocar o empreiteiro do contrato ou tirar item usado: travado
   assert.throws(() => t.ctr('contrato_salvar', { id, empreiteiro: outro, objeto: 'x', motivo: 'troca' }), /frentes de trabalho ligadas/);
@@ -206,7 +208,7 @@ test('número do contrato automático por obra: 01, 02, 03… sem repetir nem re
   const c = novo();
   assert.equal(num(c), '03');
   // outra obra começa de novo no 01
-  const obra2 = t.adm('admin_obra_criar', { nome: 'Outra Obra', sigla: 'OO', endereco: 'Rua Y' }).id;
+  const obra2 = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Outra Obra', sigla: 'OO', endereco: 'Rua Y' }).id;
   const emp2 = t.adm('exec_equipe_salvar', { obra: obra2, nome: 'Equipe Z', empresa: 'Z Ltda' }).codigo;
   const r = t.adm('contrato_salvar', { obra: obra2, empreiteiro: emp2, objeto: 'Rede', itens: ITENS });
   assert.equal(t.adm('contrato_detalhe', { obra: obra2, id: r.id }).rotulo, '01');
@@ -253,6 +255,7 @@ test('responsabilidade técnica (ART/RRT/TRT) é condição: só libera para ass
   assert.equal(t.ctr('contrato_detalhe', { id }).liberacao.liberado, false);
   t.ctr('contrato_rt_remover', { id, rt_id: nova });
   assert.equal(t.ctr('contrato_detalhe', { id }).liberacao.liberado, true);
+  t.ctr('contrato_anexo', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   t.ctr('contrato_status', { id, op: 'ativar' });
   assert.throws(() => t.ctr('contrato_rt_remover', { id, rt_id: art }), /Só dá para retirar/);
   assert.ok(t.ctr('contrato_detalhe', { id }).historico.some(h => /Responsabilidade técnica incluída/.test(h.acao)));

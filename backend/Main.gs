@@ -196,6 +196,7 @@ const ROTAS = {
   topo_diarios: { topo: 'Ver', fn: topoDiarios_ },
   topo_producao: { topo: 'Ver', fn: topoProducao_ },
   topo_arquivo: { topo: 'Ver', fn: topoArquivo_ },
+  topo_local: { topo: 'Ver', lock: true, fn: topoLocal_ },
 
   // portal do cliente (só leitura; cli: abre a obra do cliente e confere o módulo liberado)
   cli_inicio: { cli: 'orc', fn: cliInicio_ },

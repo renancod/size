@@ -45,6 +45,7 @@ test('orçamento: datas por etapa, valor distribuído por dias corridos em cada 
   assert.deepEqual(C.linhas.map(l => [l.descricao, l.ini]), [['Drenagem', '2027-02-01'], ['Terraplenagem', '2027-01-01']]);
   // aprovado e virou obra: frentes com as datas; o cronograma do orçamento não muda mais
   t.adm('prop_status', { id, op: 'aprovar' });
+  t.adm('prop_contrato', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   const obra = t.adm('prop_gerar_obra', { id, sigla: 'DU' }).obra_id;
   assert.throws(() => t.adm('prop_cronograma', { id, etapas: [] }), /dentro da obra/);
   const O = t.adm('crono_obra', { obra });
@@ -55,7 +56,7 @@ test('orçamento: datas por etapa, valor distribuído por dias corridos em cada 
 
 test('obra: previsto até hoje × executado pelo RDO × medido com FVS aprovada; a diferença espera FVS/medição', () => {
   const t = preparar();
-  const obra = t.adm('admin_obra_criar', { nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
+  const obra = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'Loteamento Sul', sigla: 'LS', endereco: 'Rua X' }).id;
   const o = (acao, d = {}) => t.adm(acao, { obra, ...d });
   const fr = o('orc_frente_salvar', { nome: 'Drenagem', preco: 100000 }).codigo;
   o('orc_itens_salvar', { frente: fr, itens: [

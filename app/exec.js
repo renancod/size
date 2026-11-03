@@ -252,6 +252,7 @@ function mEtapa(e, pre) {
     <div class="g2"><label>Responsável<input name="responsavel" value="${esc(e?.responsavel || '')}"></label><label>Observação<input name="obs" value="${esc(e?.obs || '')}"></label></div>
     <div class="g2"><label>Empreiteiro responsável <small>(as medições dele somam esta frente)</small><select name="empreiteiro"><option value="">— nenhum (equipe própria) —</option>${(D.equipes || []).filter(q => ativo(q, 'ativa')).map(q => `<option value="${esc(q.codigo)}" ${empIni === q.codigo ? 'selected' : ''}>${esc(q.nome)}${q.empresa ? ' · ' + esc(q.empresa) : ''}</option>`).join('')}</select></label>
       <label>Contrato de execução <small>(a planilha dele alimenta os serviços)</small><select name="ctr" required>${ctrOpcoes(empIni, ctrIni, e)}</select></label></div>
+    <label id="semCtr" ${ctrIni === '-' ? '' : 'hidden'}>Por que esta frente não tem contrato? <small>(obrigatório · fica registrado)</small><textarea name="sem_motivo" rows="2" minlength="10" placeholder="ex: equipe própria da Size, serviço por administração">${esc(e?.sem_contrato_motivo || '')}</textarea></label>
     ${can('contrato_gerir') ? '<small class="ct-dica">Contrato novo? Cadastre em <a href="#/ctr/novo">Medições → Contratos</a> e ative; ele aparece aqui.</small>' : ''}
     <div id="ctItens"></div><div id="orItens"></div>
     ${e ? `<div class="aviso info">Serviços já cadastrados: ${e.itens.map(i => esc(i.servico)).join(', ')}. Para mudar quantidade ou datas deles, use <b>Alterar</b> no serviço.</div>` : ''}
@@ -265,9 +266,10 @@ function mEtapa(e, pre) {
       const itens = $$('.srv', f).map(d => ({ servico: $('[name=s]', d).value.trim(), unidade: $('[name=u]', d).value.trim(), qtd_prevista: $('[name=q]', d).value, inicio: $('[name=i]', d).value || f.ini.value, termino: $('[name=t]', d).value || f.fim.value, fvs_modelo: $('[name=f]', d).value, contrato_item: d.dataset.ci || undefined, orc_item: d.dataset.orc || undefined }))
         .filter(x => x.servico || x.qtd_prevista);
       if (!f.ctr.value) throw new Error('Escolha o contrato desta frente (ou "Sem contrato").');
+      if (f.ctr.value === '-' && f.sem_motivo.value.trim().length < 10) throw new Error('Explique por que a frente não tem contrato (ex: equipe própria da Size).');
       const semFvs = itens.find(x => !x.fvs_modelo);
       if (semFvs) throw new Error('Escolha a FVS de ' + (semFvs.servico || 'cada serviço') + ': todo serviço concluído precisa de FVS.');
-      const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, empreiteiro: f.empreiteiro.value, contrato_id: f.ctr.value, itens, motivo: f.motivo?.value });
+      const r = await api('exec_etapa_salvar', { codigo: e?.codigo, nome: f.nome.value, local: f.local.value, frente: f.frente.value, responsavel: f.responsavel.value, obs: f.obs.value, empreiteiro: f.empreiteiro.value, contrato_id: f.ctr.value, sem_contrato_motivo: f.ctr.value === '-' ? f.sem_motivo.value : '', itens, motivo: f.motivo?.value });
       toast(r.msg); await carregarExec(true);
       location.hash = '#/exec/etapa/' + enc(r.codigo); if (e) rotear();
     }
@@ -350,8 +352,9 @@ function mEtapa(e, pre) {
     if (t) t.onclick = () => { livres.filter(i => i.a_programar > 0).forEach(i => add(i)); ctPainel(); orPainel(); };
   };
   const ctSemVazio = () => { const v = $('#srvs', f).children; if (v.length === 1 && !$('[name=s]', v[0]).value && !$('[name=q]', v[0]).value) v[0].remove(); };
-  f.empreiteiro.onchange = () => { f.ctr.innerHTML = ctrOpcoes(f.empreiteiro.value, '', e); ctPainel(); };
-  f.ctr.onchange = () => { $$('.srv[data-ci]', f).forEach(d => d.remove()); ctPainel(); orPainel(); };
+  const semCtr = () => { $('#semCtr', f).hidden = f.ctr.value !== '-'; };
+  f.empreiteiro.onchange = () => { f.ctr.innerHTML = ctrOpcoes(f.empreiteiro.value, '', e); ctPainel(); semCtr(); };
+  f.ctr.onchange = () => { $$('.srv[data-ci]', f).forEach(d => d.remove()); ctPainel(); orPainel(); semCtr(); };
   f.frente.onchange = () => orPainel();
   add();
   ctPainel();
@@ -464,6 +467,12 @@ const esquecerDia = d => { delete DIAS[S.obraId + '|' + d]; };
 async function vDiario(data) {
   titulo('Diário de obra');
   await carregarExec();
+  // início da obra: o diário só abre com o contrato assinado com o cliente anexado
+  if (EX.d.contrato_obra === false) {
+    view(`<div class="card vazio"><p>${ic('alert')} <b>Obra aguardando o contrato assinado com o cliente.</b></p><p>O diário de obra abre quando o contrato principal assinado for anexado.</p>
+      ${can(['orc_gerir', 'orc_ver']) ? `<a class="btn" href="#/obra/contratos">${ic('file')} Contratos e documentos</a>` : '<p><small>Avise o engenheiro ou o administrador.</small></p>'}</div>`);
+    return;
+  }
   await carregarDia(data);
 }
 function irDia(d) {

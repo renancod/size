@@ -194,7 +194,8 @@ function ctrDetalhe_(q, ctx) {
   linhas.forEach(l => { const o = orc[l.orc_item]; l.orc_unit_mo = o ? num_(o.unit_mo) : null; l.orc_servico = o ? o.servico : ''; });
   const comOrc = linhas.filter(l => l.orc_unit_mo != null), orcado = r2_(comOrc.reduce((t, l) => t + l.qtd * l.orc_unit_mo, 0)), contratadoOrc = r2_(comOrc.reduce((t, l) => t + l.total, 0));
   const aditivos = obraTab_(ctx, 'ContratoAditivos').all().filter(a => String(a.contrato) === String(c.id)).map(a => ({
-    id: a.id, numero: num_(a.numero), data: ymd_(a.data), tipo: a.tipo, descricao: a.descricao, valor: num_(a.valor), nova_vigencia: ymd_(a.nova_vigencia), criado_por: a.criado_por
+    id: a.id, numero: num_(a.numero), data: ymd_(a.data), tipo: a.tipo, descricao: a.descricao, valor: num_(a.valor), nova_vigencia: ymd_(a.nova_vigencia), criado_por: a.criado_por,
+    arquivo: !!a.arquivo_id, arquivo_nome: a.arquivo_nome || ''
   })).sort((a, b) => a.numero - b.numero);
   const frentes = calc.etapas.filter(e => String(e.contrato_id) === String(c.id)), semVinculo = [];
   frentes.forEach(e => e.itens.forEach(i => { if (!i.contrato_item) semVinculo.push({ etapa: e.codigo, etapa_nome: e.nome, servico: i.servico, unidade: i.unidade, executado: i.executado }); }));
@@ -306,6 +307,7 @@ function ctrStatus_(q, ctx) {
     if (!c.vigencia_ini) throw new Error('Informe o início da vigência.');
     if (!ctrAtivos_(ctx, c.id).length && !(num_(c.valor_global) > 0)) throw new Error('Cadastre a planilha de serviços (ou informe o valor global) antes de ativar.');
     ctrExigeLiberado_(ctx, c);                                      // sem as responsabilidades técnicas emitidas não vai para assinatura
+    if (!c.pdf_id) throw new Error('Anexe o contrato assinado antes de ativar: só o contrato assinado libera as frentes de trabalho.');
     novo = S.vig;
   } else if (acao === 'encerrar') { if (c.status !== S.vig) throw new Error('Só contrato vigente pode ser encerrado.'); novo = S.enc; }
   else if (acao === 'rescindir') { if (c.status !== S.vig) throw new Error('Só contrato vigente pode ser rescindido.'); exige(); novo = S.resc; }
@@ -330,8 +332,14 @@ function ctrAditivo_(q, ctx) {
   if (desc.length < 5) throw new Error('Descreva o aditivo.');
   const valor = q.valor === '' || q.valor == null ? 0 : num_(q.valor), nv = q.nova_vigencia ? dataDe_(q.nova_vigencia) : '';
   if (nv && c.vigencia_ini && ymd_(nv) < ymd_(c.vigencia_ini)) throw new Error('A nova vigência está antes do início do contrato.');
+  // o aditivo só vale assinado: o documento vai para a pasta do contrato no Drive
+  const arq = q.arquivo;
+  if (!arq || !arq.b64) throw new Error('Anexe o aditivo assinado (PDF ou foto): sem o documento assinado ele não vale.');
+  if (arq.b64.length > 14000000) throw new Error('Arquivo maior que ~10 MB.');
   const n = A.all().filter(a => String(a.contrato) === String(c.id)).reduce((m, a) => Math.max(m, num_(a.numero)), 0) + 1;
-  A.insert({ id: 'AD-' + Utilities.getUuid().slice(0, 6), contrato: c.id, numero: n, data: dataDe_(q.data) || new Date(), tipo: tipo, descricao: desc.slice(0, 1000), valor: valor, nova_vigencia: nv, criado_por: ctx.u.nome, criado_em: new Date() });
+  const file = ctrPasta_(ctx, c, T).createFile(Utilities.newBlob(Utilities.base64Decode(arq.b64), arq.mime || 'application/pdf', 'ADITIVO_' + n + '_' + stamp_() + '_' + limpa_(arq.nome)));
+  A.insert({ id: 'AD-' + Utilities.getUuid().slice(0, 6), contrato: c.id, numero: n, data: dataDe_(q.data) || new Date(), tipo: tipo, descricao: desc.slice(0, 1000), valor: valor, nova_vigencia: nv, criado_por: ctx.u.nome, criado_em: new Date(),
+    arquivo_id: file.getId(), arquivo_nome: String(arq.nome || file.getName()).slice(0, 120) });
   if (nv) c.vigencia_fim = nv;
   ctrHist_(c, ctx, 'Aditivo nº ' + n, tipo + (valor ? ' · ' + brl_(valor) : '') + (nv ? ' · vigência até ' + dataTxt_(ymd_(nv)) : ''));
   T.update(c);
@@ -370,6 +378,13 @@ function ctrMinuta_(q, ctx) {
 }
 function ctrAnexoVer_(q, ctx) {
   const c = ctrAchar_(ctx, q.id);
+  // aditivo assinado deste contrato
+  if (q.aditivo) {
+    const a = obraTab_(ctx, 'ContratoAditivos').all().find(x => String(x.id) === String(q.aditivo) && String(x.contrato) === String(c.id));
+    if (!a || !a.arquivo_id) throw new Error('Este aditivo não tem o documento assinado.');
+    const f = DriveApp.getFileById(a.arquivo_id);
+    return { nome: a.arquivo_nome || f.getName(), mime: f.getMimeType(), b64: Utilities.base64Encode(f.getBlob().getBytes()) };
+  }
   if (!c.pdf_id) throw new Error('Este contrato ainda não tem o arquivo assinado.');
   const file = DriveApp.getFileById(c.pdf_id);
   return { nome: c.pdf_nome || file.getName(), mime: file.getMimeType(), b64: Utilities.base64Encode(file.getBlob().getBytes()) };

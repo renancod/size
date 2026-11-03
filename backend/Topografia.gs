@@ -174,6 +174,7 @@ function topoDados_(q, ctx) {
     demandas: dem.map(d => topoPub_(d, B.ag)),
     lancamentos: lanc.map(x => ({ id: x.id, demanda: x.demanda, data: ymd_(x.data), topografo_id: String(x.topografo_id), qtd: topoR3_(x.qtd), unidade: topoUn_(x.unidade), terminou: sim_(x.terminou), fotos: json_(x.fotos_json, []).length })),
     ocupacao: gere ? B.ag.ocup : { [ctx.u.id]: B.ag.ocup[ctx.u.id] || {} },
+    locais: gere ? topoLocais_() : [],
     produtividade: { padrao: B.prod.padrao, tabela: B.prod.tabela.filter(p => gere || p.topografo_id === String(ctx.u.id)) }
   };
 }
@@ -403,6 +404,37 @@ function topoArquivo_(q, ctx) {
   topoMinha_(ctx, d);
   const f = DriveApp.getFileById(id), b = f.getBlob();
   return { nome: f.getName(), mime: b.getContentType(), b64: Utilities.base64Encode(b.getBytes()) };
+}
+
+/* ---------- localização do topógrafo (celular da empresa): o app manda ao abrir e a cada 10 min aberto ----------
+ * parado no mesmo lugar (até 60 m) só atualiza o horário do último ponto; guarda os últimos TOPO_LOCAIS_MAX pontos de cada um */
+const TOPO_LOCAIS_MAX = 60;
+function topoDist_(a, b) {
+  const r = Math.PI / 180, x = (num_(b.lng) - num_(a.lng)) * r * Math.cos((num_(a.lat) + num_(b.lat)) / 2 * r), y = (num_(b.lat) - num_(a.lat)) * r;
+  return Math.sqrt(x * x + y * y) * 6371000;
+}
+function topoLocal_(q, ctx) {
+  if (norm_(ctx.u.topografia) !== norm_('Topógrafo')) return { ok: true, ignorado: true };
+  const lat = num_(q.lat), lng = num_(q.lng), prec = Math.round(num_(q.precisao));
+  if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && lat && lng)) throw new Error('Localização inválida.');
+  const T = central_('TopoLocais'), meus = T.all().filter(x => String(x.usuario_id) === String(ctx.u.id)), ult = meus[meus.length - 1], agora = new Date();
+  const p = { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
+  if (ult && topoDist_(ult, p) <= 60 && ymd_(ult.em) === hojeYmd_()) { ult.visto_em = agora; if (prec && (!num_(ult.precisao) || prec < num_(ult.precisao))) Object.assign(ult, p, { precisao: prec }); T.update(ult); }
+  else {
+    T.insert(Object.assign({ usuario_id: ctx.u.id, usuario: ctx.u.nome, precisao: prec || '', em: agora, visto_em: agora }, p));
+    if (meus.length + 1 > TOPO_LOCAIS_MAX) { const velhos = meus.slice(0, meus.length + 1 - TOPO_LOCAIS_MAX); T.removeWhere(x => velhos.indexOf(x) >= 0); }
+  }
+  return { ok: true };
+}
+/* último ponto de cada topógrafo e o caminho de hoje (para o mapa de quem gere) */
+function topoLocais_() {
+  const hoje = hojeYmd_(), por = {};
+  central_('TopoLocais').all().forEach(x => { (por[x.usuario_id] = por[x.usuario_id] || []).push(x); });
+  return topoTopografos_().filter(t => por[t.id]).map(t => {
+    const l = por[t.id], u = l[l.length - 1];
+    return { id: t.id, nome: t.nome, telefone: t.telefone, lat: num_(u.lat), lng: num_(u.lng), precisao: num_(u.precisao) || '', em: fmtVal_(u.em), visto_em: fmtVal_(u.visto_em || u.em),
+      hoje: l.filter(x => ymd_(x.em) === hoje).map(x => [num_(x.lat), num_(x.lng), fmtVal_(x.em).slice(11, 16), fmtVal_(x.visto_em || x.em).slice(11, 16)]) };
+  });
 }
 
 /* ---------- avisos (sino e celular): o topógrafo recebe as demandas novas, mudanças de data e o lembrete da véspera;

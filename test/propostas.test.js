@@ -173,10 +173,10 @@ test('importar: mesmo código de OUTRA planilha com outra composição não sobr
 
 test('obra: localização escolhida no mapa ao criar; excluir pede a sigla, tira do sistema e guarda a pasta em "Obras excluídas"', () => {
   const t = preparar();
-  const r = t.adm('admin_obra_criar', { nome: 'AVA Residence', sigla: 'AVA', endereco: 'Maquiné/RS', lat: '-29,78378', lng: -50.07392 });
+  const r = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'AVA Residence', sigla: 'AVA', endereco: 'Maquiné/RS', lat: '-29,78378', lng: -50.07392 });
   let o = t.adm('admin_dados').obras.find(x => x.id === r.id);
   assert.deepEqual([o.lat, o.lng], [-29.78378, -50.07392]);
-  assert.throws(() => t.adm('admin_obra_criar', { nome: 'X', sigla: 'XX', lat: 123, lng: 0 }), /inválidas/);
+  assert.throws(() => t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'X', sigla: 'XX', lat: 123, lng: 0 }), /inválidas/);
   const pasta = o.pasta_id;
   assert.throws(() => t.adm('admin_obra_excluir', { id: r.id, confirmar: 'PB' }), /digite a sigla/);
   assert.match(t.adm('admin_obra_excluir', { id: r.id, confirmar: 'ava' }).msg, /Obras excluídas/);
@@ -192,6 +192,8 @@ test('gerar obra: frentes = etapas, serviços com material, mão de obra e preç
   const id = novo(t);
   assert.throws(() => t.adm('prop_gerar_obra', { id, sigla: 'RD' }), /aprovado/);
   t.adm('prop_status', { id, op: 'aprovar' });
+  assert.throws(() => t.adm('prop_gerar_obra', { id, sigla: 'RD' }), /contrato assinado/);
+  t.adm('prop_contrato', { id, arquivo: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' } });
   const r = t.adm('prop_gerar_obra', { id, sigla: 'RD' });
   assert.match(r.msg, /2 frentes gerais, 3 serviços e 3 materiais/);
   const obra = r.obra_id, o = (acao, d = {}) => t.adm(acao, { obra, ...d });
