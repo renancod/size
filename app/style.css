@@ -836,7 +836,7 @@ button.rel-chip{cursor:pointer}button.rel-chip:hover{background:rgba(255,255,255
 @media (min-width:900px){.bp-2{grid-template-columns:1fr 1fr}}
 .bp-linha{display:flex;align-items:center;gap:12px;width:100%;padding:9px 6px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;text-decoration:none;border-radius:8px}
 .bp-linha:last-child{border-bottom:0}.bp-linha:hover{background:#F7F9FC}
-.bp-linha>span:nth-of-type(1),.bp-linha>span:first-child:not(.bp-mono){flex:1;min-width:0;display:grid;gap:1px}
+.bp-linha>span:nth-of-type(1):not(.bp-foto),.bp-linha>span:first-child:not(.bp-mono):not(.bp-foto){flex:1;min-width:0;display:grid;gap:1px}
 .bp-linha b{color:var(--bp-ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bp-linha small{font-size:.76rem}
 .bp-linha .bp-mono{white-space:nowrap;font-weight:700;color:var(--bp-ink);text-align:right}
 .bp-linha .bp-mono small{font-weight:500;color:var(--mute)}
@@ -1668,3 +1668,6 @@ label.chk{display:flex;gap:8px;align-items:center;font-weight:500;color:var(--tx
 .bp-conf label.chk{align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}.bp-conf label.chk input{margin-top:3px}.bp-conf label.chk span{display:grid;gap:2px}
 .cc-doc{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}.cc-doc .acoes{flex-wrap:nowrap}
 .cl-cor.cl-logo{background:#fff;border:2px solid;overflow:hidden}.cl-cor.cl-logo img{max-width:92%;max-height:92%;object-fit:contain}
+/* faixas de filtros (chips): no computador quebram em linhas (o mouse não arrasta para o lado); no celular arrastam com o dedo, com degradê na borda */
+@media (min-width:760px) and (hover:hover){.chips{flex-wrap:wrap;overflow:visible}.chips .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}}
+@media (max-width:759px),(hover:none){.chips{padding-right:28px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}}
