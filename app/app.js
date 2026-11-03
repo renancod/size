@@ -645,7 +645,7 @@ function fecharModal() { const m = $('#modal'); m.classList.remove('on'); m.inne
 const ETAPA_NOTIF = {
   cotar: ['Para cotar', 'cart'], definir: ['Orçamentos recebidos', 'file'], aprovar: ['Aprovar compra', 'check'], liberar: ['Liberar entrega', 'truck'],
   receber: ['Receber material', 'box'], entrega: ['Previsão de entrega', 'truck'], pagar: ['Pagamentos', 'money'], nf: ['Aguardando nota fiscal', 'file'],
-  pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'],
+  pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'], nf_conf: ['Nota com diferença', 'alert'],
   exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file'],
   fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip'],
   medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2'], prop_cli: ['Portal do cliente', 'eye']
@@ -983,6 +983,9 @@ async function vPedido(numero) {
       </dl>
     </div>
 
+    ${p.nf_alerta ? `<div class="card"><div class="aviso warn"><b>Nota fiscal com diferença</b><br>${esc(p.nf_alerta).replace(/\n/g, '<br>')}
+      ${can(['compras_cotar', 'compras_definir', 'compras_aprovar', 'financeiro']) ? '<p><button type="button" class="btn sec peq" id="nfOk">Marcar como resolvido</button></p>' : '<br><small>Compras foi avisado.</small>'}</div></div>` : ''}
+
     <div class="card"><h3>Materiais</h3><div class="rolar"><table class="tab"><tr><th>#</th><th>Material</th><th class="n">Pedido</th><th class="n">Recebido</th>${itensTot ? '<th class="n">Valor</th>' : ''}</tr>
       ${d.itens.map(i => `<tr><td>${i.item}</td><td>${esc(i.descricao)}${i.material_cod ? '' : ' <small>(fora do cadastro)</small>'}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade)}</td>
         <td class="n ${num(i.qtd_recebida) >= num(i.qtd) ? '' : num(i.qtd_recebida) ? 'atrasado' : ''}">${nf(i.qtd_recebida)}</td>${itensTot ? `<td class="n">${i.valor_unit !== '' ? brl(num(i.valor_unit) * num(i.qtd)) : ''}</td>` : ''}</tr>`).join('')}
@@ -996,7 +999,7 @@ async function vPedido(numero) {
       ${p.aprovado_por ? `<dt>Aprovado</dt><dd>${esc(p.aprovado_por)} · ${fdh(p.aprovado_em)}</dd>` : ''}
       ${p.excecao_orc ? `<dt>Exceção</dt><dd class="atrasado">${esc(p.excecao_orc)}</dd>` : ''}
       ${p.liberado_em ? `<dt>Liberado</dt><dd>${fdh(p.liberado_em)}</dd>` : ''}
-      ${p.nf_numero ? `<dt>Nota fiscal</dt><dd>${esc(p.nf_numero)} · ${fd(p.nf_em)}</dd>` : ''}
+      ${p.nf_numero ? `<dt>Nota fiscal</dt><dd>${esc(p.nf_numero)} · ${fd(p.nf_em)}${p.nf_valor ? ' · ' + brl(p.nf_valor) : ''}${p.nf_chave ? `<br><small class="nf-chave">${String(p.nf_chave).split(' ').map(c => esc(c.replace(/^NFe/, '').replace(/(\d{4})(?=\d)/g, '$1 '))).join('<br>')}</small>` : ''}</dd>` : ''}
       ${p.vencimento ? `<dt>Vencimento</dt><dd class="${p.fin !== 'Pago' && vencido(p.vencimento) ? 'atrasado' : ''}">${fd(p.vencimento)}</dd>` : ''}
       ${p.fin ? `<dt>Financeiro</dt><dd>${esc(p.fin)}${p.pago_em ? ' em ' + fd(p.pago_em) + (p.forma_pagto ? ' · ' + esc(p.forma_pagto) : '') : ''}</dd>` : ''}
     </dl></div>` : ''}
@@ -1023,6 +1026,7 @@ async function vPedido(numero) {
 
   $$('[data-ver]').forEach(b => { b.onclick = () => verArquivo(b.dataset.ver); });
   $$('[data-orc]').forEach(b => { b.onclick = () => mOrc(d, d.orcamentos.find(o => o.id === b.dataset.orc)); });
+  if ($('#nfOk')) $('#nfOk').onclick = () => mNFOk(d);
   const ACOES = {
     cotar: () => mCotar([p.numero]), orc: () => mOrc(d), definir: () => mDefinir(d), aprovar: () => mAprovar(d), devolver: () => mMotivo(d, 'pedido_devolver', 'Reprovar compra', 'Reprovar', 'A compra volta para Compras refazer a cotação. Para desistir do pedido de vez, use "Cancelar".'),
     pagar: () => mPagar(d), liberar: () => mLiberar(d), receber: () => mReceber(d), nf: () => mNF(d), anexar: () => mAnexar(d), portal: () => mPortal(d), cancelar: () => mMotivo(d, 'pedido_cancelar', 'Cancelar pedido', 'Cancelar pedido')
@@ -1202,6 +1206,82 @@ function mLiberar(d) {
   });
 }
 
+/* ---------- nota pelo código de barras da DANFE ----------
+ * O código traz só a chave de 44 números (estado, mês, CNPJ de quem emitiu, série e número); o valor total é digitado.
+ * A conferência de verdade é no servidor (Pedidos.gs conferirNF_); aqui só mostra na hora o que já dá para ver. */
+const NF_LEITOR = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
+function nfeChave(s) {
+  const c = String(s || '').replace(/\D/g, '');
+  if (c.length !== 44) return null;
+  let soma = 0;
+  for (let i = 42, peso = 2; i >= 0; i--, peso = peso === 9 ? 2 : peso + 1) soma += Number(c[i]) * peso;
+  const r = soma % 11;
+  if ((r < 2 ? 0 : 11 - r) !== Number(c[43])) return null;
+  return { chave: c, ano: 2000 + Number(c.slice(2, 4)), mes: Number(c.slice(4, 6)), cnpj: c.slice(6, 20), modelo: c.slice(20, 22), serie: String(Number(c.slice(22, 25))), numero: String(Number(c.slice(25, 34))) };
+}
+const cnpjFmt = c => String(c).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+const nfCampos = () => `<div class="nf-ler">
+    <button type="button" class="btn sec" id="nfCam">${ic('search')} Ler código de barras da nota</button>
+    <label>Chave da nota <small>(lida pela câmera ou digitada: 44 números)</small><input name="nfch" inputmode="numeric" autocomplete="off" placeholder="0000 0000 0000 …"></label>
+    <div id="nfInfo"></div>
+    <label>Valor total da nota <small>(olhando a DANFE)</small><input name="nfv" inputmode="decimal" placeholder="R$ 0,00"></label></div>`;
+function nfLiga(f, p, valores) {
+  const forn = S.dados.fornecedores.find(x => x.codigo === p.fornecedor_cod);
+  const cf = String(forn && forn.cnpj || '').replace(/\D/g, '');
+  const mostra = () => {
+    const bruto = f.nfch.value.replace(/\D/g, ''), k = nfeChave(bruto), info = $('#nfInfo', f), L = [];
+    if (!bruto) { info.innerHTML = ''; return; }
+    if (!k) { info.innerHTML = `<div class="aviso warn">${bruto.length === 44 ? 'Chave inválida (o dígito final não confere): leia de novo ou confira a digitação.' : `Faltam números: ${bruto.length} de 44.`}</div>`; return; }
+    if (f.nfn) f.nfn.value = k.numero;
+    if (cf.length === 14 && cf.slice(0, 8) !== k.cnpj.slice(0, 8)) L.push(`Nota emitida pelo CNPJ ${cnpjFmt(k.cnpj)} — <b>não é do fornecedor do pedido</b> (${esc(p.fornecedor)}).`);
+    const h = new Date(), meses = (h.getFullYear() - k.ano) * 12 + (h.getMonth() + 1 - k.mes);
+    if (meses > 3) L.push(`Nota emitida em ${('0' + k.mes).slice(-2)}/${k.ano}, mais de 3 meses atrás.`);
+    if (!['55', '65'].includes(k.modelo)) L.push('Este código não é de nota fiscal de produto.');
+    const v = num(f.nfv.value), tot = num(p.valor_total);
+    if (valores && v > 0 && tot > 0 && Math.abs(v - tot) > Math.max(1, tot * 0.01)) L.push(`Valor da nota ${brl(v)} diferente do pedido ${brl(tot)} (se for entrega parcial, pode ser só do que chegou).`);
+    info.innerHTML = `<div class="aviso ${L.length ? 'warn' : 'ok'}"><b>NF ${esc(k.numero)}</b> · série ${esc(k.serie)} · ${('0' + k.mes).slice(-2)}/${k.ano} · CNPJ ${cnpjFmt(k.cnpj)}
+      ${L.length ? '<br>' + L.join('<br>') + '<br><small>Pode confirmar mesmo assim: Compras recebe o aviso para resolver.</small>' : `<br>${cf ? 'Confere com o fornecedor do pedido.' : '<small>Fornecedor sem CNPJ no cadastro: não deu para conferir quem emitiu.</small>'}`}</div>`;
+  };
+  f.nfch.oninput = mostra; f.nfv.oninput = mostra;
+  $('#nfCam', f).onclick = () => nfCamera(c => { f.nfch.value = c.replace(/(\d{4})(?=\d)/g, '$1 '); mostra(); });
+}
+// câmera por cima do formulário (o modal continua aberto embaixo); Android usa o leitor do próprio aparelho, iPhone a biblioteca
+async function nfCamera(achou) {
+  const o = document.createElement('div');
+  o.className = 'nf-cam';
+  o.innerHTML = `<div class="nf-cam-cx"><p>Aponte para o <b>código de barras</b> da nota (em cima, à direita na DANFE). Deite o celular se ajudar.</p>
+    <div id="nfVideo"></div><p class="nf-cam-msg"><span class="spin"></span> Abrindo a câmera…</p>
+    <div class="acoes"><label class="btn sec">Tirar foto<input type="file" accept="image/*" capture="environment" hidden></label><button type="button" class="btn">Fechar</button></div></div>`;
+  document.body.appendChild(o);
+  const msg = $('.nf-cam-msg', o);
+  let leitor = null, fim = false;
+  const fechar = async () => { if (fim) return; fim = true; try { if (leitor && leitor.isScanning) await leitor.stop(); } catch (e) { } o.remove(); };
+  const ok = txt => { const k = nfeChave(txt); if (!k || fim) return false; if (navigator.vibrate) navigator.vibrate(120); fechar(); achou(k.chave); return true; };
+  $('button', o).onclick = fechar;
+  try {
+    if (!window.Html5Qrcode) await carregarScript(NF_LEITOR);
+    leitor = new Html5Qrcode('nfVideo', { formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128], useBarCodeDetectorIfSupported: true, verbose: false });
+    $('input[type=file]', o).onchange = async e => {
+      const a = e.target.files[0];
+      if (!a) return;
+      msg.textContent = 'Lendo a foto…';
+      try { if (leitor.isScanning) await leitor.stop(); if (!ok(await leitor.scanFile(a, false))) msg.textContent = 'O código lido não é a chave da nota. Tente de novo mais perto.'; }
+      catch (x) { msg.textContent = 'Não achei o código na foto. Tire mais perto e com o código reto; ou digite a chave.'; }
+    };
+    await leitor.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => ({ width: Math.floor(w * 0.92), height: Math.max(60, Math.floor(Math.min(w, h) * 0.3)) }) }, ok, () => { });
+    if (!fim) msg.textContent = 'Procurando o código…';
+  } catch (x) {
+    if (!fim) msg.textContent = (window.Html5Qrcode ? 'Não deu para abrir a câmera (permissão negada?). ' : 'Sem internet para carregar o leitor. ') + 'Use "Tirar foto" ou digite a chave.';
+  }
+}
+// depois de gravar: diferença da nota aparece em destaque (o toast some rápido)
+async function nfDepois(r) {
+  await depois(r);
+  // setTimeout: abre depois que o formulário de origem fechar
+  if (r.alertas && r.alertas.length) setTimeout(() => modal('Nota com diferença', `<div class="aviso warn">${r.alertas.map(esc).join('<br>')}</div>
+    <p>Foi gravado assim mesmo. Compras recebe o aviso no sino para resolver com o fornecedor.</p>`, { ok: 'Entendi' }), 0);
+}
+
 function mReceber(d) {
   const p = d.pedido, falta = i => Math.max(0, num(i.qtd) - num(i.qtd_recebida));
   const frentes = (S.dados.frentes || []).filter(x => ativo(x, 'ativa') || x.nome === p.frente);
@@ -1210,7 +1290,9 @@ function mReceber(d) {
     <div class="acoes"><button type="button" class="btn sec peq" id="tudo">Recebi tudo</button><button type="button" class="btn sec peq" id="zera">Zerar</button></div>
     <div>${d.itens.map(i => `<div class="rec ${falta(i) ? '' : 'feito'}"><div><b>${esc(i.descricao)}</b><small>Pedido ${nf(i.qtd)} ${esc(i.unidade)} · já recebido ${nf(i.qtd_recebida)} · falta ${nf(falta(i))}</small></div>
       <input name="q_${i.item}" type="number" step="any" min="0" max="${falta(i)}" inputmode="decimal" placeholder="0" ${falta(i) ? '' : 'disabled'} data-falta="${falta(i)}"></div>`).join('')}</div>
-    <div class="g2"><label>Nº da nota fiscal <small>(se veio)</small><input name="nfn" inputmode="numeric"></label><label>Emissão da NF<input type="date" name="nfd"></label></div>
+    <h4 class="nf-tit">Nota fiscal <small>(se veio com o material)</small></h4>
+    ${nfCampos()}
+    <div class="g2"><label>Nº da nota fiscal<input name="nfn" inputmode="numeric"></label><label>Emissão da NF<input type="date" name="nfd"></label></div>
     ${campoArquivo('nf', 'Foto/PDF da nota fiscal')}
     ${campoArquivo('foto', 'Foto da entrega')}
     <label>Observação<input name="obs" placeholder="ex: 2 sacos avariados"></label>
@@ -1220,20 +1302,29 @@ function mReceber(d) {
       const itens = {};
       d.itens.forEach(i => { const v = f['q_' + i.item].value; if (v) itens[i.item] = v; });
       if (f.encerrar.checked && !f.obs.value.trim()) throw new Error('Explique na observação por que o restante não virá.');
-      return depois(await api('pedido_receber', { numero: p.numero, itens, frente: f.frente.value, nf_numero: f.nfn.value, nf_data: f.nfd.value, nf: await lerArquivo(f.nf), foto: await lerArquivo(f.foto), obs: f.obs.value, encerrar: f.encerrar.checked }));
+      return nfDepois(await api('pedido_receber', { numero: p.numero, itens, frente: f.frente.value, nf_numero: f.nfn.value, nf_data: f.nfd.value, nf_chave: f.nfch.value, nf_valor: f.nfv.value, nf: await lerArquivo(f.nf), foto: await lerArquivo(f.foto), obs: f.obs.value, encerrar: f.encerrar.checked }));
     }
   });
+  nfLiga(f, p, d.valores !== false);
   $('#tudo').onclick = () => $$('input[data-falta]', f).forEach(x => { if (!x.disabled) x.value = x.dataset.falta; });
   $('#zera').onclick = () => $$('input[data-falta]', f).forEach(x => { x.value = ''; });
 }
 
 function mNF(d) {
   const p = d.pedido;
-  modal('Nota fiscal', `<div class="g2"><label>Número da NF<input name="nfn" inputmode="numeric" value="${esc(p.nf_numero === 's/ nº' ? '' : p.nf_numero || '')}"></label>
+  const f = modal('Nota fiscal', `${nfCampos()}
+    <div class="g2"><label>Número da NF<input name="nfn" inputmode="numeric" value="${esc(p.nf_numero === 's/ nº' ? '' : p.nf_numero || '')}"></label>
     <label>Data de emissão<input type="date" name="nfd" value="${p.nf_em ? String(p.nf_em).slice(0, 10) : hoje()}"></label></div>
     ${campoArquivo('arq', 'PDF ou foto da nota')}
     ${p.fin === 'Aguardando NF' ? `<div class="aviso info">Com a nota registrada o pedido vai para o financeiro (vencimento = emissão + ${esc(p.prazo_fat || 0)} dias).</div>` : ''}`,
-  { ok: 'Salvar nota', onOk: async f => depois(await api('pedido_nf', { numero: p.numero, nf_numero: f.nfn.value, nf_data: f.nfd.value, arquivo: await lerArquivo(f.arq) })) });
+  { ok: 'Salvar nota', onOk: async f => nfDepois(await api('pedido_nf', { numero: p.numero, nf_numero: f.nfn.value, nf_data: f.nfd.value, nf_chave: f.nfch.value, nf_valor: f.nfv.value, arquivo: await lerArquivo(f.arq) })) });
+  nfLiga(f, p, d.valores !== false);
+}
+
+function mNFOk(d) {
+  modal('Diferença da nota', `<div class="aviso warn">${esc(d.pedido.nf_alerta).replace(/\n/g, '<br>')}</div>
+    <label>O que foi resolvido<input name="obs" required placeholder="ex: fornecedor vai emitir nota de complemento"></label>`,
+  { ok: 'Marcar como resolvido', onOk: async f => depois(await api('pedido_nf_ok', { numero: d.pedido.numero, obs: f.obs.value })) });
 }
 
 function mAnexar(d) {

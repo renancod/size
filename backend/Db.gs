@@ -43,7 +43,7 @@ const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',
     'status', 'entrega', 'fin', 'cotado_a', 'fornecedor_cod', 'fornecedor', 'valor_total', 'condicao', 'prazo_fat', 'previsao',
     'excecao_orc', 'aprovado_por', 'aprovado_em', 'liberado_em', 'recebido_em', 'nf_numero', 'nf_em', 'vencimento',
-    'forma_pagto', 'pago_em', 'pago_por', 'pasta_url', 'historico', 'atualizado_em'],
+    'forma_pagto', 'pago_em', 'pago_por', 'pasta_url', 'historico', 'atualizado_em', 'nf_chave', 'nf_valor', 'nf_alerta'],
   Itens: ['pedido', 'item', 'material_cod', 'descricao', 'unidade', 'qtd', 'qtd_recebida', 'valor_unit'],
   Orcamentos: ['id', 'pedido', 'fornecedor_cod', 'fornecedor', 'valor', 'prazo_entrega', 'condicao', 'arquivo_id', 'arquivo_url', 'origem', 'recebido_em', 'registrado_por'],
   Fornecedores: ['codigo', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'materiais', 'condicao', 'obs', 'ativo'],

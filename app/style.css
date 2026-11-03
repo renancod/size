@@ -1672,3 +1672,16 @@ label.chk{display:flex;gap:8px;align-items:center;font-weight:500;color:var(--tx
 @media (min-width:760px) and (hover:hover){.chips{flex-wrap:wrap;overflow:visible}.chips .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}}
 @media (max-width:759px),(hover:none){.chips{padding-right:28px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}}
 .g3{display:grid;gap:12px;grid-template-columns:1fr}@media (min-width:640px){.g3{grid-template-columns:repeat(3,1fr)}}
+
+/* nota pelo código de barras: câmera por cima do formulário do recebimento */
+.nf-tit{margin:14px 0 4px;font-size:14px}
+.nf-ler{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.nf-ler>.btn{align-self:flex-start}
+.nf-chave{font-family:var(--bp-mono);font-size:11px;color:var(--mute);word-break:break-all}
+.nf-cam{position:fixed;inset:0;z-index:300;background:rgba(5,12,30,.88);display:flex;align-items:center;justify-content:center;padding:calc(12px + var(--sat)) 12px calc(12px + var(--sab))}
+.nf-cam-cx{background:var(--card);color:var(--txt);border-radius:var(--r);padding:14px;width:100%;max-width:520px;display:flex;flex-direction:column;gap:10px}
+.nf-cam-cx p{margin:0;font-size:14px}
+#nfVideo{width:100%;min-height:200px;background:#000;border-radius:8px;overflow:hidden}
+#nfVideo video{width:100%!important;display:block}
+.nf-cam-msg{color:var(--mute);display:flex;align-items:center;gap:8px}
+.nf-cam .acoes{justify-content:flex-end}

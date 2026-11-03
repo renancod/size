@@ -51,11 +51,13 @@ function veTodos_(ctx) {
 function veValores_(ctx) {
   return pode_(ctx, ['financeiro', 'compras_cotar', 'compras_definir', 'compras_aprovar', 'compras_liberar']);
 }
-const CAMPOS_VALOR_ = ['valor_total', 'prazo_fat', 'vencimento', 'forma_pagto', 'pago_em', 'excecao_orc'];
+const CAMPOS_VALOR_ = ['valor_total', 'prazo_fat', 'vencimento', 'forma_pagto', 'pago_em', 'excecao_orc', 'nf_valor'];
 const ARQ_VALOR_ = ['ORC', 'COMPROVANTE', 'BOLETO', 'OC'];
+const tiraValores_ = s => String(s).replace(/R\$\s?-?\d[\d.]*(,\d+)?/g, 'R$ •••');
 function semValores_(o) {
   CAMPOS_VALOR_.forEach(k => { if (k in o) o[k] = ''; });
-  if (o.historico) o.historico = String(o.historico).replace(/R\$\s?-?[\d.,]+/g, 'R$ •••');
+  if (o.historico) o.historico = tiraValores_(o.historico);
+  if (o.nf_alerta) o.nf_alerta = tiraValores_(o.nf_alerta);
   return o;
 }
 function encerradoParaEstoque_(p) {
@@ -359,11 +361,72 @@ function registrarNF_(ctx, p, numero, data) {
 function pedidoNF_(q, ctx) {
   const p = achar_(ctx, q.numero);
   if (p.status !== 'Aprovado' && p.status !== 'Concluído') throw new Error('A nota fiscal só entra depois da compra aprovada.');
-  if (!String(q.nf_numero || '').trim() && !(q.arquivo && q.arquivo.b64)) throw new Error('Informe o número da nota ou anexe o arquivo.');
+  if (!String(q.nf_numero || '').trim() && !String(q.nf_chave || '').trim() && !(q.arquivo && q.arquivo.b64)) throw new Error('Informe o número da nota, leia o código de barras ou anexe o arquivo.');
+  const al = nfConferir_(ctx, p, q, []);
   if (q.arquivo && q.arquivo.b64) salvarArquivo_(ctx, p, 'NF', q.arquivo, 'nota fiscal');
   registrarNF_(ctx, p, q.nf_numero, q.nf_data);
   salvar_(ctx, p);
-  return { msg: 'Nota fiscal registrada.' + (p.fin === 'A pagar' ? ' Encaminhada ao financeiro.' : '') };
+  return { msg: 'Nota fiscal registrada.' + (p.fin === 'A pagar' ? ' Encaminhada ao financeiro.' : '') + nfMsg_(ctx, al), alertas: nfAlertasVer_(ctx, al) };
+}
+
+/* ---------- conferência da nota pelo código de barras da DANFE ----------
+ * A chave de acesso (44 números) traz estado, ano/mês, CNPJ de quem emitiu, modelo, série e número; não traz valor
+ * nem itens (o valor total o recebedor digita olhando a DANFE). Nada aqui impede o recebimento: o que não bate fica
+ * anotado no pedido (nf_alerta) e avisa Compras/financeiro no sino até alguém marcar como resolvido. */
+function nfeChave_(s) {
+  const c = String(s || '').replace(/\D/g, '');
+  if (!c) return null;
+  if (c.length !== 44) throw new Error('A chave da nota tem 44 números (veio com ' + c.length + '). Leia o código de barras de novo ou confira a digitação.');
+  let soma = 0;
+  for (let i = 42, peso = 2; i >= 0; i--, peso = peso === 9 ? 2 : peso + 1) soma += Number(c[i]) * peso;
+  const r = soma % 11;
+  if ((r < 2 ? 0 : 11 - r) !== Number(c[43])) throw new Error('Chave da nota inválida (o dígito final não confere). Leia o código de barras de novo ou confira a digitação.');
+  return { chave: c, uf: c.slice(0, 2), ano: 2000 + Number(c.slice(2, 4)), mes: Number(c.slice(4, 6)), cnpj: c.slice(6, 20), modelo: c.slice(20, 22), serie: String(Number(c.slice(22, 25))), numero: String(Number(c.slice(25, 34))) };
+}
+const cnpjFmt_ = c => String(c).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+// recebendo: itens deste recebimento [{ qtd, valor_unit }] — a nota pode ser só do que chegou agora (entrega parcial)
+function conferirNF_(ctx, p, k, valor, recebendo) {
+  const al = [];
+  if (['55', '65'].indexOf(k.modelo) < 0) al.push('o código lido não é de nota fiscal de produto (modelo ' + k.modelo + ')');
+  const f = obraTab_(ctx, 'Fornecedores').all().find(x => String(x.codigo) === String(p.fornecedor_cod));
+  const cf = String(f && f.cnpj || '').replace(/\D/g, '');
+  // mesma raiz (8 primeiros números) = mesma empresa, outra filial: não é diferença
+  if (cf.length === 14 && cf.slice(0, 8) !== k.cnpj.slice(0, 8)) al.push('emitida pelo CNPJ ' + cnpjFmt_(k.cnpj) + ', que não é o do fornecedor do pedido (' + p.fornecedor + ')');
+  const ch = 'NFe' + k.chave;
+  const outro = obraTab_(ctx, 'Pedidos').all().find(x => String(x.numero) !== String(p.numero) && x.status !== 'Cancelado' && String(x.nf_chave || '').split(' ').indexOf(ch) >= 0);
+  if (outro) al.push('esta mesma nota já foi lançada no pedido ' + outro.numero);
+  const h = new Date(), meses = (h.getFullYear() - k.ano) * 12 + (h.getMonth() + 1 - k.mes);
+  if (meses > 3) al.push('nota emitida em ' + ('0' + k.mes).slice(-2) + '/' + k.ano + ' (mais de 3 meses atrás)');
+  const total = num_(p.valor_total), agora = recebendo.reduce((s, i) => s + num_(i.qtd) * num_(i.valor_unit), 0);
+  const bate = v => v > 0 && Math.abs(valor - v) <= Math.max(1, v * 0.01);
+  if (valor > 0 && total > 0 && !bate(total) && !bate(agora))
+    al.push('valor da nota ' + brl_(valor) + ', pedido ' + brl_(total) + (agora > 0 && Math.abs(agora - total) > 0.01 ? ' (recebido agora ' + brl_(agora) + ')' : ''));
+  return al;
+}
+function nfConferir_(ctx, p, q, recebendo) {
+  const k = nfeChave_(q.nf_chave);
+  if (!k) return [];
+  const valor = num_(q.nf_valor), al = conferirNF_(ctx, p, k, valor, recebendo), ch = 'NFe' + k.chave;   // "NFe" na frente: a planilha não vira número
+  if (String(p.nf_chave || '').split(' ').indexOf(ch) < 0) p.nf_chave = [p.nf_chave, ch].filter(Boolean).join(' ');
+  if (valor > 0) p.nf_valor = valor;
+  if (!String(q.nf_numero || '').trim()) q.nf_numero = k.numero;
+  if (al.length) p.nf_alerta = [p.nf_alerta].concat(al.map(a => 'NF ' + k.numero + ': ' + a)).filter(Boolean).join('\n');
+  hist_(p, ctx, 'Nota ' + k.numero + ' (série ' + k.serie + ') lida pelo código de barras' + (valor > 0 ? ', valor ' + brl_(valor) : '') + (al.length ? ' — DIFERENÇA: ' + al.join('; ') : ' — confere com o pedido'));
+  return al;
+}
+const nfAlertasVer_ = (ctx, al) => veValores_(ctx) ? al : al.map(tiraValores_);
+const nfMsg_ = (ctx, al) => al.length ? ' ATENÇÃO: ' + nfAlertasVer_(ctx, al).join('; ') + '. Compras foi avisado.' : '';
+
+function pedidoNFOk_(q, ctx) {
+  const p = achar_(ctx, q.numero);
+  if (!p.nf_alerta) throw new Error('Este pedido não tem diferença de nota pendente.');
+  const obs = String(q.obs || '').trim();
+  if (!obs) throw new Error('Conte o que foi resolvido (ex: fornecedor vai emitir nota de complemento).');
+  hist_(p, ctx, 'Diferença da nota resolvida: ' + obs + ' [' + String(p.nf_alerta).split('\n').join('; ') + ']');
+  p.nf_alerta = '';
+  salvar_(ctx, p);
+  return { msg: 'Diferença marcada como resolvida.' };
 }
 
 /* ---------- entrega e recebimento ---------- */
@@ -389,8 +452,9 @@ function pedidoLiberar_(q, ctx) {
 function pedidoReceber_(q, ctx) {
   const p = achar_(ctx, q.numero);
   if (p.status !== 'Aprovado' || ['Entrega liberada', 'Recebido parcial'].indexOf(p.entrega) < 0) throw new Error('Este pedido não está liberado para recebimento.');
-  const I = obraTab_(ctx, 'Itens'), its = itensDe_(ctx, p.numero), qs = q.itens || {};
-  const recs = [], movs = [], quando = new Date();
+  nfeChave_(q.nf_chave);   // chave errada para aqui, antes de gravar qualquer item
+  const I =obraTab_(ctx, 'Itens'), its = itensDe_(ctx, p.numero), qs = q.itens || {};
+  const recs = [], movs = [], agora = [], quando = new Date();
   // frente geral que recebeu o material (conta no "comprado × recebido" do orçamento da obra)
   let frente = p.frente || '';
   if (q.frente !== undefined && String(q.frente || '').trim() && norm_(q.frente) !== norm_(p.frente)) {
@@ -406,11 +470,15 @@ function pedidoReceber_(q, ctx) {
     if (qtd > falta + 1e-9) throw new Error('Item ' + i.item + ' (' + i.descricao + '): recebendo ' + qtd + ', mas faltam só ' + falta + '.');
     i.qtd_recebida = num_(i.qtd_recebida) + qtd;
     I.update(i);
+    agora.push({ qtd: qtd, valor_unit: i.valor_unit });
     const id = Utilities.getUuid().slice(0, 8);
     recs.push({ id: id, pedido: p.numero, item: i.item, material_cod: i.material_cod, descricao: i.descricao, qtd: qtd, unidade: i.unidade, data: quando, usuario: ctx.u.nome, nf: q.nf_numero || '', obs: q.obs || '', frente: frente });
     movs.push({ id: id, data: quando, tipo: 'Entrada', material_cod: i.material_cod, descricao: i.descricao, unidade: i.unidade, qtd: qtd, pedido: p.numero, frente: frente, usuario: ctx.u.nome, obs: 'Recebimento ' + p.numero });
   });
   if (!recs.length && !q.encerrar) throw new Error('Informe a quantidade recebida de pelo menos um item.');
+  // nota lida pelo código de barras: número vem da chave e a conferência com o pedido fica no histórico
+  const al = nfConferir_(ctx, p, q, agora);
+  if (q.nf_numero) recs.forEach(r => { r.nf = String(q.nf_numero); });
   obraTab_(ctx, 'Recebimentos').insertMany(recs);
   obraTab_(ctx, 'Estoque').insertMany(movs);
   if (q.foto && q.foto.b64) salvarArquivo_(ctx, p, 'FOTO', q.foto, 'recebimento');
@@ -430,7 +498,7 @@ function pedidoReceber_(q, ctx) {
   fechar_(ctx, p);
   salvar_(ctx, p);
   log_(ctx, 'pedido_receber', p.numero + ' ' + txt);
-  return { msg: p.entrega === 'Recebido' ? 'Recebimento concluído.' : 'Recebimento parcial registrado.' };
+  return { msg: (p.entrega === 'Recebido' ? 'Recebimento concluído.' : 'Recebimento parcial registrado.') + nfMsg_(ctx, al), alertas: nfAlertasVer_(ctx, al) };
 }
 
 function pedidoCancelar_(q, ctx) {

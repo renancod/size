@@ -12,7 +12,7 @@
 const PUSH_VISTOS_MAX = 500, PUSH_MAX_POR_VEZ = 4, PUSH_APARELHOS_MAX = 6;
 const PUSH_ETAPAS = {
   cotar: 'Para cotar', definir: 'Orçamentos recebidos', aprovar: 'Aprovar compra', liberar: 'Liberar entrega', receber: 'Receber material',
-  entrega: 'Previsão de entrega', pagar: 'Pagamentos', nf: 'Aguardando nota fiscal', pago: 'Pagamento concluído', meu: 'Seu pedido',
+  entrega: 'Previsão de entrega', pagar: 'Pagamentos', nf: 'Aguardando nota fiscal', nf_conf: 'Nota com diferença', pago: 'Pagamento concluído', meu: 'Seu pedido',
   exec_aviso: 'Aviso do engenheiro', exec_diario: 'Diário de obra', exec_alerta: 'Alerta de produção', exec_revisar: 'Diário para revisar',
   fvs_aprovar: 'FVS para aprovar', fvs_devolvida: 'FVS devolvida', fvs_verificar: 'FVS para verificar',
   medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida', sinapi: 'SINAPI do mês novo',

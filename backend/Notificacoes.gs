@@ -61,6 +61,9 @@ function notifMontar_(ctx) {
       }
       if (p.status === 'Aprovado' && p.fin === 'Aguardando NF' && p.entrega === 'Recebido' && pode('financeiro'))
         add('nf', 'Material recebido — aguardando a nota fiscal para programar o pagamento');
+      // conferência da nota (código de barras) que não bateu com o pedido: fica até alguém marcar como resolvido
+      if (p.nf_alerta && p.status !== 'Cancelado' && pode(['compras_cotar', 'compras_definir', 'compras_aprovar', 'financeiro']))
+        add('nf_conf', 'Nota com diferença — ' + String(p.nf_alerta).split('\n').join('; '), String(p.nf_alerta).length);
       if (p.fin === 'Pago' && p.pago_em instanceof Date && Date.now() - p.pago_em.getTime() < 3 * 864e5 && pode(['financeiro', 'compras_definir', 'compras_aprovar']))
         add('pago', 'Pagamento concluído: ' + brl_(p.valor_total) + ' · ' + p.fornecedor + (p.forma_pagto ? ' (' + p.forma_pagto + ')' : ''));
       // quem abriu o pedido acompanha cada mudança de etapa (últimos 10 dias)

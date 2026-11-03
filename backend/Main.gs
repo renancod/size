@@ -68,6 +68,7 @@ const ROTAS = {
   pedido_liberar: { obra: true, perm: 'compras_liberar', lock: true, fn: pedidoLiberar_ },
   pedido_receber: { obra: true, perm: 'pedido_receber', lock: true, fn: pedidoReceber_ },
   pedido_nf: { obra: true, perm: ['financeiro', 'pedido_receber', 'compras_cotar'], lock: true, fn: pedidoNF_ },
+  pedido_nf_ok: { obra: true, perm: ['compras_cotar', 'compras_definir', 'compras_aprovar', 'financeiro'], lock: true, fn: pedidoNFOk_ },
   pedido_cancelar: { obra: true, perm: 'compras_cancelar', lock: true, fn: pedidoCancelar_ },
   arquivo_anexar: { obra: true, lock: true, fn: arquivoAnexar_ },
   arquivo_ver: { obra: true, fn: arquivoVer_ },
