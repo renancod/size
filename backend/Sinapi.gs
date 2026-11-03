@@ -260,7 +260,8 @@ function sinapiBaixar_(q, ctx) {
 }
 
 /* ---------- conferência diária: a Caixa já publicou o mês seguinte? ---------- */
-function sinapiVerificar() {
+function sinapiVerificar() { return usoTarefa_('sinapi', sinapiVerificar_); }
+function sinapiVerificar_() {
   const ss = sinSS_(false), I = sinInfo_(ss), P = PropertiesService.getScriptProperties();
   const hoje = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM');
   P.setProperty('SINAPI_VERIFICADO', agora_());

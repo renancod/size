@@ -687,6 +687,7 @@ function execRelatorioEmail_(q, ctx) {
   const op = { htmlBody: html, name: empresa_(), attachments: [blob] };
   if (q.copia && ctx.u.email) op.cc = ctx.u.email;
   GmailApp.sendEmail(para.join(','), assunto, (msg || 'Relatório em anexo.'), op);
+  usoEmail_(para.join(','));
   log_(ctx, 'exec_relatorio_email', para.join(', ') + ' · ' + nome);
   return { msg: 'Relatório enviado para ' + para.join(', ') + '.' };
 }

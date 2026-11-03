@@ -453,6 +453,7 @@ function cliAcessoEmail_(q, ctx) {
     + '<div style="border:1px solid #e3e6ec;border-top:0;border-radius:0 0 12px 12px;padding:20px">' + corpo
     + botaoPortal_(link, 'Acessar o portal') + '<p style="color:#6b7280;font-size:13px">' + h_(empresa_()) + ' · portal do cliente</p></div></div>';
   GmailApp.sendEmail(para, 'Acesso ao portal ' + c.nome + ' · ' + empresa_(), texto, { htmlBody: html, name: empresa_() });
+  usoEmail_(para);
   if (!u.email) u.email = para;
   u.acesso_enviado_em = new Date();
   U.update(u);

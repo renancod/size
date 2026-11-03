@@ -34,6 +34,7 @@ function tag_(ps) { return '[' + ps.map(p => p.numero).join(', ') + ']'; }
 function enviar_(para, assunto, html, anexos) {
   GmailApp.sendEmail(String(para).replace(/;/g, ','), assunto, 'Abra este e-mail em formato HTML.',
     { htmlBody: html, name: empresa_() + ' · Compras', attachments: anexos || [] });
+  usoEmail_(para);
 }
 
 function emailCotacao_(ctx, f, ps, q) {
@@ -153,7 +154,13 @@ function avisarAprovadores_(ctx, p) {
 }
 
 /* ---------- captura automática ---------- */
-function capturarEmails() {
+/* gatilho de 10 em 10 min (e = evento): só das 6h às 20h, medindo o tempo (Uso.gs). O botão do app chama sem evento. */
+function capturarEmails(e) {
+  if (!e) return capturarEmails_();
+  if (!horaUtil_()) return usoAnotar_('captura', 0, true);
+  return usoTarefa_('captura', capturarEmails_);
+}
+function capturarEmails_() {
   // 1) leitura do Gmail FORA da fila de gravação (é a parte demorada: quem grava no app não fica esperando)
   const eu = Session.getEffectiveUser().getEmail().toLowerCase();
   const threads = GmailApp.search('has:attachment newer_than:45d subject:Size', 0, 60);

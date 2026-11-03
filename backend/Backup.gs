@@ -45,7 +45,7 @@ function backupExecutar_() {
 
 /* gatilho diário (3h): não depende de ninguém estar com o app aberto */
 function backupDiario() {
-  try { backupExecutar_(); } catch (e) { avisarAdmins_('Backup falhou', 'O backup automático não rodou: ' + (e && e.message ? e.message : e)); }
+  try { usoTarefa_('backup', backupExecutar_); } catch (e) { avisarAdmins_('Backup falhou', 'O backup automático não rodou: ' + (e && e.message ? e.message : e)); }
 }
 
 function garantirBackup_() {

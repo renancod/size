@@ -126,8 +126,7 @@ Sheet.prototype.setName = function (n) { this.nome = n; return this; };
     CacheService: { getScriptCache: () => ({ get: k => { const e = cache[k]; if (!e) return null; if (e.exp < Date.now()) { delete cache[k]; return null; } return e.v; }, put: (k, v, s) => { cache[k] = { v: String(v), exp: Date.now() + (s || 600) * 1000 }; }, remove: k => { delete cache[k]; },
       getAll: ks => { const o = {}; ks.forEach(k => { const e = cache[k]; if (e && e.exp >= Date.now()) o[k] = e.v; }); return o; },
       putAll: (o, s) => { Object.keys(o).forEach(k => { cache[k] = { v: String(o[k]), exp: Date.now() + (s || 600) * 1000 }; }); } }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {} }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: k => { delete props[k]; } }) },    LockService: { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {} }) },
     // Firebase falso: guarda cada mensagem enviada; _fcmResp(token) devolve o código HTTP (padrão 200)
     UrlFetchApp: {
       fetch: () => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify({ access_token: 'token-falso' }) }),
@@ -147,7 +146,7 @@ Sheet.prototype.setName = function (n) { this.nome = n; return this; };
 
   const ctx = vm.createContext(G);
   const dir = path.join(__dirname, '..', 'backend');
-  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Contratos.gs', 'Orcamento.gs', 'ImportAva.gs', 'RelatorioObra.gs', 'Push.gs', 'Base.gs', 'Propostas.gs', 'Cronograma.gs', 'Sinapi.gs', 'Clientes.gs', 'ContratosCliente.gs'];
+  const ordem = ['Main.gs', 'Db.gs', 'Pedidos.gs', 'Estoque.gs', 'Admin.gs', 'Setup.gs', 'Email.gs', 'Fornecedor.gs', 'Notificacoes.gs', 'Execucao.gs', 'Retroativos.gs', 'Backup.gs', 'Fvs.gs', 'FvsPadrao.gs', 'Medicoes.gs', 'Contratos.gs', 'Orcamento.gs', 'ImportAva.gs', 'RelatorioObra.gs', 'Push.gs', 'Base.gs', 'Propostas.gs', 'Cronograma.gs', 'Sinapi.gs', 'Clientes.gs', 'ContratosCliente.gs', 'Uso.gs'];
   const codigo = ordem.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(codigo, ctx, { filename: 'backend.gs' });
   ctx.chamar = q => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(q) } }).getContent());

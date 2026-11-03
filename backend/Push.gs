@@ -16,7 +16,7 @@ const PUSH_ETAPAS = {
   exec_aviso: 'Aviso do engenheiro', exec_diario: 'Diário de obra', exec_alerta: 'Alerta de produção', exec_revisar: 'Diário para revisar',
   fvs_aprovar: 'FVS para aprovar', fvs_devolvida: 'FVS devolvida', fvs_verificar: 'FVS para verificar',
   medicao_aprovar: 'Medição para aprovar', medicao_devolvida: 'Medição devolvida', sinapi: 'SINAPI do mês novo',
-  cli_diario: 'Diário de obra', cli_med: 'Medição', cli_fvs: 'Qualidade', cli_orc: 'Orçamento', cli_obra: 'Obra iniciada', cli_doc: 'Documento da obra', prop_cli: 'Portal do cliente'
+  cli_diario: 'Diário de obra', cli_med: 'Medição', cli_fvs: 'Qualidade', cli_orc: 'Orçamento', cli_obra: 'Obra iniciada', cli_doc: 'Documento da obra', cota_email: 'E-mails do dia', cota_tempo: 'Limite do Google', prop_cli: 'Portal do cliente'
 };
 
 function pushConta_() {
@@ -133,8 +133,19 @@ function pushMarcarVistos_(tok, usuarioId, itens) {
   } catch (e) { /* o sino continua funcionando mesmo se isso falhar */ }
 }
 
-/* ---------- varredura automática (gatilho de 5 em 5 minutos) ---------- */
-function pushVarrer() {
+/* ---------- varredura automática (gatilho de 5 em 5 minutos) ----------
+ * Pelo gatilho (e = evento) economiza a cota de 90 min/dia do Google (Uso.gs): só das 6h às 20h e só quando algo foi
+ * gravado no sistema desde a última varredura (geração "notif" do Db.gs) — e no máximo 1 h sem varrer, para os avisos
+ * que dependem só da data (vencimentos). Chamada sem evento (testes, editor) varre sempre. */
+function pushVarrer(e) {
+  if (!e) return pushVarrer_();
+  if (!horaUtil_()) return usoAnotar_('push', 0, true);
+  const c = CacheService.getScriptCache(), ger = memGer_(c, 'notif'), ult = c.get('push_ult');
+  if (ult && ult.split('|')[0] === ger && Date.now() - +ult.split('|')[1] < 3600000) return usoAnotar_('push', 0, true);
+  c.put('push_ult', ger + '|' + Date.now(), 21600);   // antes de varrer: o que mudar durante a varredura entra na próxima
+  usoTarefa_('push', pushVarrer_);
+}
+function pushVarrer_() {
   if (!pushConta_()) return;
   const T0 = central_('Aparelhos'), todos = T0.all().slice();
   if (!todos.length) return;

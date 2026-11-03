@@ -215,6 +215,7 @@ const ROTAS = {
   cli_emp_foto_salvar: { admin: true, lock: true, fn: cliEmpFotoSalvar_ },
   cli_usuario_excluir: { admin: true, lock: true, fn: cliUsuarioExcluir_ },
   cli_acesso_email: { admin: true, lock: true, fn: cliAcessoEmail_ },
+  uso_cotas: { admin: true, fn: usoCotas_ },
   cli_publicar: { admin: true, fn: cliPublicar_ },   // trava só no fim (as idas ao GitHub demoram)
   cli_github: { admin: true, lock: true, fn: cliGithub_ },
   exec_cliente: { obra: true, perm: 'exec_planejar', lock: true, fn: execCliente_ },
@@ -364,6 +365,7 @@ function avisarAdmins_(assunto, texto) {
     const para = central_('Usuarios').all().filter(u => sim_(u.admin) && sim_(u.ativo) && /@/.test(String(u.email || ''))).map(u => String(u.email).trim());
     if (!para.length) para.push(Session.getEffectiveUser().getEmail());
     GmailApp.sendEmail(para.filter(Boolean).join(','), assunto, texto, { name: String(config_().EMPRESA || 'Size Engenharia') + ' · Segurança' });
+    usoEmail_(para.filter(Boolean).join(','));
     return true;
   } catch (e) { return false; }
 }

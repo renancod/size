@@ -1555,6 +1555,20 @@ async function vObras() {
   });
 }
 
+/* cotas do Google (backend Uso.gs): tarefas automáticas 90 min/dia e 100 destinatários de e-mail por dia */
+async function usoCotaHtml() {
+  const el = $('#usoCota');
+  let U;
+  try { U = await api('uso_cotas'); } catch (e) { if (el) el.innerHTML = `<h3>Uso do servidor</h3><small class="mute">${esc(e.message)}</small>`; return; }
+  if (!el) return;
+  const h = U.dias[0], usados = U.limite_emails - U.emails_restantes, bar = (v, max) => { const p = Math.min(100, max ? v / max * 100 : 0); return `<div class="pbar ${p >= 80 ? 'exc' : ''}"><span style="width:${p}%"></span></div>`; };
+  el.innerHTML = `<h3>Uso do servidor (limites do Google)</h3>
+    <div class="g2"><div><small>Tarefas automáticas hoje</small><b style="display:block;font-size:1.3rem">${nf(h.min)} de ${U.limite_min} min</b>${bar(h.min, U.limite_min)}</div>
+      <div><small>E-mails enviados hoje</small><b style="display:block;font-size:1.3rem">${usados} de ${U.limite_emails}</b>${bar(usados, U.limite_emails)}<small>restam ${U.emails_restantes} (cada destinatário conta)</small></div></div>
+    ${h.tarefas.length ? `<div style="margin-top:10px">${h.tarefas.map(t => `<div class="arq"><span class="nome">${esc(t.nome)}<br><small>${plural(t.rodadas, 'rodada', 'rodadas')}${t.puladas ? ' · ' + t.puladas + ' puladas (nada mudou ou fora do horário)' : ''}</small></span><b>${nf(t.min)} min</b></div>`).join('')}</div>` : '<p class="mute" style="margin:8px 0 0">Nenhuma tarefa automática rodou hoje ainda.</p>'}
+    <details style="margin-top:8px"><summary><small>Últimos 7 dias</small></summary>${U.dias.map(d => `<div class="arq"><span class="nome">${fd(d.dia)}</span><small>${nf(d.min)} min · ${d.emails} e-mails</small></div>`).join('')}</details>
+    <small class="mute">Os acessos ao app não têm limite diário. Avisos no celular e leitura dos e-mails dos fornecedores rodam das ${U.horario[0]}h às ${U.horario[1]}h, e só quando algo mudou. Se passar de 90 min, o Google pausa as tarefas até o dia seguinte (o app continua funcionando).</small>`;
+}
 async function vConfig() {
   titulo('Configurações');
   const A = await adm(true), c = k => (A.config.find(x => x.chave === k) || {}).valor ?? '';
@@ -1574,6 +1588,7 @@ async function vConfig() {
       <p class="mute" style="margin:0 0 8px">Todo dia de madrugada o sistema copia as planilhas (central e de cada obra) para a pasta <b>Backups</b> do Drive e guarda os últimos ${(A.backup && A.backup.dias) || 14} dias. Fotos e PDFs ficam protegidos pelo histórico do próprio Drive.</p>
       <p id="bkInfo" style="margin:0 0 12px">${A.backup ? `Último backup: <b>${esc(A.backup.quando)}</b> — ${A.backup.feitos} de ${A.backup.total} planilhas${(A.backup.erros || []).length ? ' <b style="color:var(--err)">(com falhas)</b>' : ''}.` : 'Ainda não rodou: ele roda sozinho de madrugada, ou use o botão abaixo.'}</p>
       <div class="acoes"><button class="btn" id="bkAgora" type="button">${ic('refresh')} Fazer backup agora</button>${A.backup && A.backup.pasta_url ? `<a class="btn sec" href="${esc(A.backup.pasta_url)}" target="_blank" rel="noopener">Abrir a pasta Backups</a>` : ''}</div></div>
+    <div class="card" id="usoCota"><h3>Uso do servidor (limites do Google)</h3><small class="mute">carregando…</small></div>
     <div class="card"><div class="cab"><h3 style="flex:1;margin:0">Materiais padrão (${A.padrao.length})</h3><button class="btn sec peq" id="novoMat">${ic('plus')} Adicionar</button></div>
       <small>Toda obra nova já nasce com estes materiais.</small>
       <div class="busca" style="margin-top:10px">${ic('search')}<input type="search" id="bm" placeholder="Buscar…"></div><div id="lm"></div></div>
@@ -1587,6 +1602,7 @@ async function vConfig() {
     ['MIN_ORCAMENTOS', 'PRAZO_FATURADO_PADRAO', 'REGRAS_ORCAMENTO', 'EMAIL_FINANCEIRO', 'APP_URL', 'EMPRESA', 'FRENTES_PADRAO', 'CHUVA_LIMITE_MM', 'BACKUP_DIAS'].forEach(k => { config[k] = f[k].value; });
     try { toast((await api('admin_config_salvar', { config, unidades: f.unidades.value.split(',').map(s => s.trim()).filter(Boolean) })).msg); if (S.obraId) await recarregarDados(); } catch (x) { toast(x.message, 1); }
   };
+  usoCotaHtml();
   $('#bkAgora').onclick = async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Copiando…';
     try { toast((await api('admin_backup')).msg); } catch (x) { toast(x.message, 1); }
