@@ -33,6 +33,22 @@ test('gatilho dos avisos: fora do horário não roda; no horário só varre quan
   assert.equal(tarefa(t.adm('uso_cotas'), 'captura').puladas, 1);
 });
 
+test('telas guardadas no aparelho: resposta de gravação vem com w; versão da base muda só quando a base muda', () => {
+  const t = preparar();
+  const senha = t.G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
+  const tk = t.G.chamar({ acao: 'login', login: 'admin', senha }).dados.token, raw = (acao, d = {}) => t.G.chamar({ acao, token: tk, ...d });
+  assert.equal(raw('empresa_dados').w, undefined);                 // leitura
+  const b1 = raw('base_dados').dados.ger, n1 = raw('notificacoes').dados.ger_base;
+  assert.ok(b1); assert.equal(n1, b1);
+  const r = raw('admin_obra_criar', { nome: 'Obra Nova', sigla: 'ON', endereco: 'Rua Y' });
+  assert.equal(r.w, 1);                                             // gravou
+  assert.equal(raw('notificacoes').dados.ger_base, b1);            // obra nova não mexe na base
+  raw('base_insumo_salvar', { insumo: { codigo: 'AREIA', descricao: 'Areia média', unidade: 'm3', tipo: 'Material', preco: 120 } });
+  const b2 = raw('notificacoes').dados.ger_base;
+  assert.notEqual(b2, b1);
+  assert.equal(raw('base_dados').dados.ger, b2);
+});
+
 test('e-mails do dia: o sistema conta os destinatários e avisa o administrador no sino quando estão acabando', () => {
   const t = preparar();
   let U = t.adm('uso_cotas');

@@ -195,7 +195,7 @@ Tabela_.prototype.mudou_ = function () {
   if (this.auth) authMudou_();
   if (this.grupo) memMudou_(this.grupo);
   const n = this.sh.getName();
-  if (n !== 'Log' && n !== 'Aparelhos') memMudou_('notif');
+  if (n !== 'Log' && n !== 'Aparelhos') { memMudou_('notif'); TEMPO_.gravou = 1; }
   // planilha da obra: renova o que estiver guardado dela (ex.: lista de pedidos)
   if (this.ssId && n !== 'Log') memMudou_('ss' + this.ssId);
 };

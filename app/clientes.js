@@ -9,7 +9,7 @@ const clSlug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-
 
 async function vClientes() {
   titulo('Portal do cliente');
-  const A = CL.d = await api('cli_admin');
+  const A = CL.d = await apiAgora('cli_admin');
   view(`<div class="card"><div class="bp-h"><h3>${ic('eye')} Portal do cliente</h3><a class="btn" href="#/admin/cliente/novo">${ic('plus')} Novo cliente</a></div>
       <p class="mute" style="margin:0">Cada cliente acompanha pelo app, com a logo e a cor da empresa dele, os empreendimentos que a Size gerencia ou executa e os orçamentos. Ele só vê o que você liberar e nunca custos, compras ou dados internos.</p></div>
     ${A.github ? '' : `<form class="card grid" id="clGh"><h3>${ic('download')} Publicação do endereço do cliente</h3>

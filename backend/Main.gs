@@ -17,7 +17,7 @@ function doGet() {
 
 function doPost(e) {
   let out;
-  Object.assign(TEMPO_, { ini: Date.now(), auth: 0, abas: 0, linhas: 0, cache: '' });
+  Object.assign(TEMPO_, { ini: Date.now(), auth: 0, abas: 0, linhas: 0, cache: '', gravou: 0 });
   try {
     const q = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     try { migrar_(); } catch (x) { /* lançamento único nunca derruba a chamada */ }
@@ -27,9 +27,11 @@ function doPost(e) {
   }
   // tempos para o diagnóstico de lentidão do app: total no servidor, login/acesso, abas lidas
   out.t = { ms: Date.now() - TEMPO_.ini, auth: TEMPO_.auth, abas: TEMPO_.abas, linhas: TEMPO_.linhas, cache: TEMPO_.cache };
+  // gravou algo: o app joga fora as telas guardadas no aparelho (apiAgora) para não mostrar a versão antiga
+  if (TEMPO_.gravou) out.w = 1;
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
-const TEMPO_ = { ini: 0, auth: 0, abas: 0, linhas: 0, cache: '' };
+const TEMPO_ = { ini: 0, auth: 0, abas: 0, linhas: 0, cache: '', gravou: 0 };
 
 /* ---------- rotas ----------
  * pub: sem login · admin: só administradores · obra: precisa de q.obra · perm: permissão (ou lista: basta uma)

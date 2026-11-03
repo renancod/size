@@ -106,7 +106,8 @@ function baseUsos_(ix) {
 /* ---------- leitura ---------- */
 function baseDados_(q, ctx) {
   // guardada na memória do Google (Db.gs memoria_): a base é a leitura mais pesada do módulo Orçamentos
-  return Object.assign(memoria_('base', 'dados', baseMontar_), { nivel: ctx.base, hoje: baseHoje_() });
+  const ger = baseGer_();
+  return Object.assign(memoria_('base', 'dados', baseMontar_), { nivel: ctx.base, hoje: baseHoje_(), ger: ger });
 }
 /* resumo do Início: quantas composições e insumos e quantos preços passaram de 6 meses */
 function baseResumo_() {
@@ -211,6 +212,8 @@ function baseInsumoExcluir_(q, ctx) {
 /* foto do insumo: arquivo no Drive (Compras Size / Base de preços / Fotos dos insumos), aberto para quem tem o link,
  * para o app mostrar direto pela miniatura do Drive (sem passar pela API a cada imagem) */
 const BASE_FOTO_MAX_ = 4 * 1024 * 1024;
+/* versão da base (muda a cada gravação nela): o app compara com a que tem guardada (base.js bpGer) */
+function baseGer_() { try { return memGer_(CacheService.getScriptCache(), 'base'); } catch (e) { return ''; } }
 function baseFotoUrl_(id) { return id ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w800' : ''; }
 function baseFotoLixo_(id) { if (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* já não existe */ } } }
 function baseInsumoFoto_(q, ctx) {
@@ -221,7 +224,7 @@ function baseInsumoFoto_(q, ctx) {
     i.foto_id = '';
     T.update(i);
     log_(ctx, 'insumo_foto', i.codigo + ' removida');
-    return { msg: 'Foto removida.', foto: '' };
+    return { msg: 'Foto removida.', foto: '', ger: baseGer_() };
   }
   const a = q.arquivo || {};
   if (!/^image\/(jpeg|png|webp|gif)$/i.test(String(a.mime || ''))) throw new Error('Envie uma imagem (JPG, PNG ou WEBP).');
@@ -238,7 +241,7 @@ function baseInsumoFoto_(q, ctx) {
   i.atualizado_por = ctx.u.nome;
   T.update(i);
   log_(ctx, 'insumo_foto', i.codigo);
-  return { msg: 'Foto salva.', foto: baseFotoUrl_(i.foto_id) };
+  return { msg: 'Foto salva.', foto: baseFotoUrl_(i.foto_id), ger: baseGer_() };
 }
 /* atualização de preços em lote: reajuste por % (o app calcula) ou lista colada do Excel (código · preço) */
 function basePrecos_(q, ctx) {

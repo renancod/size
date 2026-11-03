@@ -42,7 +42,7 @@ async function vPropLista(qs) {
   if (!baseNivel()) return bpSem();
   // a lista não precisa da base: ela carrega por trás (fica pronta para abrir composição, insumo etc.)
   bpCarregar().catch(() => {});
-  const L = (await api('prop_listar')).propostas, p = new URLSearchParams(qs || ''), F = PP.fl;
+  const L = (await apiAgora('prop_listar')).propostas, p = new URLSearchParams(qs || ''), F = PP.fl;
   if (p.has('s')) F.s = p.get('s');
   const conta = s => L.filter(x => (s ? x.status === s : x.status !== 'Revisado')).length;
   bpTela('props', `<div class="cab"><h2>Orçamentos de clientes</h2><span class="contagem" id="ppN"></span>${bpGere() ? `<span class="acoes"><a class="btn sec peq" href="#/orc/orcamento/importar">${ic('upload')} Importar orçamento</a><a class="btn peq bp-ac" href="#/orc/orcamento/novo">${ic('plus')} Novo orçamento</a></span>` : ''}</div>

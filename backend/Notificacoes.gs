@@ -14,7 +14,8 @@ function notificacoes_(q, ctx) {
   const itens = memoria_('notif', String(ctx.u.id), () => notifMontar_(ctx), 60);
   // app aberto com os avisos de fundo ativos: o que ele já mostrou não precisa ir de novo por push
   if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, itens);
-  return { itens: itens, agora: fmtVal_(new Date()) };
+  // versão da base de preços: o app só baixa a base de novo quando ela mudou (base.js bpCarregar)
+  return { itens: itens, agora: fmtVal_(new Date()), ger_base: baseGer_() };
 }
 function notifMontar_(ctx) {
   const itens = [], limiteMeus = Date.now() - 10 * 864e5, hojeStr = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');

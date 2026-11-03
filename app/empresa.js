@@ -14,7 +14,7 @@ async function vEmpresa() {
   titulo('Início');
   const nome = esc(S.sess.usuario.nome.split(' ')[0]), dataTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase());
   let D;
-  try { D = EMP.d = await api('empresa_dados'); }
+  try { D = EMP.d = await apiAgora('empresa_dados'); }
   catch (e) {
     if (!e.rede) throw e;
     // sem sinal: só as obras da sessão guardada

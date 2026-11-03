@@ -174,11 +174,39 @@ async function api(acao, d = {}) {
     x.rede = navigator.onLine === false; throw x;
   }
   tempoApi(acao, t0, j.t, t.length);
+  if (j.w) agoraLimpar();
   if (!j.ok) {
     if (/^Sess[aã]o/.test(j.erro || '')) { sair(j.erro); }
     throw new Error(j.erro || 'Erro na API');
   }
   return j.dados;
+}
+/* ---------- telas que abrem toda hora (Início, Clientes, Orçamentos): abrem na hora com o que já está no aparelho ----------
+ * e conferem com o servidor por trás; se veio algo diferente e a pessoa ainda está na mesma tela, desenha de novo no
+ * mesmo ponto da página. Qualquer gravação (resposta com w) joga fora o guardado: depois de salvar, a tela vem atualizada. */
+const AGORA = {}, AGORA_FRESCO = 20000;
+const agoraChave = acao => 'cs_agora_' + ((S.sess && S.sess.usuario.id) || '') + '_' + acao;
+function agoraLimpar() {
+  Object.keys(AGORA).forEach(k => delete AGORA[k]);
+  try { Object.keys(localStorage).filter(k => k.indexOf(LSP + 'cs_agora_') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* sem armazenamento */ }
+}
+async function apiAgora(acao) {
+  const k = agoraChave(acao);
+  let c = AGORA[k];
+  if (!c) { try { const s = LS.get(k); if (s) c = AGORA[k] = { s, ate: 0 }; } catch (e) { /* sem armazenamento */ } }
+  const buscar = () => api(acao).then(d => {
+    const s = JSON.stringify(d), mudou = !c || c.s !== s;
+    c = AGORA[k] = { s, ate: Date.now() + AGORA_FRESCO };
+    try { LS.set(k, s); } catch (e) { /* cheio: fica só na memória */ }
+    return { d, mudou };
+  });
+  if (!c) return (await buscar()).d;
+  if (Date.now() > c.ate) {
+    const rota = location.hash;
+    c.ate = Date.now() + AGORA_FRESCO;
+    buscar().then(r => { if (r.mudou && location.hash === rota && !$('#modal.on')) { const y = scrollY; Promise.resolve(rotear()).then(() => scrollTo(0, y)); } }).catch(() => {});
+  }
+  return JSON.parse(c.s);   // cópia: a tela pode mexer nos dados
 }
 /* ---------- diagnóstico de lentidão: tempo de cada chamada e de cada tela (fica só neste aparelho) ----------
  * chamada: total (rede + Google acordar + servidor), servidor (srv), login/acesso (auth), abas e linhas lidas.
@@ -628,6 +656,7 @@ async function buscarNotif() {
   NOTIF.em = Date.now();
   let r;
   try { r = await api('notificacoes', LS.get('cs_fcm') && pushLigado() ? { push: LS.get('cs_fcm') } : {}); } catch (e) { return; }
+  if (r.ger_base && typeof bpGer === 'function') bpGer(r.ger_base);
   const novos = r.itens.filter(i => !NOTIF.conhecidos.has(i.id));
   // na primeira vez que o aparelho usa o app, só registra; depois avisa tudo que for novo
   if (novos.length && (!NOTIF.primeira || NOTIF.conhecidos.size)) avisarNovos(novos);

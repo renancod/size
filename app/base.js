@@ -107,15 +107,47 @@ function bpReduzir(f, max = 1000) {
 const bpDominante = c => (BP_K.slice().sort((a, b) => (c[b[0]] || 0) - (c[a[0]] || 0))[0] || ['mat'])[0];
 
 /* ---------- dados ---------- */
+/* a base (~90 KB) fica no aparelho e só é baixada de novo quando muda: o sino traz a versão dela a cada minuto
+ * (ger_base) e as gravações daqui chamam bpCarregar(true). Sem notícia da versão há 10 min, confere por trás. */
+function bpIndexar() {
+  BP.I = {}; BP.C = {};
+  BP.d.insumos.forEach(i => { BP.I[i.codigo] = i; });
+  BP.d.composicoes.forEach(c => { BP.C[c.codigo] = c; });
+}
 async function bpCarregar(forcar) {
-  if (!BP.d || forcar || Date.now() - BP.ts > 60000) {
+  if (!BP.d && !forcar) {
+    try { const s = LS.get('cs_base_' + (S.sess ? S.sess.usuario.id : '')); if (s) { BP.d = JSON.parse(s); BP.ts = 0; bpIndexar(); } } catch (e) { BP.d = null; }
+  }
+  if (!BP.d || forcar || BP.velha) {
     BP.d = await api('base_dados');
-    BP.ts = Date.now();
-    BP.I = {}; BP.C = {};
-    BP.d.insumos.forEach(i => { BP.I[i.codigo] = i; });
-    BP.d.composicoes.forEach(c => { BP.C[c.codigo] = c; });
+    BP.ts = Date.now(); BP.velha = false;
+    bpIndexar();
+    try { LS.set('cs_base_' + S.sess.usuario.id, JSON.stringify(BP.d)); } catch (e) { /* cheio: fica só na memória */ }
+  } else if (Date.now() - (BP.ts || 0) > 600000 && !BP.conf) {
+    BP.conf = api('base_dados').then(d => { if (d.ger !== BP.d.ger) bpTrocar(d); else BP.ts = Date.now(); }).catch(() => {}).finally(() => { BP.conf = null; });
   }
   return BP.d;
+}
+/* chegou base nova por trás: guarda e, se a pessoa está numa lista da base, desenha de novo */
+function bpTrocar(d) {
+  BP.d = d; BP.ts = Date.now(); BP.velha = false; bpIndexar();
+  try { LS.set('cs_base_' + S.sess.usuario.id, JSON.stringify(d)); } catch (e) { /* cheio */ }
+  if (/^#\/orc(\/(composicoes|insumos))?(\?|$)/.test(location.hash) && !$('#modal.on')) { const y = scrollY; Promise.resolve(rotear()).then(() => scrollTo(0, y)); }
+}
+/* foto de insumo trocada aqui: atualiza só aquele insumo, sem baixar a base inteira de novo (a versão nova vem pelo sino) */
+function bpFotoLocal(cod, url, ger) {
+  const i = BP.I && BP.I[cod];
+  if (!i) return;
+  i.foto = url;
+  if (ger) BP.d.ger = ger;   // a versão nova da base é esta mesma mudança: não precisa baixar de novo
+  try { LS.set('cs_base_' + S.sess.usuario.id, JSON.stringify(BP.d)); } catch (e) { /* cheio */ }
+}
+/* versão que o sino trouxe: diferente da que está no aparelho = a base mudou (outra pessoa salvou) */
+function bpGer(g) {
+  if (!g || !BP.d) return;
+  if (BP.d.ger === g) { BP.ts = Date.now(); return; }
+  BP.velha = true;
+  if (/^#\/orc(\/(composicoes|insumos))?(\?|$)/.test(location.hash) && !BP.conf) BP.conf = api('base_dados').then(bpTrocar).catch(() => {}).finally(() => { BP.conf = null; });
 }
 /* o que um item da composição é: insumo (com preço do cadastro ou próprio) ou composição auxiliar */
 function bpRef(x) {
@@ -667,7 +699,7 @@ function bpInsumoModal(i, depois) {
         box.classList.add('enviando');
         const r = await api('base_insumo_foto', { codigo: i.codigo, arquivo: a });
         mostra(a.url);   // mostra a que acabou de subir (a miniatura do Drive leva alguns segundos para ficar pronta)
-        await bpCarregar(true);
+        bpFotoLocal(i.codigo, r.foto, r.ger);
         const lin = $(`#bpLista [data-ins="${CSS.escape(i.codigo)}"] .bp-foto`);
         if (lin) lin.outerHTML = bpFoto(BP.I[i.codigo], 'mini zoom');
         toast(r.msg);
@@ -685,9 +717,10 @@ function bpInsumoModal(i, depois) {
       if (novo) { pend = null; return mostra(''); }
       if (!confirm('Remover a foto deste insumo?')) return;
       try {
-        toast((await api('base_insumo_foto', { codigo: i.codigo, remover: true })).msg);
+        const r = await api('base_insumo_foto', { codigo: i.codigo, remover: true });
+        toast(r.msg);
         mostra('');
-        await bpCarregar(true);
+        bpFotoLocal(i.codigo, '', r.ger);
         const lin = $(`#bpLista [data-ins="${CSS.escape(i.codigo)}"] .bp-foto`);
         if (lin) lin.outerHTML = bpFoto(BP.I[i.codigo], 'mini zoom');
       } catch (e) { toast(e.message, 1); }
