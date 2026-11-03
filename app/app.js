@@ -1411,11 +1411,17 @@ function vVelocidade() {
     chamadas.map(([a, l]) => [a, l.length, sg(md(l.map(x => x.ms))), sg(Math.max(...l.map(x => x.ms))), sg(md(l.map(x => x.srv || 0))), sg(md(l.map(x => x.auth || 0))), md(l.map(x => x.abas || 0)), md(l.map(x => x.lin || 0)), md(l.map(x => x.kb))].join(' | '))).join('\n');
   view(`<div class="card"><h3>${ic('chart')} Velocidade do app</h3><p class="muted" style="margin:0">Medido neste aparelho desde ${TEMPOS.api.length ? new Date(TEMPOS.api[0].em).toLocaleString('pt-BR') : 'agora'}. <b>Servidor</b> é o tempo dentro do Google; o resto do total é internet e o Google "acordar". <b>Em fila</b>: a tela esperou uma chamada terminar para fazer a próxima.</p>
       <div class="acoes" style="margin-top:10px"><button class="btn sec peq" id="velCop">${ic('copy')} Copiar relatório</button><button class="btn sec peq" id="velLimpa">Limpar medições</button></div></div>
+    ${admin() ? `<div class="card" id="usoCotaV"><h3>Uso do servidor</h3><small class="mute">carregando…</small></div>` : ''}
     <div class="card"><h3>Telas <small>primeira abertura (sem a cópia instantânea)</small></h3><div class="rolar"><table class="tab"><thead><tr><th>Tela</th><th class="n">Vezes</th><th class="n">Média</th><th class="n">Pior</th><th class="n">Chamadas</th><th>Em fila</th></tr></thead><tbody>
       ${telas.map(([t, l]) => `<tr><td><code>${esc(t)}</code></td><td class="n">${l.length}</td><td class="n"><b>${sg(md(l.map(x => x.ms)))}</b></td><td class="n">${sg(Math.max(...l.map(x => x.ms)))}</td><td class="n">${md(l.map(x => x.n))}</td><td>${l.some(x => x.n > 1 && x.soma >= x.ms * 0.9) ? 'sim' : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Use o app normalmente e volte aqui.</td></tr>'}</tbody></table></div></div>
     <div class="card"><h3>Chamadas ao servidor</h3><div class="rolar"><table class="tab"><thead><tr><th>Ação</th><th class="n">Vezes</th><th class="n">Média</th><th class="n">Pior</th><th class="n">Servidor</th><th class="n">Login</th><th class="n">Abas</th><th class="n">Linhas</th><th class="n">KB</th></tr></thead><tbody>
       ${chamadas.map(([a, l]) => `<tr><td><code>${esc(a)}</code></td><td class="n">${l.length}</td><td class="n"><b>${sg(md(l.map(x => x.ms)))}</b></td><td class="n">${sg(Math.max(...l.map(x => x.ms)))}</td><td class="n">${sg(md(l.map(x => x.srv || 0)))}</td><td class="n">${sg(md(l.map(x => x.auth || 0)))}</td><td class="n">${md(l.map(x => x.abas || 0))}</td><td class="n">${nf(md(l.map(x => x.lin || 0)))}</td><td class="n">${md(l.map(x => x.kb))}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">Nenhuma chamada medida ainda.</td></tr>'}</tbody></table></div></div>`);
-  $('#velCop').onclick = async () => { try { await navigator.clipboard.writeText(rel()); toast('Relatório copiado. Cole na conversa.'); } catch (e) { toast('Não consegui copiar.', 1); } };
+  // servidor (todas as pessoas, só o administrador vê): vai junto no relatório copiado
+  let U = null;
+  if (admin()) usoCotaHtml('#usoCotaV').then(r => { U = r; });
+  const relServ = () => !U ? '' : '\n\nSERVIDOR (todas as pessoas) hoje: ' + U.dias[0].chamadas + ' chamadas · ' + U.dias[0].min + ' de ' + U.limite_min + ' min de tarefas · ' + (U.limite_emails - U.emails_restantes) + ' de ' + U.limite_emails + ' e-mails\n'
+    + 'por ação: ' + (U.dias[0].por_acao || []).map(x => x.acao + ' ' + x.n).join(' · ') + '\núltimos 7 dias: ' + U.dias.map(d => d.dia.slice(5) + ' ' + d.chamadas + ' cham./' + d.min + ' min/' + d.emails + ' e-mails').join(' · ');
+  $('#velCop').onclick = async () => { try { await navigator.clipboard.writeText(rel() + relServ()); toast('Relatório copiado. Cole na conversa.'); } catch (e) { toast('Não consegui copiar.', 1); } };
   $('#velLimpa').onclick = () => { TEMPOS.api = []; TEMPOS.telas = []; LS.del('cs_tempos'); vVelocidade(); };
 }
 
@@ -1585,18 +1591,21 @@ async function vObras() {
 }
 
 /* cotas do Google (backend Uso.gs): tarefas automáticas 90 min/dia e 100 destinatários de e-mail por dia */
-async function usoCotaHtml() {
-  const el = $('#usoCota');
+async function usoCotaHtml(sel) {
+  const el = $(sel || '#usoCota');
   let U;
-  try { U = await api('uso_cotas'); } catch (e) { if (el) el.innerHTML = `<h3>Uso do servidor</h3><small class="mute">${esc(e.message)}</small>`; return; }
-  if (!el) return;
+  try { U = await api('uso_cotas'); } catch (e) { if (el) el.innerHTML = `<h3>Uso do servidor</h3><small class="mute">${esc(e.message)}</small>`; return null; }
+  if (!el) return U;
   const h = U.dias[0], usados = U.limite_emails - U.emails_restantes, bar = (v, max) => { const p = Math.min(100, max ? v / max * 100 : 0); return `<div class="pbar ${p >= 80 ? 'exc' : ''}"><span style="width:${p}%"></span></div>`; };
-  el.innerHTML = `<h3>Uso do servidor (limites do Google)</h3>
-    <div class="g2"><div><small>Tarefas automáticas hoje</small><b style="display:block;font-size:1.3rem">${nf(h.min)} de ${U.limite_min} min</b>${bar(h.min, U.limite_min)}</div>
+  el.innerHTML = `<h3>Uso do servidor (limites do Google) <small>todas as pessoas</small></h3>
+    <div class="g3"><div><small>Chamadas ao servidor hoje</small><b style="display:block;font-size:1.3rem">${nf(h.chamadas || 0)}</b><small>sem limite diário (até 30 ao mesmo tempo)</small></div>
+      <div><small>Tarefas automáticas hoje</small><b style="display:block;font-size:1.3rem">${nf(h.min)} de ${U.limite_min} min</b>${bar(h.min, U.limite_min)}</div>
       <div><small>E-mails enviados hoje</small><b style="display:block;font-size:1.3rem">${usados} de ${U.limite_emails}</b>${bar(usados, U.limite_emails)}<small>restam ${U.emails_restantes} (cada destinatário conta)</small></div></div>
+    ${(h.por_acao || []).length ? `<details style="margin-top:10px"><summary><small>Chamadas de hoje por ação</small></summary>${h.por_acao.map(x => `<div class="arq"><span class="nome"><code>${esc(x.acao)}</code></span><b>${nf(x.n)}</b></div>`).join('')}</details>` : ''}
     ${h.tarefas.length ? `<div style="margin-top:10px">${h.tarefas.map(t => `<div class="arq"><span class="nome">${esc(t.nome)}<br><small>${plural(t.rodadas, 'rodada', 'rodadas')}${t.puladas ? ' · ' + t.puladas + ' puladas (nada mudou ou fora do horário)' : ''}</small></span><b>${nf(t.min)} min</b></div>`).join('')}</div>` : '<p class="mute" style="margin:8px 0 0">Nenhuma tarefa automática rodou hoje ainda.</p>'}
-    <details style="margin-top:8px"><summary><small>Últimos 7 dias</small></summary>${U.dias.map(d => `<div class="arq"><span class="nome">${fd(d.dia)}</span><small>${nf(d.min)} min · ${d.emails} e-mails</small></div>`).join('')}</details>
-    <small class="mute">Os acessos ao app não têm limite diário. Avisos no celular e leitura dos e-mails dos fornecedores rodam das ${U.horario[0]}h às ${U.horario[1]}h, e só quando algo mudou. Se passar de 90 min, o Google pausa as tarefas até o dia seguinte (o app continua funcionando).</small>`;
+    <details style="margin-top:8px"><summary><small>Últimos 7 dias</small></summary>${U.dias.map(d => `<div class="arq"><span class="nome">${fd(d.dia)}</span><small>${nf(d.chamadas || 0)} chamadas · ${nf(d.min)} min · ${d.emails} e-mails</small></div>`).join('')}</details>
+    <small class="mute">Avisos no celular e leitura dos e-mails dos fornecedores rodam das ${U.horario[0]}h às ${U.horario[1]}h, e só quando algo mudou. Se passar de 90 min, o Google pausa as tarefas até o dia seguinte (o app continua funcionando).</small>`;
+  return U;
 }
 async function vConfig() {
   titulo('Configurações');

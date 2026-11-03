@@ -1671,3 +1671,4 @@ label.chk{display:flex;gap:8px;align-items:center;font-weight:500;color:var(--tx
 /* faixas de filtros (chips): no computador quebram em linhas (o mouse não arrasta para o lado); no celular arrastam com o dedo, com degradê na borda */
 @media (min-width:760px) and (hover:hover){.chips{flex-wrap:wrap;overflow:visible}.chips .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}}
 @media (max-width:759px),(hover:none){.chips{padding-right:28px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}}
+.g3{display:grid;gap:12px;grid-template-columns:1fr}@media (min-width:640px){.g3{grid-template-columns:repeat(3,1fr)}}

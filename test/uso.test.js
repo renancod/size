@@ -49,6 +49,20 @@ test('telas guardadas no aparelho: resposta de gravação vem com w; versão da 
   assert.equal(raw('base_dados').dados.ger, b2);
 });
 
+test('chamadas ao servidor do dia: contadas por ação, somadas no total pelas tarefas automáticas', () => {
+  const t = preparar();
+  t.adm('empresa_dados'); t.adm('empresa_dados'); t.adm('notificacoes');
+  let h = hoje(t.adm('uso_cotas'));
+  assert.ok(h.chamadas >= 3);
+  assert.ok(h.por_acao.find(x => x.acao === 'empresa_dados').n >= 2);
+  const antes = h.chamadas;
+  t.G.rodar('horaUtil_ = () => false; pushVarrer({ triggerUid: "x" })');   // a tarefa grava o acréscimo no total do dia
+  h = hoje(t.adm('uso_cotas'));
+  assert.equal(h.chamadas, antes + 1);                                     // nada se perde (o +1 é esta própria consulta)
+  assert.equal(t.G.chamar({ acao: 'nao_existe', token: 'x' }).ok, false);   // ação desconhecida não conta
+  assert.equal(hoje(t.adm('uso_cotas')).por_acao.some(x => x.acao === 'nao_existe'), false);
+});
+
 test('e-mails do dia: o sistema conta os destinatários e avisa o administrador no sino quando estão acabando', () => {
   const t = preparar();
   let U = t.adm('uso_cotas');
