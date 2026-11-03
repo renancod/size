@@ -98,7 +98,9 @@ function tpBarra(d) {
   const p = Math.max(0, Math.min(100, Number(d.pct) || 0));
   return `<span class="tp-barra" title="${p.toLocaleString('pt-BR')}%"><i style="width:${p}%"></i></span>`;
 }
-const tpQtdTxt = d => d.qtd_prevista ? `${nf(d.qtd_feita)} de ${tpQ(d.qtd_prevista, d.unidade)}` : d.qtd_feita ? tpQ(d.qtd_feita, d.unidade) + ' feitos' : (d.dias_previstos ? plural(Number(d.dias_previstos), 'dia previsto', 'dias previstos') : 'sem quantidade');
+// previsão de dias em meio dia (o cálculo da agenda é fracionado; a tela mostra ~0,5 · ~1 · ~3,5)
+const tpDias = x => { const v = Math.max(0.5, Math.round(Number(x) * 2) / 2); return '~' + nf(v) + (v > 1 ? ' dias' : ' dia'); };
+const tpQtdTxt =d => d.qtd_prevista ? `${nf(d.qtd_feita)} de ${tpQ(d.qtd_prevista, d.unidade)}` : d.qtd_feita ? tpQ(d.qtd_feita, d.unidade) + ' feitos' : (d.dias_previstos ? plural(Number(d.dias_previstos), 'dia previsto', 'dias previstos') : 'sem quantidade');
 function tpPrev(d) {
   const p = d.previsao;
   if (!p) return d.status === 'Concluída' ? `concluída ${fd(d.concluida_em)}` : '';
@@ -232,7 +234,7 @@ async function vTopoDemanda(id) {
       <div class="card"><h3>${ic('alvo')} Execução</h3>
         <dl class="tp-dl">
           <dt>Topógrafo</dt><dd>${esc(d.topografo)}</dd>
-          <dt>Data marcada</dt><dd>${fdc(d.data)}${p && p.ini !== d.data ? `<br><small>agenda: ${tpPrev(d)}</small>` : p ? `<br><small>${p.ini === p.fim ? '' : 'até ' + fdc(p.fim) + ' · '}~${nf(p.carga)} dia${p.carga > 1 ? 's' : ''} de trabalho</small>` : ''}</dd>
+          <dt>Data marcada</dt><dd>${fdc(d.data)}${p && p.ini !== d.data ? `<br><small>agenda: ${tpPrev(d)}</small>` : p ? `<br><small>${p.ini === p.fim ? '' : 'até ' + fdc(p.fim) + ' · '}${tpDias(p.carga)} de trabalho</small>` : ''}</dd>
           <dt>Quantidade</dt><dd>${d.qtd_prevista ? tpQ(d.qtd_prevista, d.unidade) : d.dias_previstos ? plural(Number(d.dias_previstos), 'dia', 'dias') : '—'}</dd>
           <dt>Aberta por</dt><dd>${esc(d.criado_por)} <small>${fdh(d.criado_em)}</small></dd>
           ${d.arquivo_usado ? `<dt>Arquivo usado</dt><dd>${ic('regua')} ${esc(d.arquivo_usado)}</dd>` : ''}
@@ -301,7 +303,7 @@ async function vTopoNova(id) {
     <div class="card tp-passo"><h3><span class="tp-n">3</span> Quanto <small>(é o que calcula a agenda)</small></h3>
       <div class="seg tp-seg" id="tpUn">${Object.entries(TP_UNL).map(([k, t]) => `<button type="button" data-u="${k}" class="${un === k ? 'on' : ''}">${t}</button>`).join('')}</div><input type="hidden" name="unidade" value="${un}">
       <div class="g2"><label>Quantidade prevista <small id="tpUnT">(${TP_UN[un]})</small><input name="qtd_prevista" inputmode="decimal" value="${esc(d ? d.qtd_prevista : '')}" placeholder="Ex: 1200"></label>
-        <label>ou dias de trabalho <small>(sem quantidade)</small><input name="dias_previstos" inputmode="decimal" value="${esc(d ? d.dias_previstos : '')}" placeholder="Ex: 2"></label></div>
+        <label>Prazo em dias <small>(se preencher, vale este prazo)</small><input name="dias_previstos" inputmode="decimal" value="${esc(d ? d.dias_previstos : '')}" placeholder="Ex: 2"></label></div>
     </div>
     <div class="card tp-passo"><h3><span class="tp-n">4</span> Quem e quando</h3>
       <label>Data da execução<input type="date" name="data" required value="${esc(d ? d.data : '')}" ${d ? '' : `min="${hoje()}"`}></label>${datas('data')}
@@ -328,7 +330,7 @@ async function vTopoNova(id) {
     const sel = f.topografo_id.value;
     $('#tpQuem').innerHTML = !D.topografos.length ? $('#tpQuem').innerHTML : `<div class="tp-op ${sel === 'auto' ? 'on' : ''}" data-t="auto"><span class="tp-op-i">${ic('alvo')}</span><span><b>Qualquer um</b><small>${s && s.melhor ? 'vai para ' + esc(s.melhor.nome) + ' · livre ' + (s.melhor.data === hoje() ? 'hoje' : fdc(s.melhor.data)) : 'o sistema escolhe quem está livre antes'}</small></span></div>` +
       D.topografos.map(t => { const x = s && s.sugestoes.find(z => z.id === t.id); return `<div class="tp-op ${sel === t.id ? 'on' : ''}" data-t="${esc(t.id)}"><span class="tp-op-i">${esc(t.nome.slice(0, 1))}</span><span><b>${esc(t.nome)}</b>
-        <small>${x ? `livre ${x.data === hoje() ? 'hoje' : fdc(x.data)}${x.livre < 1 ? ' (meio dia)' : ''} · leva ~${nf(x.dias)} dia${x.dias > 1 ? 's' : ''} · ${plural(x.abertas, 'aberta', 'abertas')}` : '…'}</small></span>
+        <small>${x ? `livre ${x.data === hoje() ? 'hoje' : fdc(x.data)}${x.livre < 1 ? ' (meio dia)' : ''} · leva ${tpDias(x.dias)} ·${plural(x.abertas, 'aberta', 'abertas')}` : '…'}</small></span>
         ${x && f.data.value && x.data > f.data.value ? `<em class="tp-op-w">${ic('alert')} ocupado em ${fd(f.data.value).slice(0, 5)}</em>` : ''}</div>`; }).join('');
     $$('#tpQuem .tp-op').forEach(o => { o.onclick = () => { f.topografo_id.value = o.dataset.t; desenharQuem(ultima); if (o.dataset.t === 'auto' && ultima && ultima.melhor && !d) f.data.value = f.data.value || ultima.melhor.data; }; });
   };

@@ -132,6 +132,13 @@ test('agenda automática: produção média estima os dias, a fila anda quando a
   const x = abrir(t, { topografo_id: t.t2.id, qtd_prevista: 1100, data: util(0), servico: 'Rede de água' });
   [-3, -2, -1].forEach(n => t.t2.f('topo_lancar', { demanda: x, data: dia(n), qtd: 100, fotos: [FOTO(1), FOTO(2)] }));
   assert.equal(P(x).carga, 8);
+  // prazo digitado vale sobre a média (1413 m em 3 dias, não 3,5); com 1/3 feito, restam 2 dias
+  const s3 = t.eng.f('topo_sugerir', { tipo: 'Marcação', unidade: 'm', qtd: 1413, dias: 3 });
+  assert.equal(s3.melhor.dias, 3);
+  const z = abrir(t, { topografo_id: t.t2.id, qtd_prevista: 900, dias_previstos: 3, data: util(0), servico: 'Pluvial' });
+  assert.equal(P(z).carga, 3);
+  t.t2.f('topo_lancar', { demanda: z, data: dia(0), qtd: 300, fotos: [FOTO(1), FOTO(2)] });
+  assert.equal(P(z).carga, 2);
 });
 
 test('lembrete da véspera, diários separados do RDO e produção do mês', () => {

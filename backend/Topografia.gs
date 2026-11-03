@@ -98,12 +98,13 @@ function topoProdutividade_(diarios) {
     padrao: pad
   };
 }
-/* carga em dias de uma demanda aberta (fração de dia; mínimo 1/4 de dia) */
+/* carga em dias de uma demanda aberta (fração de dia; mínimo 1/4 de dia)
+ * o prazo digitado por quem abriu vale sobre a média; com quantidade também, desconta o que já foi feito */
 function topoCarga_(d, prod) {
   const prev = num_(d.qtd_prevista), feita = num_(d.qtd_feita), dias = num_(d.dias_previstos);
-  if (dias > 0 && !(prev > 0)) return Math.max(0.25, dias);
+  const resta = prev > 0 ? Math.max(0, prev - feita) : 0;
+  if (dias > 0) return Math.max(0.25, prev > 0 ? dias * resta / prev : dias);
   if (!(prev > 0)) return 1;
-  const resta = Math.max(0, prev - feita);
   return Math.max(0.25, resta / prod.de(d.topografo_id, d.tipo, d.unidade));
 }
 /* enfileira as demandas abertas de cada topógrafo; devolve {id: {ini, fim, carga, empurrada}} e a ocupação de cada dia */
