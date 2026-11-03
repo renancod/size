@@ -1591,12 +1591,13 @@ function mUsuario(u) {
       .map(([v, t]) => `<option value="${v}" ${(u?.orcamentos || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <label>Topografia (demandas, agenda e diário do topógrafo; não depende de obra)<select name="topografia">${[['', 'Sem acesso'], ['Topógrafo', 'Topógrafo: recebe as demandas e lança o dia'], ['Gerir', 'Gerir: abre demandas, vê a agenda e a produção da equipe']]
       .map(([v, t]) => `<option value="${v}" ${(u?.topografia || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-    <div id="acessos"><h3>Acesso por obra</h3>${A.obras.map(o => {
+    <div id="acessos"><h3>Acesso por obra</h3>${A.obras.filter(o => sim(o.ativa) || ac(o.id)).map(o => {
+      // obra desativada só aparece para quem já tem acesso a ela (senão o acesso sumiria ao salvar)
       const a = ac(o.id), lista = a ? a.permissoes : [];
-      return `<div class="acesso" data-obra="${esc(o.id)}"><div class="topo2"><b>${esc(o.nome)} <small>${esc(o.sigla)}</small></b>
+      return `<div class="acesso" data-obra="${esc(o.id)}"><div class="topo2"><b>${esc(o.nome)} <small>${esc(o.sigla)}</small>${sim(o.ativa) ? '' : ' <span class="badge b-canc">desativada</span>'}</b>
         <select class="perfil"><option value="">Sem acesso</option>${perfis.map(p => `<option ${a && a.perfil === p.perfil ? 'selected' : ''}>${esc(p.perfil)}</option>`).join('')}<option ${a && !perfis.some(p => p.perfil === a.perfil) ? 'selected' : ''}>Personalizado</option></select></div>
         <details ${a ? '' : ''}><summary>Ajustar permissões</summary><div class="perms">${Object.entries(P).map(([k, t]) => `<label class="ck"><input type="checkbox" value="${k}" ${lista.includes(k) ? 'checked' : ''}> ${esc(t)}</label>`).join('')}</div></details></div>`;
-    }).join('') || '<small>Nenhuma obra criada ainda.</small>'}</div>
+    }).join('') || `<small>${A.obras.length ? 'Nenhuma obra ativa.' : 'Nenhuma obra criada ainda.'}</small>`}</div>
     ${u ? '<button type="button" class="btn sec" id="senha">Definir senha provisória</button>' : ''}`, {
     larga: true, ok: 'Salvar',
     onOk: async f => {
