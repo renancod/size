@@ -85,6 +85,7 @@ function adminUsuarioSalvar_(q, ctx) {
   u.admin = sim_(d.admin) ? 'Sim' : 'Não';
   u.ativo = sim_(d.ativo) ? 'Sim' : 'Não';
   if (d.orcamentos !== undefined) u.orcamentos = BASE_NIVEIS.indexOf(d.orcamentos) >= 0 ? d.orcamentos : '';
+  if (d.topografia !== undefined) u.topografia = TOPO_NIVEIS.indexOf(d.topografia) >= 0 ? d.topografia : '';
   if (novo) U.insert(u); else U.update(u);
 
   if (q.acessos) {

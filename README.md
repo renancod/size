@@ -128,6 +128,16 @@ Módulo **Orçamento da obra** (`#/obra`, `Orcamento.gs` + `orc.js`). Cada **fre
 - **No orçamento:** a busca "Incluir serviço" mostra também o SINAPI; o regime (**não desonerado / desonerado**) é escolhido em cada orçamento. **Copiar para a base da Size:** a composição vira `SINAPI-<código>` para ajustar.
 - O índice da busca (~3 MB) fica guardado no aparelho (IndexedDB) até mudar o mês.
 
+## Topografia
+`Topografia.gs` + `topo.js` (`#/topo`), na parte **Empresa** do menu (não depende de obra). Abas centrais `TopoDemandas` e `TopoDiarios`.
+- **Acesso** pelo cadastro do usuário (`Usuarios.topografia`): **Topógrafo** recebe as demandas dele e lança o dia; **Gerir** abre demandas e vê a agenda e a produção da equipe (o administrador é Gerir). Topógrafo sem obra entra direto em `#/topo`.
+- **Demanda:** obra cadastrada ou **Outra** (nome e cidade digitados), tipo (marcação, conferência, levantamento, nivelamento, locação, cadastro), serviço, local, descrição, quantidade prevista em **metros, pontos ou unidades** (ou dias), topógrafo (ou **Qualquer um**), data, urgente, e arquivos opcionais (PDF, DXF, DWG, planilha de pontos) na pasta `Topografia/<obra>/<TP-0001>` do Drive.
+- **Lançar o dia** (diário do topógrafo, separado do RDO da obra): quantidade feita, **terminou?**, **no mínimo 2 fotos**; no lançamento que termina, **croqui** e **arquivo usado** são obrigatórios. Pode durar vários dias; a demanda soma o feito. O topógrafo corrige só o lançamento de hoje (até 7 dias para trás para lançar atrasado); dias anteriores, só quem gere. Sem sinal, fica na fila do aparelho.
+- **Mudar a data:** o topógrafo pode, sempre com o **motivo** (histórico e aviso a quem abriu).
+- **Agenda automática:** a média por dia (do histórico de cada topógrafo por tipo, a partir de 3 dias lançados; antes, o padrão `TOPO_PRODUTIVIDADE` = `m:400; pt:80; un:30`) estima a carga de cada demanda e enfileira nos dias úteis (seg–sex sem feriado nacional), em frações de dia; urgente passa na frente no mesmo dia. Atrasou, as próximas andam. Ao abrir a demanda, o app sugere o primeiro dia livre de cada topógrafo.
+- **Avisos** (sino e celular): nova demanda / data mudada para o topógrafo, lembrete da agenda do próximo dia útil a partir das 17h; data mudada pelo topógrafo e demanda concluída para quem abriu e o administrador.
+- **Telas:** painel (hoje, próximos dias, ocupação da equipe nos próximos 10 dias úteis), demandas, agenda da semana (dias × topógrafos), diários do topógrafo por mês e **produção** do mês (metros, pontos, unidades, dias trabalhados, média por dia, por tipo e por obra, concluídas sem mudar a data).
+
 ## Portal do cliente
 `Clientes.gs` + `portal.js` (o que o cliente vê) + `clientes.js` (cadastro, **Administração → Portal do cliente**, `#/admin/clientes`).
 - **Cadastro do cliente** (aba central `Clientes`): nome do app, empresa, **razão social, CNPJ/CPF** (conferido), contato, cargo, e-mail, telefone, cidade, observações internas, cor, logo e fundo do login. A lista mostra a **logo publicada** (o quadrado pega a cor do fundo dela) e todos os orçamentos ligados, inclusive rascunho.

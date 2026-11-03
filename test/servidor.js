@@ -181,6 +181,39 @@ console.log(G.rodar('criarObraAvaResidence()'));
   adm('admin_dados').obras.filter(o => !o.lat).forEach((o, n) => adm('admin_obra_salvar', { id: o.id, nome: o.nome, endereco: o.endereco, ativa: true, lat: [-29.64, -29.89][n % 2], lng: [-49.99, -50.27][n % 2] }));
 }
 
+// topografia: dois topógrafos, demandas em obra cadastrada e em "Outra", dias já lançados (fotos e croqui de exemplo)
+{
+  const topo = (login, nome, nivel) => {
+    adm('admin_usuario_salvar', { usuario: { nome, login, ativo: true, topografia: nivel }, senha: 'Obra#Teste26', acessos: [] });
+    const s = call('login', { login, senha: 'Obra#Teste26' }), t = call('trocarSenha', { token: s.token, atual: 'Obra#Teste26', nova: 'Obra#Teste26' }).token;
+    return { id: s.usuario.id, f: (acao, x = {}) => call(acao, { token: t, ...x }) };
+  };
+  const tiago = topo('topo', 'Tiago Topógrafo', 'Topógrafo'), tania = topo('topo2', 'Tânia Topógrafa', 'Topógrafo');
+  // imagem de exemplo (PNG 48×32 de uma cor, com faixa) para as fotos e o croqui
+  const crc = b => { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; } return ~c >>> 0; };
+  const bloco = (t, d) => { const l = Buffer.alloc(4), c = Buffer.alloc(4), td = Buffer.concat([Buffer.from(t), d]); l.writeUInt32BE(d.length); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
+  const IMG = (r, g, b) => {
+    const w = 48, h = 32, ih = Buffer.alloc(13); ih.writeUInt32BE(w, 0); ih.writeUInt32BE(h, 4); ih[8] = 8; ih[9] = 2;
+    const px = Buffer.alloc((w * 3 + 1) * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3, f = Math.abs(y - 16 - (x - 24) / 3) < 2; px[o] = f ? 255 : r; px[o + 1] = f ? 122 : g; px[o + 2] = f ? 26 : b; }
+    const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), bloco('IHDR', ih), bloco('IDAT', require('zlib').deflateSync(px)), bloco('IEND', Buffer.alloc(0))]);
+    return { nome: 'foto.png', mime: 'image/png', b64: png.toString('base64') };
+  };
+  const F = [IMG(120, 150, 110), IMG(150, 140, 120)];
+  const DXF = { nome: 'RUA10_AGUA_REV02.dxf', mime: 'application/dxf', b64: Buffer.from('0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF').toString('base64') };
+  const nova = (x, anexos) => adm('topo_salvar', { demanda: { obra_id: obra, tipo: 'Marcação', unidade: 'm', data: d(0), ...x }, anexos }).id;
+  const a = nova({ servico: 'Rede de água', local: 'Rua 10, da Av. Central até a Rua 4', qtd_prevista: 1200, topografo_id: tiago.id, data: d(-3), descricao: 'Marcar eixo da rede DN 75 a cada 20 m com off-set de 1 m do lado direito.' }, [DXF]);
+  [-3, -2, -1].forEach((n, i) => tiago.f('topo_lancar', { demanda: a, data: d(n), qtd: [320, 280, 350][i], fotos: F, obs: ['Início na Av. Central', 'Trecho com interferência de poste', ''][i], arquivo_usado: 'Anexo da demanda: RUA10_AGUA_REV02.dxf' }));
+  nova({ servico: 'Meio-fio', local: 'Rua 12 (ambos os lados)', qtd_prevista: 600, topografo_id: tiago.id, data: d(1) });
+  nova({ tipo: 'Conferência', servico: 'Drenagem pluvial', local: 'PVs da Rua 4', unidade: 'pt', qtd_prevista: 45, topografo_id: tiago.id, data: d(1), prioridade: 'Urgente' });
+  const b = adm('topo_salvar', { demanda: { obra_id: 'outra', obra_nome: 'Loteamento Dunas', cidade: 'Xangri-lá', tipo: 'Levantamento', servico: 'Curvas de nível', local: 'Quadras 1 a 3', unidade: 'pt', qtd_prevista: 300, topografo_id: tania.id, data: d(-2) } }).id;
+  tania.f('topo_lancar', { demanda: b, data: d(-2), qtd: 140, fotos: F });
+  tania.f('topo_lancar', { demanda: b, data: d(-1), qtd: 160, terminou: true, fotos: F, croquis: [IMG(240, 240, 235)], arquivo_usado: 'Levantamento_Dunas_Q1-3.txt (estação)' });
+  nova({ tipo: 'Locação', servico: 'Lotes', local: 'Quadra 7', unidade: 'un', qtd_prevista: 24, topografo_id: tania.id, data: d(2) });
+  tiago.f('topo_data', { id: nova({ tipo: 'Nivelamento', servico: 'Rua / pavimento', local: 'Rua 15', qtd_prevista: 400, topografo_id: tiago.id, data: d(2) }), data: d(4), motivo: 'Frente não liberada pela terraplenagem' });
+  console.log('Topografia: login topo / Obra#Teste26 (Tiago) · topo2 (Tânia) · admin gere');
+}
+
 const local = u => u.replace(/^https?:\/\/[^/]+\/[^?]*/, 'http://localhost:5173/fornecedor.html');
 console.log('Portal (cotação PB-0002):', local(com('forn_link', { fornecedor: 'F003', numeros: [p2] }).url));
 console.log('Portal (compra PB-0005):', local(com('forn_link', { fornecedor: 'F001', numeros: [p5] }).url));

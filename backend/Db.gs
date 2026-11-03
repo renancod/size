@@ -5,7 +5,7 @@
 const SCHEMA_CENTRAL = {
   Config: ['chave', 'valor', 'descricao'],
   // cliente_id preenchido = usuário do portal do cliente (só vê a obra desse cliente, só leitura)
-  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id', 'portal_json', 'acesso_enviado_em'],
+  Usuarios: ['id', 'nome', 'login', 'email', 'telefone', 'admin', 'ativo', 'trocar_senha', 'senha_hash', 'salt', 'criado_em', 'ultimo_acesso', 'orcamentos', 'cliente_id', 'portal_json', 'acesso_enviado_em', 'topografia'],
   // portal do cliente: uma linha por cliente/obra; modulos = o que ele vê; slug = endereço próprio (c/<slug>/) com ícone e nome do empreendimento
   // obra_id vazio = cliente em negociação (só vê os orçamentos enviados a ele)
   Clientes: ['id', 'nome', 'empresa', 'obra_id', 'modelo', 'modulos', 'cor', 'slug', 'publicado_em', 'ativo', 'criado_em', 'criado_por', 'atualizado_em', 'capa', 'logo', 'emps_json',
@@ -37,7 +37,13 @@ const SCHEMA_CENTRAL = {
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
   // sem_bdi / sem_gestao: item fora do BDI ou da gestão (ex. AVA: mobilização e canteiro sem BDI)
   // fonte: vazio = base da Size; SINAPI = composição do SINAPI; SINAPI-INSUMO = insumo do SINAPI (custo congelado do mês e do regime do orçamento)
-  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs', 'sem_bdi', 'sem_gestao', 'fonte']
+  PropostaItens: ['proposta', 'ordem', 'tipo', 'codigo', 'comp_cod', 'descricao', 'unidade', 'qtd', 'unit_mat', 'unit_mo', 'unit_eq', 'unit_sv', 'obs', 'sem_bdi', 'sem_gestao', 'fonte'],
+  // Topografia (Topografia.gs): demandas do topógrafo em obra cadastrada ou "Outra" e o diário dele (um lançamento por dia de trabalho)
+  TopoDemandas: ['id', 'obra_id', 'obra_nome', 'obra_outra', 'cidade', 'tipo', 'servico', 'local', 'descricao', 'unidade', 'qtd_prevista', 'qtd_feita', 'dias_previstos',
+    'topografo_id', 'topografo', 'data', 'prioridade', 'status', 'anexos_json', 'arquivo_usado', 'criado_em', 'criado_por_id', 'criado_por', 'iniciada_em', 'concluida_em',
+    'motivo', 'adiada_em', 'adiada_por', 'historico_json', 'atualizado_em', 'pasta_id'],
+  TopoDiarios: ['id', 'demanda', 'data', 'topografo_id', 'topografo', 'obra_id', 'obra_nome', 'tipo', 'servico', 'local', 'unidade', 'qtd', 'terminou', 'obs', 'arquivo_usado',
+    'fotos_json', 'croquis_json', 'arquivos_json', 'lat', 'lng', 'criado_em', 'atualizado_em']
 };
 const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',

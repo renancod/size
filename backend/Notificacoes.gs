@@ -79,6 +79,8 @@ function notifMontar_(ctx) {
   try { sinNotif_({ base: nivelBase_(ctx.u), admin: ctx.admin }).forEach(x => itens.push(x)); } catch (e) { /* sem SINAPI ainda */ }
   // portal do cliente: considerações novas e aceites pelo app
   try { propNotifCli_(ctx).forEach(x => itens.push(x)); } catch (e) { /* não derruba o sino */ }
+  // topografia: demandas do topógrafo, data mudada, concluída e o lembrete da véspera
+  try { topoNotif_(ctx).forEach(x => itens.push(x)); } catch (e) { /* não derruba o sino */ }
   // cotas do Google (Uso.gs): e-mails do dia acabando ou tarefas automáticas perto do limite — só o administrador
   if (ctx.admin) try {
     usoAvisos_((etapa, texto, resumo) => itens.push({ id: 'uso|' + etapa + '|' + hojeStr, obra: '', obra_nome: 'Sistema', numero: '', rota: '#/admin/config', etapa: etapa, texto: texto, resumo: resumo, situacao: '', prioridade: 'alta', quando: '' }));

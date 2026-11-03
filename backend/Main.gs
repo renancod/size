@@ -185,6 +185,18 @@ const ROTAS = {
   sinapi_para_base: { base: 'Gerir', lock: true, fn: sinapiParaBase_ },
   sinapi_insumo_para_base: { base: 'Gerir', lock: true, fn: sinapiInsumoParaBase_ },
 
+  // topografia (sem obra: acesso pelo cadastro do usuário · Topógrafo = as demandas dele · Gerir = abre e agenda)
+  topo_dados: { topo: 'Ver', fn: topoDados_ },
+  topo_demanda: { topo: 'Ver', fn: topoDemanda_ },
+  topo_sugerir: { topo: 'Gerir', fn: topoSugerir_ },
+  topo_salvar: { topo: 'Gerir', lock: true, fn: topoSalvar_ },
+  topo_status: { topo: 'Gerir', lock: true, fn: topoStatus_ },
+  topo_data: { topo: 'Ver', lock: true, fn: topoData_ },
+  topo_lancar: { topo: 'Ver', lock: true, fn: topoLancar_ },
+  topo_diarios: { topo: 'Ver', fn: topoDiarios_ },
+  topo_producao: { topo: 'Ver', fn: topoProducao_ },
+  topo_arquivo: { topo: 'Ver', fn: topoArquivo_ },
+
   // portal do cliente (só leitura; cli: abre a obra do cliente e confere o módulo liberado)
   cli_inicio: { cli: 'orc', fn: cliInicio_ },
   cli_orcamentos: { cli: 'orc', fn: cliOrcamentos_ },
@@ -252,6 +264,7 @@ function rota_(q) {
   if (r.cli) cliCtx_(q, ctx);
   if (r.admin && !ctx.admin) throw new Error('Apenas administradores.');
   if (r.base) exigirBase_(ctx, r.base);
+  if (r.topo) exigirTopo_(ctx, r.topo);
   if (r.obra) abrirObra_(ctx, q.obra);
   if (r.perm) exigir_(ctx, r.perm);
   TEMPO_.auth = Date.now() - t0;
@@ -407,7 +420,7 @@ function sessaoDe_(u) {
     .map(o => ({ id: String(o.id), sigla: o.sigla, nome: o.nome, ativa: sim_(o.ativa), permissoes: permsDe_(u, o.id) }))
     .filter(o => o.permissoes);
   return {
-    usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: admin, trocar_senha: sim_(u.trocar_senha), orcamentos: nivelBase_(u) },
+    usuario: { id: String(u.id), nome: u.nome, login: u.login, email: u.email, admin: admin, trocar_senha: sim_(u.trocar_senha), orcamentos: nivelBase_(u), topografia: nivelTopo_(u) },
     obras: obras,
     permissoes: PERMISSOES
   };

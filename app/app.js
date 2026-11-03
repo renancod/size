@@ -339,6 +339,19 @@ const MODULOS = [
       { h: '#/orc/sinapi', t: 'SINAPI (Caixa)', i: 'grid2', ok: () => !!baseNivel() },
       { h: '#/orc/importar', t: 'Importar composições', i: 'upload', ok: () => baseNivel() === 'Gerir' }
     ]
+  },
+  {
+    id: 'topografia', t: 'Topografia', i: 'tripod', home: '#/topo', global: true,
+    desc: 'Demandas do topógrafo (marcação, conferência, levantamento), agenda automática pela produção, diário do topógrafo com fotos, croqui e arquivo usado',
+    rotas: /^#\/topo/,
+    itens: [
+      { h: '#/topo', t: 'Painel', i: 'home', ok: () => !!topoNivel(), c: 'topo-hoje' },
+      { h: '#/topo/nova', t: 'Nova demanda', i: 'plus', ok: () => topoNivel() === 'Gerir' },
+      { h: '#/topo/demandas', t: 'Demandas', i: 'list', ok: () => !!topoNivel() },
+      { h: '#/topo/agenda', t: 'Agenda', i: 'calendar', ok: () => !!topoNivel() },
+      { h: '#/topo/diarios', t: 'Diários do topógrafo', i: 'book', ok: () => !!topoNivel() },
+      { h: '#/topo/producao', t: 'Produção', i: 'chart', ok: () => !!topoNivel() }
+    ]
   }
 ];
 const modOk = m => !m.itens || m.itens.some(n => n.ok());
@@ -441,7 +454,7 @@ function marcarMenu() {
 function contadores() {
   $$('#nav .cont').forEach(c => {
     const k = c.dataset.c;
-    const n = obraInativa() ? 0 : /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra|mod-orcamentos)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
+    const n = /^(topo-|mod-topografia)/.test(k) ? (typeof contTopo === 'function' ? contTopo(k) : 0) : obraInativa() ? 0 : /^(exec-|mod-execucao)/.test(k) ? (typeof contExec === 'function' ? contExec(k) : 0) : /^(med-|mod-medicoes|mod-obra|mod-orcamentos)/.test(k) ? 0 : !S.ped ? 0 : k === 'mod-compras' ? pendenciasCompras() : conta(k);
     c.textContent = n; c.hidden = !n;
   });
 }
@@ -465,9 +478,9 @@ function sairObra() {
   if (location.hash === '#/inicio') rotear(); else location.hash = '#/inicio';
 }
 /* telas que não dependem de obra (Início da empresa, Orçamentos, administração, conta) */
-const rotaEmpresa = h => /^(#\/?)?$|^#\/(inicio|orc|admin|conta)(\/|\?|$)/.test(h);
-/* tem mais de um lugar para ir: várias obras, administração ou o módulo Orçamentos */
-const multiObra = () => admin() || !!baseNivel() || (S.sess?.obras || []).filter(o => o.ativa).length > 1;
+const rotaEmpresa = h => /^(#\/?)?$|^#\/(inicio|orc|admin|conta|topo)(\/|\?|$)/.test(h);
+/* tem mais de um lugar para ir: várias obras, administração, o módulo Orçamentos ou a Topografia */
+const multiObra = () => admin() || !!baseNivel() || !!(typeof topoNivel === 'function' && topoNivel()) || (S.sess?.obras || []).filter(o => o.ativa).length > 1;
 
 /* ---------- rotas ---------- */
 const ROTAS = [
@@ -594,11 +607,15 @@ async function iniciar() {
   S.dados = null;
   if (S.obraId) { try { await recarregarDados(); } catch (e) { toast(e.message, 1); } }
   if (S.obraId && /^(#\/inicio)?$/.test(location.hash)) history.replaceState(null, '', '#/painel');
+  // topógrafo sem obra liberada: abre direto na Topografia
+  else if (!S.obraId && !ativas.length && !admin() && !baseNivel() && typeof topoNivel === 'function' && topoNivel() && /^(#\/?(inicio)?)?$/.test(location.hash)) history.replaceState(null, '', '#/topo');
   montarShell();
   rotear();
   if (S.dados && !S.offline) pedidos().catch(() => {});
   iniciarNotif();
   if (typeof iniciarExec === 'function') iniciarExec();
+  // contador do menu da Topografia (demandas de hoje / atrasadas)
+  if (typeof topoNivel === 'function' && topoNivel() && !/^#\/topo/.test(location.hash)) setTimeout(() => topoCarregar().catch(() => {}), 3000);
 }
 async function boot() {
   const qs = new URLSearchParams(location.search);
@@ -648,7 +665,8 @@ const ETAPA_NOTIF = {
   pago: ['Pagamentos concluídos', 'check'], meu: ['Meus pedidos', 'clock'], nf_conf: ['Nota com diferença', 'alert'],
   exec_aviso: ['Aviso do engenheiro', 'alert'], exec_diario: ['Diário de obra', 'book'], exec_alerta: ['Alerta de produção', 'chart'], exec_revisar: ['Diário para revisar', 'file'],
   fvs_aprovar: ['FVS para aprovar', 'check'], fvs_devolvida: ['FVS devolvida', 'alert'], fvs_verificar: ['FVS para verificar', 'clip'],
-  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2'], prop_cli: ['Portal do cliente', 'eye']
+  medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2'], prop_cli: ['Portal do cliente', 'eye'],
+  topo_nova: ['Topografia · demandas', 'tripod'], topo_amanha: ['Agenda de amanhã', 'calendar'], topo_adiada: ['Topografia · data mudada', 'calendar'], topo_concluida: ['Topografia · concluídas', 'check']
 };
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {
@@ -685,7 +703,7 @@ function atualizarSino() {
   b.textContent = n > 99 ? '99+' : n;
   b.hidden = !n;
 }
-const urlNotif = i => './?obra=' + enc(i.obra) + '#/pedido/' + enc(i.numero);
+const urlNotif = i => (i.obra ? './?obra=' + enc(i.obra) : './') + (i.rota || '#/pedido/' + enc(i.numero));
 function avisarNovos(novos) {
   const caixa = $('#avisos') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'avisos', className: 'avisos' }));
   novos.slice(0, 3).forEach(i => {
@@ -1542,7 +1560,7 @@ async function vUsuarios() {
   titulo('Usuários e acessos');
   const A = await adm(true);
   const resumo = u => sim(u.admin) ? 'Administrador' : [...A.acessos.filter(a => a.usuario_id === u.id).map(a => `${A.obras.find(o => o.id === a.obra_id)?.sigla || a.obra}: ${a.perfil}`),
-    ...(u.orcamentos ? ['Orçamentos: ' + u.orcamentos] : [])].join(' · ') || 'sem acesso';
+    ...(u.orcamentos ? ['Orçamentos: ' + u.orcamentos] : []), ...(u.topografia ? ['Topografia: ' + u.topografia] : [])].join(' · ') || 'sem acesso';
   view(`<div class="cab"><h2>${plural(A.usuarios.length, 'usuário', 'usuários')}</h2><button class="btn" id="novo">${ic('plus')} Novo usuário</button></div>
     <div class="busca">${ic('search')}<input type="search" id="busca" placeholder="Buscar…"></div>
     <div class="card" style="padding:4px 14px" id="lst"></div>`);
@@ -1571,6 +1589,8 @@ function mUsuario(u) {
     <label class="ck"><input type="checkbox" name="admin" ${u && sim(u.admin) ? 'checked' : ''}> Administrador (acesso total a todas as obras e à administração)</label>
     <label>Orçamentos (base de preços: insumos e composições; não depende de obra)<select name="orcamentos">${[['', 'Sem acesso'], ['Ver', 'Ver: consulta preços e composições'], ['Gerir', 'Gerir: cadastra, importa e atualiza preços']]
       .map(([v, t]) => `<option value="${v}" ${(u?.orcamentos || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <label>Topografia (demandas, agenda e diário do topógrafo; não depende de obra)<select name="topografia">${[['', 'Sem acesso'], ['Topógrafo', 'Topógrafo: recebe as demandas e lança o dia'], ['Gerir', 'Gerir: abre demandas, vê a agenda e a produção da equipe']]
+      .map(([v, t]) => `<option value="${v}" ${(u?.topografia || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <div id="acessos"><h3>Acesso por obra</h3>${A.obras.map(o => {
       const a = ac(o.id), lista = a ? a.permissoes : [];
       return `<div class="acesso" data-obra="${esc(o.id)}"><div class="topo2"><b>${esc(o.nome)} <small>${esc(o.sigla)}</small></b>
@@ -1581,7 +1601,7 @@ function mUsuario(u) {
     larga: true, ok: 'Salvar',
     onOk: async f => {
       const acessos = $$('.acesso', f).map(el => ({ obra_id: el.dataset.obra, perfil: $('.perfil', el).value, permissoes: $$('.perms input:checked', el).map(x => x.value) })).filter(a => a.permissoes.length);
-      const r = await api('admin_usuario_salvar', { usuario: { id: u?.id, nome: f.nome.value, login: f.login.value, email: f.email.value, telefone: f.telefone.value, admin: f.admin.checked, ativo: f.ativo.checked, orcamentos: f.orcamentos.value }, senha: f.senha?.value, acessos });
+      const r = await api('admin_usuario_salvar', { usuario: { id: u?.id, nome: f.nome.value, login: f.login.value, email: f.email.value, telefone: f.telefone.value, admin: f.admin.checked, ativo: f.ativo.checked, orcamentos: f.orcamentos.value, topografia: f.topografia.value }, senha: f.senha?.value, acessos });
       toast(r.msg);
       if (u && u.id === S.sess.usuario.id) await recarregarSessao();
       await vUsuarios();

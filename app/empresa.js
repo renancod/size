@@ -44,6 +44,7 @@ async function vEmpresa() {
       ${ativas.some(o => o.lat !== '' && o.lat != null && o.lng !== '' && o.lng != null) ? '<div class="emp-mapa" id="empMapa"></div>' : ''}
       <div class="emp-obras">${ativas.map(empCartao).join('') || '<p class="vazio">Nenhuma obra liberada para você.</p>'}</div>
       ${inativas.length ? `<details class="emp-inat"><summary>${plural(inativas.length, 'obra desativada', 'obras desativadas')}</summary><div class="emp-obras">${inativas.map(empCartao).join('')}</div></details>` : ''}</div>
+    ${typeof empTopo === 'function' ? empTopo() : ''}
     ${D.nivel ? empOrcamentos(P) + empBase(D.base) : ''}
   </div>`);
   $$('[data-entrar]').forEach(b => { b.onclick = () => empEntrar(b.dataset.entrar); });
