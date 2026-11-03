@@ -1,27 +1,46 @@
 # Size Engenharia — sistema de gestão
 
-App único da Size organizado em **módulos** (menu lateral). Hoje: **Compras**. Próximo: **Diário de obra**.
+App único da Size Engenharia (PWA para Android, iPhone e computador), organizado em **módulos** no menu lateral:
 
-## Módulo Compras
+| Módulo | O que faz |
+|---|---|
+| **Compras** | pedidos de material, cotação, aprovação, liberação de entrega, recebimento, estoque e financeiro |
+| **Execução** | frentes de trabalho, diário de obra (RDO), equipes, clima, fotos, produção, avisos e **FVS** |
+| **Medições** | medições de empreiteiros e **contratos de empreiteiros** |
+| **Orçamento da obra** | o que cada frente geral precisa executar, valores, materiais, cronograma, contratos e documentos com o cliente, relatório da obra |
+| **Orçamentos** | base de preços (insumos e composições), orçamentos de clientes e SINAPI (Caixa) |
+| **Portal do cliente** | o cliente acompanha as obras e negocia os orçamentos, com a logo dele |
+| **Administração** | usuários e acessos, obras, portal do cliente e configurações |
 
-App único (PWA para Android e iPhone) para **pedidos de material, cotação, aprovação, liberação de entrega, recebimento, estoque e financeiro** das obras da Size Engenharia.
-Substitui os apps `COMPRAS-SIZE-02` (abertura de pedido) e `COMPRAS-SIZE-03` (gestão de compras).
-
-- **Frontend:** `app/` — HTML/CSS/JS puro, publicado no GitHub Pages.
-- **Backend:** `backend/` — Google Apps Script (API) + Google Sheets como banco de dados.
+- **Frontend:** `app/` — HTML/CSS/JS puro, publicado no GitHub Pages (`.github/workflows/pages.yml`, roda os testes antes).
+- **Backend:** `backend/` — Google Apps Script (API) + Google Sheets como banco de dados, publicado com `clasp`.
+- Substituiu os apps `COMPRAS-SIZE-02` (abertura de pedido) e `COMPRAS-SIZE-03` (gestão de compras).
 
 ## Como os dados ficam organizados
 
+As colunas são lidas pelo **nome do cabeçalho** (`backend/Db.gs`): dá para reordenar ou acrescentar colunas, e as que faltarem são criadas sozinhas no fim da aba.
+
 | Onde | Abas |
 |---|---|
-| **Planilha central "Size · Cadastros"** | Usuarios, Acessos (usuário × obra × permissões), Obras, Perfis, MateriaisPadrao, Unidades, Config, Log |
-| **Uma planilha por obra** (criada pelo app) | Pedidos, Itens, Orcamentos, Fornecedores, Materiais, Frentes, Recebimentos, Estoque, Arquivos |
-| **Drive** | `Compras Size/<Obra>/<Nº do pedido>/` com orçamentos, NFs, comprovantes e fotos |
+| **Planilha central "Size · Cadastros (Compras)"** | Pessoas e acesso: `Usuarios`, `Acessos` (usuário × obra × permissões), `Perfis`, `Obras`, `Config`, `Log`, `Aparelhos` (push) · Cadastros padrão: `MateriaisPadrao`, `ServicosPadrao`, `FvsModelos`, `Unidades` · Base de preços: `Insumos`, `InsumoPrecos`, `Composicoes`, `ComposicaoItens` · Orçamentos de clientes: `Propostas`, `PropostaItens`, `PropostaComentarios` · Portal: `Clientes` |
+| **Uma planilha por obra** (criada pelo app) | Compras: `Pedidos`, `Itens`, `Orcamentos`, `Fornecedores`, `Materiais`, `Recebimentos`, `Estoque`, `Arquivos` · Execução: `Etapas`, `EtapaItens`, `Equipes`, `Diarios`, `Producao`, `EquipesDia`, `FotosExec`, `AlteracoesExec`, `AvisosExec`, `Fvs` · Medições e contratos: `Medicoes`, `MedicaoItens`, `Contratos`, `ContratoItens`, `ContratoRT`, `ContratoAditivos` · Orçamento da obra: `Frentes`, `OrcItens`, `OrcMateriais`, `ContratosCliente` |
+| **Planilha "Size · SINAPI"** | referência da Caixa (RS, mês atual), separada para não pesar a central |
+| **Drive** | `Compras Size/<Obra>/…`: pedidos (orçamentos, NFs, comprovantes, fotos), FVS, medições, contratos, contratos do cliente, fotos do diário · `Base de preços/Fotos dos insumos` · `Backups` |
 
-As colunas são lidas pelo **nome do cabeçalho** — dá para reordenar ou acrescentar colunas sem quebrar o sistema.
 Ao criar uma obra, ela já nasce com os **materiais padrão** e as **frentes padrão** (Configurações).
 
-## Fluxo do pedido
+## Perfis e permissões
+
+Cada usuário recebe, **por obra**, um perfil (**Admin, Compras, Estoque, Financeiro, Solicitante, Encarregado, Engenheiro**) que marca as permissões padrão, e dá para ligar/desligar cada permissão individualmente. Administradores veem todas as obras. O módulo **Orçamentos** tem acesso próprio, que não depende de obra (*Ver* ou *Gerir*, em Usuários e acessos). Usuário de cliente (`Usuarios.cliente_id`) só entra no portal do cliente.
+
+## Início da empresa e obra aberta
+- **Início** (`#/inicio`, `empresa.js`): saudação, ações rápidas (novo orçamento, composição, insumo, importar orçamento, nova obra, usuários), **obras** em mapa (Leaflet + OpenStreetMap, pelas coordenadas do cadastro) e cartões com pedidos, frentes, último diário, pendências e **prazo em dias úteis**; **orçamentos de clientes** (em elaboração, aguardando o cliente, aprovados, taxa de aprovação) e a base de preços.
+- **Dois níveis no menu:** sem obra aberta, só Início e **Empresa** (Orçamentos e administração). Ao tocar numa obra, ela fica em destaque no topo do menu (botão **Trocar**) e aparecem os módulos que dependem da planilha da obra, com o **Painel da obra** (`#/painel`).
+- O app abre no Início; entra direto na obra quando o link é de uma tela da obra (notificação), está sem sinal (diário offline) ou a pessoa só tem uma obra e nada fora dela.
+
+## Compras
+
+### Fluxo do pedido
 
 ```
 Aberto → Em cotação → Aguardando aprovação → Aprovado ─┬─ Faturamento direto: Financeiro paga → Liberar entrega → Recebimento → Concluído
@@ -32,136 +51,132 @@ Aberto → Em cotação → Aguardando aprovação → Aprovado ─┬─ Fatura
 - **Faturamento direto:** a entrega fica bloqueada até o financeiro registrar o pagamento (com comprovante).
 - **Faturado:** a entrega pode ser liberada logo após a aprovação; quando a NF é registrada (no recebimento, manualmente ou por e-mail) o pedido vai para o financeiro com vencimento = emissão + prazo.
 - **Recebimento** por item, total ou parcial; cada entrada alimenta o estoque da obra. Dá para encerrar com falta (com motivo).
-- Respostas dos fornecedores por e-mail com PDF entram sozinhas: na cotação viram **orçamento**; na liberação/pagamento viram **nota fiscal**.
+- **Fornecedor:** pedido de cotação por e-mail com o link do **portal do fornecedor** (`fornecedor.html`: envia o orçamento, informa a entrega e manda a NF); ao aprovar, o fornecedor recebe a **ordem de compra** em PDF; cancelamento também é avisado. Respostas por e-mail com PDF entram sozinhas: na cotação viram **orçamento**; na liberação/pagamento viram **nota fiscal**.
+- **Financeiro:** recebe a NF e o **boleto** anexados ao aviso, lembrete diário (8h) dos vencimentos próximos e dos faturamentos diretos esperando pagamento; pagamento de faturado manda o comprovante ao fornecedor.
 
-## Perfis e permissões
+## Execução · diário de obra (RDO)
+`Execucao.gs` + `exec.js` (`#/exec`, `#/diario`).
+- **Frentes de trabalho (etapas):** nome, local, frente geral, responsável e empreiteiro (com ou sem contrato). Cada serviço tem unidade, **quantidade prevista** e início/término. O serviço vem do **orçamento da obra** (um toque, com o que falta distribuir), da **planilha do contrato** do empreiteiro ou do catálogo; serviço digitado à mão não dá baixa no orçamento da obra (aviso na etapa).
+- **Diário:** um por dia da obra (RDO 001, 002…), com várias etapas dentro: equipes e pessoas, quantidade executada por serviço (o saldo desconta sozinho), fotos com legenda, ocorrências e observações. **Clima** pela Open-Meteo (manhã e tarde, mm de chuva); chuva ≥ `CHUVA_LIMITE_MM` (padrão 5 mm) entre 7h e 17h sugere "Parado por chuva", e dia parado sai da média.
+- **Regras:** dias úteis = seg a sex sem feriado nacional (e municipal da obra); sábado, domingo ou feriado é livre e marca "aditivo especial". Executado acima do previsto **não bloqueia**: vira alerta. O encarregado lança hoje e ontem; dias anteriores e mudanças de quantidade ou datas só o engenheiro, com motivo (tudo fica em `AlteracoesExec`, com o previsto original guardado).
+- **Sem sinal:** o diário fica no aparelho e sobe sozinho quando o sinal volta (no iPhone, ao reabrir o app).
+- **Painel e cálculos:** % de cada etapa, média por dia, ritmo necessário, término projetado e produtividade (por homem-dia e equipe-dia); **avisos do engenheiro** para a equipe; diário para revisar.
+- **RDO em PDF** (cabeçalho, rodapé e marca d'água), **relatório do período** com projeção, e o botão **Mostrar ao cliente** (o dia aparece no portal).
+- **Verba (VB):** serviço sem medida (acompanhamento, administração) com unidade VB, verba ou % é lançado e mostrado **em %** do previsto (app `ehVerba`/`qun`, backend `ehVerba_`/`qun_`). Cada lançamento é o que andou no dia (10% + 20% = 30%); o gravado continua a fração (25% de 1 VB = 0,25). Passar de 100% gera aviso, sem travar.
 
-Cada usuário recebe, **por obra**, um perfil (Admin, Compras, Estoque, Financeiro, Solicitante) que marca as permissões padrão — e dá para ligar/desligar cada permissão individualmente. Administradores veem todas as obras. O financeiro escolhe/troca a obra no menu e só vê os dados dela.
+### FVS (ficha de verificação de serviço)
+- **Modelos** (Execução → FVS → Modelos de FVS): 45 fichas importadas do Drive da qualidade (`backend/FvsPadrao.gs`), por categoria → tipo. Mudar os itens sobe a revisão; as fichas já emitidas guardam a revisão usada.
+- **Abertura:** ao criar uma frente de trabalho, cada serviço recebe uma FVS (o catálogo sugere o modelo; "Sem FVS" é uma escolha explícita). Dá para abrir depois pela tela da etapa.
+- **Ficha:** O / X / ⊗ (reinspeção, até 3 vistorias) / N/A, alteração em relação ao projeto (com quem autorizou), não conformidades, **croqui base** e **croqui de execução** (obrigatórios), outros anexos e os **RDOs vinculados**.
+- **Aprovação:** quem tem `fvs_aprovar` (Engenheiro e Admin) aprova ou devolve. Ao aprovar, a FVS ganha o número em sequência (FVS 001…), é travada com um código de verificação e vai para `Drive → obra → FVS → AAAA-MM → "FVS 001 · …"` com o PDF, os croquis e os anexos.
+- Permissões: `fvs_ver`, `fvs_preencher`, `fvs_aprovar`.
+
+## Medições de empreiteiros
+- **Empreiteiros** = o painel de Equipes (empresa, responsável, telefone, e-mail, CNPJ/CPF, endereço, equipe em campo). Cada frente de trabalho escolhe o empreiteiro e o contrato dele (ou "Sem contrato"); isso aparece na medição.
+- **Medição:** o empreiteiro soma as frentes dele. Só entra serviço **concluído** (executado ≥ previsto) **e com FVS aprovada**, **uma vez só**, inteiro, no período em que foi concluído, pela quantidade **executada**. Serviço já medido que recebe mais lançamento entra como **complemento** na medição seguinte. **Verba** é medida **em parcelas** (o lançado até o fim do período que ainda não foi medido), sem exigir FVS.
+- **Fluxo:** rascunho → aguardando aprovação → aprovada (numerada **por empreiteiro**, travada, PDF em `Drive → obra → Medições → empreiteiro → Medição 001 · período`) → paga. Rascunho e devolvida não reservam serviços; enviada, aprovada e paga reservam.
+- **Permissões por obra:** `medicao_ver`, `medicao_lancar`, `medicao_aprovar`. O sino avisa quem aprova quando uma medição é enviada.
+
+### Contratos de empreiteiros
+Dentro de **Medições → Contratos** (`#/ctr`, `Contratos.gs` + `ctr.js` + `ctr-doc.js`). O contrato é cadastrado com a planilha de serviços, vinculado a um empreiteiro, e a frente de trabalho nasce ligada a ele.
+- **Número:** automático por obra (01, 02, 03…), dado ao salvar o rascunho; nunca repete nem é reaproveitado.
+- **Cadastro** (`contrato_gerir`): partes, objeto, vigência, **planilha** (grupo, item, serviço, unidade, quantidade e preço unitário; dá para **colar do Excel/Word**, puxar do **orçamento da obra** ou da **base de preços**), preço global, pagamento (medição semanal/quinzenal/mensal, permuta, % nota × recibo), retenções, reajuste, multas, garantia, aviso prévio, foro e cláusulas extras. Os valores iniciais vêm do último contrato da obra.
+- **Situação:** rascunho → vigente → encerrado ou rescindido (ou cancelado, se ainda era rascunho). Contrato vigente só muda com motivo (histórico). **Aditivos:** tipo, descrição, valor (soma ao contrato) e nova vigência.
+- **Acompanhamento** (`contrato_ver`): contratado × executado (diários) × medido × pago × saldo, em quantidade e em R$, por item e total. Passou do contratado: só avisa.
+- **Responsabilidade técnica:** lista de ART, RRT, TRT… exigidos, cada um com número e documento anexado. O contrato só é **liberado para assinatura** (minuta e ativação) com a lista cadastrada e **toda** emitida, no app e no servidor.
+- **Documentos:** minuta em PDF (cláusulas baseadas nos modelos VN × Prime Beach e Confiança × Verde Mar, mais o Anexo I com a planilha), guardada sozinha em Obra → Contratos → pasta do contrato, junto do contrato assinado. **Revise a minuta antes de assinar.**
+
+## Orçamento da obra
+Módulo **Orçamento da obra** (`#/obra`, `Orcamento.gs` + `orc.js`). Cada **frente geral** (aba `Frentes`, ex: Rede de Esgoto) tem o que precisa executar no total; as frentes de execução, os contratos e as compras se ligam a esse orçamento.
+- **Obra nova:** ao criar, informe as frentes gerais (uma por linha); sem lista, entram as frentes padrão. Novas frentes gerais também podem ser criadas aqui (trocar o nome atualiza pedidos, estoque e frentes de execução).
+- **Orçamento (quantidades):** por frente geral, os serviços com a **quantidade total**. Dá para **colar do Excel** (item · descrição · unidade · quantidade · R$ material · R$ mão de obra). A frente geral mostra executado × total e o que **falta**.
+- **Valores (financeiro):** R$ de material e de mão de obra por unidade do serviço; totais por frente e da obra.
+- **Saldo:** a frente de execução escolhe o serviço do orçamento e consome o saldo (total − programado). Passar do total **não bloqueia**: grava e vira alerta.
+- **Materiais:** por serviço (composição com a perda) ou direto na frente. Para cada material: **necessário × comprado × em compra × recebido × consumido** e **falta comprar** (só quantidade; o gasto em R$ vem dos pedidos).
+- **Painel da obra:** orçado, executado (ponderado pelo R$), MO contratada, material comprado, materiais a comprar e alertas.
+- **Cronograma físico-financeiro** (`#/obra/cronograma`, `Cronograma.gs` + `crono.js`): por frente geral, previsto (datas) × executado (RDO) × medido. A diferença executado − medido é o que já foi feito e espera FVS / medição.
+- **Prazo em dias úteis** (`prazoObra_`, seg a sex sem feriados nacionais e municipais da obra): do início ao fim das frentes gerais + os dias úteis dos aditivos. O cartão da obra (Início e portal do cliente) mostra "Dia X de N dias úteis · faltam", o término e a projeção pelo ritmo.
+- **Contratos e documentos** (`ContratosCliente.gs`, aba `ContratosCliente`, `#/obra/contratos`): o contrato principal nasce no Gerar obra; aditivo ou novo contrato pelo orçamento aprovado (**Incluir em obra existente**: as etapas viram frentes gerais novas, "Pavimentação · Aditivo 1") ou à mão, com valor, dias úteis a mais, documento e frentes gerais ligadas (`Frentes.contrato`). **Outros documentos:** ART, Licença, Projeto, Alvará, Outro (só arquivo, sem valor nem prazo). Cada um tem **"o cliente vê"** (contrato/aditivo marcados por padrão, documentos não), que aparece no portal na área **Documentos**.
+- **Relatório da obra** (`#/obra/relatorio`, `RelatorioObra.gs` + `relobra.js`): PDF A4 com logo, em dois modelos. **Andamento** (sem R$, pode ir ao cliente): % executado, curva S previsto × realizado × projetado, avanço por frente e serviço, prazos tipo Gantt com **estimativa de atraso** (ritmo dos últimos 7 dias trabalhados, em dias úteis, descontando a chuva média dos últimos 60 dias), produção, clima, efetivo, ocorrências e as últimas fotos. **Gerencial** (só `orc_gerir`, "uso interno"): + resultado do empreendimento, gasto real × custo orçado, déficit por frente, materiais a comprar, mão de obra orçado × contratado × medido, medições a pagar e **pontos para a reunião**.
+- Permissões `orc_ver` e `orc_gerir`.
+
+## Orçamentos
+
+### Base de preços
+`#/orc`, `Base.gs` + `base.js`. Fica na **planilha central** (não depende de obra).
+- **Insumos:** material, mão de obra, equipamento ou serviço de terceiro, com preço, **data-base** (marca o preço com mais de 3 e de 6 meses), grupo, fonte e **foto** (Drive, `Base de preços / Fotos dos insumos`). Toda mudança de preço fica no histórico (`InsumoPrecos`, com gráfico). **Reajuste em %** sobre a lista filtrada e **colar preços do Excel** (código · preço).
+- **Composições:** serviço formado por insumos e/ou **composições auxiliares** × coeficiente por unidade; o item pode ter **preço próprio** só naquela composição. Custo unitário separado em material, mão de obra, equipamento e serviço; composição circular é recusada. Ficha analítica, **curva ABC**, **simulação de quantidade**, duplicar, exportar CSV.
+- **Importar composições** (`#/orc/importar`): a planilha (aba *Composições*: Item, Tipo, Código, Descrição, Un, Quant., Custo unit.) é lida no navegador (SheetJS) e conferida **antes de gravar**: coeficiente = quantidade do insumo ÷ quantidade do serviço; o mesmo código com itens diferentes no arquivo vira variante (`10075-2`); serviço repetido entra uma vez; preço de insumo diferente dentro do arquivo vira preço próprio; item sem código ganha `INS-…`. Importar de novo atualiza, não duplica. **Código que já está na base com composição de outra planilha** não é sobrescrito: entra como variante, a não ser que se marque **"substituir"** na conferência. Aqui **não cria orçamento**.
+
+### Orçamentos de clientes
+`#/orc/orcamentos`, `Propostas.gs` + `prop.js`, na planilha central.
+- **Planilha:** etapas (1, 2, 3…) e itens (1.1, 1.2…): serviço da base × quantidade (custo **congelado** no orçamento; "Atualizar preços pela base" puxa de novo) ou **item de preço direto**.
+- **Importar orçamento** (`#/orc/orcamento/importar`): a planilha do orçamento (ex. a do RDObras) cria o orçamento **em rascunho**, com as etapas, as quantidades, o BDI, a gestão e os itens sem BDI, e leva as composições para a base (mesma conferência da importação de composições).
+- **BDI e gestão** com % e base configuráveis (mão de obra + equipamento + serviços, ou custo total). Preço de venda do item = custo + BDI + gestão.
+- **Situação:** rascunho → enviado → aprovado | perdido (com motivo) | cancelado; reabrir; **nova revisão** (ORC-0001 rev.1, a anterior fica "Revisado"); copiar como novo; histórico. Só o rascunho é editado.
+- **Proposta para imprimir/PDF** (a do cliente e a planilha interna) e exportação para Excel.
+- **Cronograma** (`#/orc/orcamento/<id>/cronograma`): início e fim de cada etapa pelas datas, pela duração ou **arrastando a barra**; desembolso por mês e curva S; sai na proposta e no Excel.
+- **Gerar obra** (administrador, orçamento aprovado): cria a obra (planilha e pasta no Drive) com uma frente geral por etapa, os serviços, a receita e o custo de cada frente, os **materiais** das composições, as datas do cronograma e o **contrato principal**. **Incluir em obra existente:** o orçamento aprovado entra como **aditivo** ou **novo contrato** numa obra que já existe.
+- **Portal do cliente** (quadro no orçamento): o cliente que vê, o modo (aberto ou fechado), o contrato anexado, o tipo que a Size fará quando virar obra e a foto do empreendimento. Ao ligar o cliente, os campos vazios (CNPJ, contato, telefone, e-mail, cidade) vêm do cadastro dele.
+
+### SINAPI (Caixa)
+`Sinapi.gs` + `sinapi.js`, tela **Orçamentos → SINAPI (Caixa)** (`#/orc/sinapi`).
+- Referência oficial ao lado da base da Size, na planilha **Size · SINAPI** (id em `SINAPI_ID`): só o **RS** e o **mês atual** — insumos (sem e com desoneração), composições (já divididas em material / mão de obra / equipamento / serviço) e os itens de cada composição. Insumos que mudaram de preço ficam em `SinapiHist`.
+- A Caixa publica um arquivo por mês com todas as UFs (~15 MB; ~110 MB aberto). Ler isso no Apps Script estoura a memória, então **quem lê é o app** (de preferência no computador): o servidor baixa o zip e entrega em partes (`sinapi_baixar`), o app separa o RS e manda em lotes (`sinapi_importar`: inicio → lote → fim). Também aceita o arquivo escolhido à mão.
+- **Conferência diária** (gatilho `sinapiVerificar`, 7h): mês novo publicado aparece no sino de quem gerencia a base e na tela do SINAPI ("Atualizar agora").
+- **No orçamento:** a busca "Incluir serviço" mostra também o SINAPI; o regime (**não desonerado / desonerado**) é escolhido em cada orçamento. **Copiar para a base da Size:** a composição vira `SINAPI-<código>` para ajustar.
+- O índice da busca (~3 MB) fica guardado no aparelho (IndexedDB) até mudar o mês.
+
+## Portal do cliente
+`Clientes.gs` + `portal.js` (o que o cliente vê) + `clientes.js` (cadastro, **Administração → Portal do cliente**, `#/admin/clientes`).
+- **Cadastro do cliente** (aba central `Clientes`): nome do app, empresa, **razão social, CNPJ/CPF** (conferido), contato, cargo, e-mail, telefone, cidade, observações internas, cor, logo e fundo do login. A lista mostra a **logo publicada** (o quadrado pega a cor do fundo dela) e todos os orçamentos ligados, inclusive rascunho.
+- **Empreendimentos** (`Clientes.emps_json` = obra, tipo e foto): andamento sempre, mais **Gerenciamento** (cronograma, diário, FVS, financeiro e documentos), **Execução** (sem financeiro) ou áreas marcadas uma a uma. Com mais de um, o Início mostra um cartão por empreendimento e as telas da obra têm o seletor; as rotas `cli_*` recebem `obra`.
+- **Áreas:** **Diário** (só os dias que o engenheiro liberar: serviços, clima, pessoas e fotos), **Qualidade** (FVS aprovadas), **Financeiro** (contratos das empreiteiras e medições aprovadas/pagas, com o PDF), **Documentos** (contratos, aditivos e documentos marcados "o cliente vê") e **Relatórios**.
+- **Segurança no servidor:** usuário de cliente só chama as rotas `cli_*` e as da própria conta (`CLI_GERAIS_`); as rotas `cli_*` nunca devolvem custo, BDI, compras, fornecedores, estoque, ocorrências ou observações.
+- **Acessos do cliente:** um login por pessoa, cada um com o que vê (`Usuarios.portal_json`): obras (todas, inclusive as próximas, ou só algumas), orçamentos sim/não e áreas. Perfis prontos: **Dono/diretoria** (tudo), **Engenheiro/fiscal** (sem orçamentos, financeiro e documentos; é o padrão do acesso novo) e **Financeiro**. **Compartilhar:** envia o acesso **por e-mail pelo sistema** (logo e cor do cliente, botão do portal; avisa quando o acesso não tem e-mail e guarda o que for digitado), pelo WhatsApp ou copiando a mensagem. A senha provisória só vai quando acabou de ser criada. **Excluir este acesso** apaga o login.
+- **Negociação (antes do contrato):** cliente sem obra só vê **Orçamentos**. Ele vê só revisões **enviadas** (o orçamento some quando a revisão mais nova volta para a Size), com o que mudou desde a anterior; deixa **considerações** por item ou gerais (`PropostaComentarios`), que a Size responde (aviso no sino); e pode **aceitar pelo app** (nome, CPF/CNPJ, contrato assinado opcional; o orçamento vira Aprovado). **Gerar obra** com "Liberar o acompanhamento" marcado já põe a obra nos empreendimentos do cliente e avisa "Sua obra começou".
+- **Endereço próprio** `c/<slug>/` (ícone, nome, cor e fundo do login): o cadastro recorta a imagem no navegador e o servidor publica em `app/c/<slug>/` direto no GitHub (chave em `GITHUB_TOKEN`, só no servidor); o Pages põe no ar em 1–2 min. **Atenção:** depois de publicar um cliente, o GitHub tem commits que não estão nesta pasta — rodar `git pull` antes do próximo `git push`. **Nunca apagar `app/c/`** (são os portais reais).
+- **Avisos** (sino e push): diário liberado, medição aprovada/paga, FVS aprovada, documento novo, orçamento enviado, resposta da Size e obra iniciada.
+- O app do cliente leva a assinatura **Plataforma Size Engenharia**.
+
+## Avisos com o app fechado (push)
+O sino (app aberto: som, vibração e janelinha) consulta o servidor a cada minuto. Com os avisos de fundo ativados, o aparelho também recebe o aviso com o app fechado, via Firebase Cloud Messaging.
+- **No aparelho:** sino > "Ativar avisos neste aparelho" (aba `Aparelhos`); quem mostra o aviso é o `sw.js`. iPhone: só iOS 16.4+ com o app instalado na tela inicial.
+- **No servidor:** `pushVarrer` (gatilho de 5 em 5 min) calcula o mesmo que o sino (`notificacoes_`) para cada pessoa com aparelho registrado e envia só o que ainda não foi avisado. Pelo gatilho, roda das 6h às 20h e só quando algo foi gravado desde a última varredura (no máximo 1 h sem varrer).
+- **Configuração (uma vez):** em `app/config.js` preencher `FIREBASE_CFG` (não são segredos) e, no Apps Script, criar a propriedade `FCM_SA` com o JSON da conta de serviço do Firebase (segredo: nunca no GitHub).
+
+## Velocidade, cotas do Google e uso do servidor
+- **Telas guardadas no aparelho** (`apiAgora` no `app.js`): Início, Clientes e Orçamentos de clientes abrem na hora com o que já está no aparelho e conferem com o servidor por trás (desenham de novo só se mudou). Toda resposta que gravou algo vem com `w` e o app descarta o guardado. A **base de preços** fica no aparelho e só é baixada de novo quando a versão muda (`ger` em `base_dados`, `ger_base` no sino); foto de insumo atualiza só aquele insumo.
+- **No servidor:** memória do Google (`memoria_` no `Db.gs`, CacheService) para login, base, orçamentos, pedidos e sino, renovada a cada gravação.
+- **Cotas do Google** (`Uso.gs`; conta comum: tarefas automáticas 90 min/dia, 100 destinatários de e-mail/dia; os acessos ao app não têm limite diário, só 30 ao mesmo tempo): `pushVarrer` e `capturarEmails` pelo gatilho só rodam das 6h às 20h. Cada rodada e cada e-mail enviado são somados por dia (propriedade `USO_aaaa-mm-dd`). **Configurações → Uso do servidor** mostra o dia e os últimos 7; o sino avisa o administrador com 15 e-mails ou menos no dia ou tarefas em 80% do tempo.
+- **Configurações → Velocidade:** tempo de cada tela e de cada chamada (rede + Google + servidor), guardado só no aparelho, para mandar quando algo parecer lento.
+
+## Segurança e backup
+- **Login:** 5 senhas erradas seguidas bloqueiam o usuário por 15 minutos (o administrador recebe um e-mail de alerta). Senhas **novas** precisam de 10+ caracteres e não podem ser óbvias.
+- **Sessão:** 14 dias. Trocar a senha encerra as sessões abertas nos outros aparelhos.
+- **Navegador:** o `index.html`, o `fornecedor.html` e o endereço de cada cliente trazem uma política de segurança (CSP): scripts só do próprio app, do `cdnjs.cloudflare.com` (PDF, planilhas, mapa) e do `www.gstatic.com` (Firebase); conexões só com o Apps Script, a Open-Meteo, o OpenStreetMap e o Firebase. Por isso não use `onclick="..."` nem `<script>` inline: use `data-acao` (veja `app.js`) ou um arquivo `.js`.
+- **Backup:** todo dia às 3h o script copia a planilha central e as das obras para `Compras Size / Backups` no Drive (`AAAA-MM-DD · nome`), guardando `BACKUP_DIAS` dias (padrão 14). Configurações tem o botão "Fazer backup agora". Fotos e PDFs não são duplicados (ficam protegidos pelo histórico do Drive).
 
 ## Instalação (uma vez)
 
-1. Em [script.google.com](https://script.google.com), crie um **projeto novo** (logado com a conta da empresa) e copie os arquivos de `backend/` (`.gs` e `appsscript.json` — ative "Mostrar appsscript.json" nas configurações do projeto).
+1. Em [script.google.com](https://script.google.com), crie um **projeto novo** (logado com a conta da empresa) e envie os arquivos de `backend/` (`clasp push` ou copiando os `.gs` e o `appsscript.json`).
 2. Rode **`setup()`**. No *Registro de execução* aparecem o link da planilha central e a **senha provisória do usuário `admin`**.
-3. Em `Setup.gs`, preencha `ID_PLANILHA_ANTIGA` (o código entre `/d/` e `/edit` na URL da planilha antiga "Pedidos Size") e rode **`migrarPrimeBeach()`** — cria a obra Prime Beach e importa pedidos, fornecedores, materiais e unidades. Pode rodar de novo sem duplicar.
-4. Rode **`instalarGatilho()`** (leitura de e-mails a cada 10 min).
-5. **Implantar → Nova implantação → App da Web**: executar como *Eu*, acesso *Qualquer pessoa*. Copie a URL `.../exec` para `app/config.js`.
-6. Abra o app, entre como `admin`, troque a senha, e cadastre os usuários em **Usuários e acessos**.
+3. Rode **`instalarGatilho()`** (leitura de e-mails a cada 10 min e lembretes das 8h). Os outros gatilhos (backup 3h, push 5 min, SINAPI 7h) são criados sozinhos no primeiro uso.
+4. **Implantar → Nova implantação → App da Web**: executar como *Eu*, acesso *Qualquer pessoa*. Copie a URL `.../exec` para `app/config.js`.
+5. Propriedades do script (segredos, nunca no GitHub): `FCM_SA` (push), `GITHUB_TOKEN` (endereço do cliente; também dá para colar pela tela do portal do cliente). `SINAPI_ID` é criada pelo próprio app.
+6. Abra o app, entre como `admin`, troque a senha e cadastre os usuários em **Usuários e acessos**.
 
-Ao alterar o backend: *Implantar → Gerenciar implantações → editar → Nova versão* (a URL continua a mesma).
+> Histórico: `migrarPrimeBeach()` (`Setup.gs`, com `ID_PLANILHA_ANTIGA`) importou a obra Prime Beach da planilha antiga "Pedidos Size"; os usuários do sistema antigo foram recriados à mão.
 
-> Usuários do sistema antigo não são migrados (as senhas eram de outro formato): recrie-os em **Usuários e acessos** com uma senha provisória.
-
-## Desenvolvimento
+## Desenvolvimento e publicação
 
 ```bash
 npm test          # testes do backend com simulador do Apps Script (test/gas-mock.js)
 npm run demo      # app + API simulada com dados de exemplo em http://localhost:5173
 ```
 
-Logins da demo: `admin`/`Admin#Size26`, `compras`, `estoque`, `fin`, `joao` (senha `Obra#Teste26`).
+Logins da demo: `admin`/`Admin#Size26`, `compras`, `estoque`, `fin`, `joao` (senha `Obra#Teste26`). Arquivo `.gs` novo precisa entrar na lista `ordem` do `test/gas-mock.js`; arquivo de teste novo, no `npm test` do `package.json`.
 
-## Segurança e backup
-
-- **Login:** 5 senhas erradas seguidas bloqueiam o usuário por 15 minutos (o administrador recebe um e-mail de alerta). Senhas **novas** precisam de 10+ caracteres e não podem ser óbvias; quem já tinha senha continua entrando com ela até trocar.
-- **Sessão:** 14 dias. Trocar a senha encerra as sessões abertas nos outros aparelhos (a do aparelho atual recebe um token novo).
-- **Navegador:** o `index.html` e o `fornecedor.html` trazem uma política de segurança (CSP) que só deixa o app carregar scripts dele e do `cdnjs.cloudflare.com` (usado só para gerar PDF) e só falar com o Apps Script e a Open-Meteo. Por isso não use `onclick="..."` nem `<script>` inline: use `data-acao` (veja `app.js`) ou um arquivo `.js`.
-- **Backup:** todo dia às 3h o script copia a planilha central e as das obras para `Compras Size / Backups` no Drive (`AAAA-MM-DD · nome`), guardando `BACKUP_DIAS` dias (padrão 14). O gatilho é criado sozinho quando um administrador abre a administração; Administração → Configurações tem o botão "Fazer backup agora". Fotos e PDFs não são duplicados.
-
-## FVS (ficha de verificação de serviço)
-
-- **Modelos** (Execução → FVS → Modelos de FVS): 45 fichas importadas do Drive da qualidade (`backend/FvsPadrao.gs`), por categoria → tipo. Mudar os itens sobe a revisão; as fichas já emitidas guardam a revisão usada.
-- **Abertura:** ao criar uma frente de trabalho (etapa), cada serviço recebe uma FVS (o catálogo sugere o modelo; "Sem FVS" é uma escolha explícita). Dá para abrir depois pela tela da etapa.
-- **Ficha:** O / X / ⊗ (reinspeção, até 3 vistorias) / N/A, alteração em relação ao projeto (com quem autorizou), não conformidades, **croqui base** e **croqui de execução** (obrigatórios), outros anexos e os **RDOs vinculados** (vêm dos lançamentos do serviço).
-- **Aprovação:** quem tem a permissão `fvs_aprovar` (Engenheiro e Admin) aprova ou devolve. Ao aprovar, a FVS ganha o número em sequência (FVS 001…), é travada com um código de verificação e vai para `Drive → obra → FVS → AAAA-MM → "FVS 001 · …"` com o PDF, os croquis e os anexos.
-- Permissões novas: `fvs_ver`, `fvs_preencher`, `fvs_aprovar` (migração automática para Admin/Engenheiro/Encarregado no primeiro acesso).
-
-## Medições de empreiteiros
-
-- **Empreiteiros** = o painel de Equipes (empresa, responsável, telefone, e-mail, CNPJ/CPF, equipe em campo). Cada **frente de trabalho (etapa)** escolhe o empreiteiro e informa se é **com contrato** (número e data) ou **sem contrato**; isso aparece na medição. (O módulo **Contratos** aparece no menu como "em breve".)
-- **Medição:** o empreiteiro soma as frentes dele. Só entra serviço **concluído** (executado ≥ previsto) **e com FVS aprovada**, **uma vez só**, inteiro, no período em que foi concluído, pela quantidade **executada**. Serviço já medido que recebe mais lançamento entra como **complemento** na medição seguinte.
-- **Fluxo:** rascunho → aguardando aprovação → aprovada (numerada **por empreiteiro**, travada, PDF em `Drive → obra → Medições → empreiteiro → Medição 001 · período`) → paga. Rascunho e devolvida não reservam serviços; enviada, aprovada e paga reservam.
-- **Permissões por obra:** `medicao_ver`, `medicao_lancar`, `medicao_aprovar` (administrador tem todas; as demais pessoas são liberadas na tela de acessos). O sino avisa quem aprova quando uma medição é enviada.
-- Valores (contrato × pago × saldo por etapa) e descontos ficam para a próxima etapa.
-
-## Avisos com o app fechado (push)
-O sino continua igual (app aberto: som, vibração e janelinha). Com os avisos de fundo ativados, o aparelho também recebe o aviso com o app fechado, via Firebase Cloud Messaging.
-- **No aparelho:** sino > "Ativar avisos neste aparelho". O app só pede a permissão e registra o aparelho (aba `Aparelhos`); quem mostra o aviso é o `sw.js`. iPhone: só iOS 16.4+ com o app instalado na tela inicial.
-- **No servidor:** `pushVarrer()` (gatilho de 5 em 5 min, criado sozinho no primeiro registro) calcula o mesmo que o sino (`notificacoes_`) para cada pessoa com aparelho registrado e envia só o que ainda não foi avisado àquele aparelho. Se o app estiver aberto, ele marca os avisos como vistos e não duplica.
-- **Configuração (uma vez):** em `app/config.js` preencher `FIREBASE_CFG` (apiKey, messagingSenderId, appId e a chave pública VAPID; não são segredos) e, no Apps Script, criar a propriedade do script `FCM_SA` com o JSON da conta de serviço do Firebase (segredo: nunca no GitHub). Depois, nova versão da implantação.
-- Quem sai do app deixa de receber os avisos dele naquele aparelho.
-
-## Contratos de empreiteiros
-Módulo dentro de **Medições → Contratos** (`#/ctr`). O contrato é cadastrado com a planilha de serviços, vinculado a um empreiteiro, e a frente de trabalho nasce ligada a ele.
-- **Número do contrato:** automático por obra (01, 02, 03…), dado ao salvar o rascunho; nunca repete nem é reaproveitado (nem de contrato cancelado) e cada obra começa do 01.
-- **Cadastro** (permissão `contrato_gerir`): partes (contratante, administradora, empreiteiro com CNPJ e endereço do cadastro dele), objeto, vigência, **planilha** (etapa/grupo, item, serviço, unidade, quantidade e preço unitário; dá para **colar do Excel/Word**), preço global (vale o do contrato; a soma da planilha aparece ao lado para conferir), pagamento (medição semanal/quinzenal/mensal, permuta, % nota fiscal × recibo), retenções, reajuste, multas, garantia, aviso prévio, foro e cláusulas extras. Os valores iniciais vêm do último contrato da obra.
-- **Situação:** rascunho → vigente (ativar) → encerrado ou rescindido (ou cancelado, se ainda era rascunho). Contrato vigente só é alterado com motivo (histórico). Aditivos: tipo, descrição, valor (soma ao contrato) e nova vigência.
-- **Frente de trabalho (Execução → etapa):** escolhe o empreiteiro e o contrato vigente dele (ou "Sem contrato"; frentes antigas com número digitado continuam como estavam). Os serviços entram **pela planilha do contrato** (um toque, com a quantidade que falta programar) e ficam ligados ao item. Serviço fora da planilha ainda pode ser incluído (aparece como "sem vínculo" no contrato).
-- **Acompanhamento** (permissão `contrato_ver`): contratado × executado (diários) × medido (medições enviadas/aprovadas/pagas) × pago × saldo, em quantidade e em R$, por item e total. Passou do contratado: só avisa, não trava a obra.
-- **Responsabilidade técnica (condição para assinatura):** cada contrato tem a lista de ART, RRT, TRT (ou outro documento com responsabilidade técnica) exigidos: tipo, atividade, profissional, registro, número, data e o documento anexado (Drive → Contratos → pasta do contrato → Responsabilidade técnica). Só conta como **emitida** com número + documento. O contrato só é **liberado para assinatura** com a lista cadastrada e **toda** emitida: sem isso a minuta (rascunho) e a ativação ficam bloqueadas, no app e no servidor. As emitidas entram na minuta.
-- **Documentos:** minuta do contrato em PDF (texto, cláusulas baseadas nos modelos VN × Prime Beach e Confiança × Verde Mar, mais o Anexo I com a planilha); a minuta baixada (e a da ativação do contrato) é guardada sozinha no Drive em Obra → Contratos → pasta do contrato; o contrato assinado é anexado e arquivado na mesma pasta. **Revise a minuta antes de assinar.**
-- Abas novas: `Contratos`, `ContratoItens`, `ContratoAditivos` (por obra); `Etapas.contrato_id`, `EtapaItens.contrato_item`, `Equipes.endereco`. O Admin recebe as permissões sozinho; as demais pessoas são liberadas por obra na tela de acessos.
-
-## Orçamento da obra
-Módulo **Orçamento da obra** (`#/obra`). Cada **frente geral** (aba `Frentes`, ex: Rede de Esgoto) tem o que precisa executar no total; as frentes de execução, os contratos e as compras passam a se ligar a esse orçamento.
-- **Obra nova:** ao criar, informe as frentes gerais (uma por linha); sem lista, entram as frentes padrão das Configurações. Novas frentes gerais também podem ser criadas no próprio orçamento (trocar o nome atualiza pedidos, estoque e frentes de execução).
-- **Orçamento (quantidades):** por frente geral, os serviços (catálogo ou avulso) com a **quantidade total** (ex: 2.500 m de rede). Dá para **colar do Excel** (item · descrição · unidade · quantidade · R$ material · R$ mão de obra). Números no padrão brasileiro: "2.500" = dois mil e quinhentos.
-- **Valores (financeiro):** R$ de **material** e de **mão de obra** por unidade do serviço; totais por frente e da obra.
-- **Saldo:** a frente de execução escolhe o serviço do orçamento (um toque, já com o que falta distribuir) e a quantidade dela **consome o saldo** (total − programado em frentes). Passar do total **não bloqueia**: grava e vira alerta. Frente aberta pelo item de um contrato ligado ao orçamento herda o vínculo.
-- **Contrato do empreiteiro:** "Puxar do orçamento da obra" traz os serviços com a quantidade que falta contratar e o **valor de mão de obra orçado** (pode ser mudado). O contrato mostra orçado × contratado; o orçamento mostra a MO contratada (contratos vigentes, encerrados ou rescindidos).
-- **Materiais:** por serviço (composição: quanto gasta por unidade, já com a perda — ex: 1,05 m de tubo por metro de rede) ou direto na frente (quantidade total). Para cada material: **necessário × comprado** (pedidos aprovados da frente) **× em compra × recebido** (o recebimento pode escolher a frente) **× consumido** (teórico = executado × composição; real = saídas do estoque) e **falta comprar**. O vínculo com os pedidos é pelo material do cadastro.
-- **Painel da obra:** orçado, executado (ponderado pelo R$; sem valores, média dos serviços), MO contratada, material comprado, materiais a comprar e alertas (falta comprar, consumo acima do recebido, programado/executado/contratado acima do orçado).
-- **Relatório da obra** (`#/obra/relatorio`, `RelatorioObra.gs` + `relobra.js`): PDF A4 com logo, em dois modelos. **Andamento** (sem R$, pode ir ao cliente): % executado (ponderado pelo valor de venda, igual ao painel), curva S previsto × realizado × projetado, avanço por frente e serviço, prazos tipo Gantt com **estimativa de atraso** (ritmo dos últimos 7 dias trabalhados aplicado ao saldo, em dias úteis, descontando a média de dias parados por chuva dos últimos 60 dias; em risco = atraso até 10% do prazo), ritmo necessário para cumprir, produção/clima/efetivo por semana, ocorrências e as últimas 6 fotos do período. **Gerencial** (só `orc_gerir`, marcado "uso interno"): + resultado do empreendimento, gasto real × custo orçado no tempo, déficit por frente, materiais a comprar, mão de obra orçado × contratado × medido, medições a pagar e **pontos para a reunião** gerados automaticamente. Baixar, WhatsApp ou e-mail.
-- Permissões `orc_ver` (ver, inclusive valores) e `orc_gerir` (cadastrar); o Admin recebe as duas sozinho, o perfil Engenheiro novo já vem com `orc_ver`. Abas novas: `OrcItens`, `OrcMateriais` (por obra); `EtapaItens.orc_item`, `ContratoItens.orc_item`, `Recebimentos.frente`.
-
-## Orçamentos · base de preços
-Módulo **Orçamentos** (`#/orc`, `Base.gs` + `base.js`): a base de preços da empresa para orçar novos clientes. Fica na **planilha central** (não depende de obra), então dá para orçar antes de a obra existir.
-- **Insumos:** material, mão de obra, equipamento ou serviço de terceiro, com preço, **data-base** (o app marca o preço com mais de 3 e de 6 meses), grupo e fonte. Toda mudança de preço fica no histórico (aba `InsumoPrecos`, com gráfico no cadastro do insumo). **Reajuste em %** sobre a lista filtrada e **colar preços do Excel** (código · preço), por exemplo a resposta de uma cotação.
-- **Composições:** serviço formado por insumos e/ou **composições auxiliares** × coeficiente por unidade. O item pode ter **preço próprio** só naquela composição (vazio = preço do cadastro). O custo unitário é calculado na hora e separado em material, mão de obra, equipamento e serviço; composição circular é recusada. Ficha analítica com a estrutura (abre as auxiliares), **curva ABC dos insumos** e **simulação de quantidade** (custo total e quanto comprar de cada insumo). Duplicar, exportar CSV.
-- **Importar orçamento:** a planilha exportada (aba *Composições*: Item, Tipo, Código, Descrição, Un, Quant., Custo unit.) é lida no navegador (SheetJS, do cdnjs) e conferida **antes de gravar**: o coeficiente vem da quantidade do item ÷ quantidade do serviço; o mesmo código com itens diferentes vira variante (`10075-2`); serviço repetido entra uma vez; preço de insumo diferente dentro do arquivo vira preço próprio; item sem código ganha `INS-…`; se a aba do orçamento vier junto, a etapa vira o grupo da composição. Importar de novo atualiza, não duplica.
-- **Acesso:** em Usuários e acessos → **Orçamentos**: *Ver* ou *Gerir* (o administrador gere). Quem só tem esse acesso entra direto na base de preços.
-- Abas novas na planilha central: `Insumos`, `InsumoPrecos`, `Composicoes`, `ComposicaoItens`; coluna `Usuarios.orcamentos`. Códigos com zero à esquerda (`008`) são gravados como texto.
-- **Foto do insumo:** no Drive (`Compras Size / Base de preços / Fotos dos insumos`, aberta para quem tem o link), ao lado do cadastro e em miniatura nas listas.
-- **Contratos:** o serviço da planilha do contrato é escolhido na base (referência sem material), no catálogo ou digitado como novo; "Puxar da base de preços" traz vários de uma vez (`ContratoItens.comp_cod`).
-
-## Início da empresa e obra aberta
-- **Início** (`#/inicio`, `empresa.js`): saudação, ações rápidas (novo orçamento, composição, insumo, importar, nova obra, usuários), **obras** em mapa (Leaflet + OpenStreetMap, pelas coordenadas do cadastro da obra) e cartões com pedidos em andamento/urgentes, frentes, último diário e pendências; **orçamentos de clientes** (em elaboração, aguardando o cliente, aprovados, taxa de aprovação) e a base de preços. Rota `empresa_dados` (resumo de cada obra guardado 3 min).
-- **Dois níveis no menu:** sem obra aberta, só Início e **Empresa** (Orçamentos e administração). Ao tocar numa obra, ela fica em destaque no topo do menu (botão **Trocar**) e aparecem só os módulos que dependem da planilha da obra, com o **Painel da obra** (`#/painel`). Tela de obra sem obra aberta volta para o Início.
-- O app abre no Início; entra direto na obra quando o link é de uma tela da obra (notificação), está sem sinal (diário offline) ou a pessoa só tem uma obra e nada fora dela.
-
-## Orçamentos de clientes
-Módulo **Orçamentos → Orçamentos de clientes** (`#/orc/orcamentos`, `Propostas.gs` + `prop.js`), na planilha central (abas `Propostas`, `PropostaItens`).
-- **Planilha:** etapas (1, 2, 3…) e itens (1.1, 1.2…): serviço da base × quantidade (o custo unitário por categoria fica **congelado** no orçamento; "Atualizar preços pela base" puxa de novo) ou **item de preço direto** (material e mão de obra por unidade).
-- **BDI e gestão** com % e base configuráveis (mão de obra + equipamento + serviços, ou custo total). Preço de venda do item = custo + BDI + gestão (2 casas por item, como na planilha).
-- **Situação:** rascunho → enviado → aprovado | perdido (com motivo) | cancelado; reabrir; **nova revisão** (ORC-0001 rev.1, a anterior fica "Revisado"); copiar como novo; histórico.
-- **Proposta para imprimir/PDF:** a do cliente (preço de venda) e a planilha interna (custo, material, MO, BDI, gestão).
-- **Gerar obra** (administrador, orçamento aprovado): cria a obra (planilha e pasta no Drive) com uma frente geral por etapa, os serviços com quantidade, material, mão de obra e preço de venda, a receita e o custo de cada frente e os **materiais** de cada serviço (insumos de material das composições, com o coeficiente) — o Orçamento da obra já nasce pronto.
-
-## Cronograma físico-financeiro
-`Cronograma.gs` + `crono.js`. O valor de cada etapa é distribuído por igual nos **dias corridos** entre a data de início e a de fim.
-- **No orçamento** (`#/orc/orcamento/<id>/cronograma`, campo `Propostas.cronograma_json`): início e fim de cada etapa pelas datas, pela duração em dias ou **arrastando a barra** (as pontas mudam o prazo); "Encadear todas" põe uma etapa depois da outra. Mostra o desembolso por mês e a curva S; sai na proposta (PDF) e numa aba **Cronograma** do Excel. As datas acompanham a etapa pelo nome, mesmo se ela mudar de posição.
-- **Gerar obra** leva as datas para as frentes gerais (aba `Frentes`, colunas `inicio` e `fim`).
-- **Prazo em dias úteis** (`prazoObra_`, seg a sex sem feriados nacionais e municipais da obra): do início ao fim das frentes gerais + os dias úteis dos aditivos; cartão da obra no Início e no portal do cliente mostra "Dia X de N dias úteis · faltam", o término e a projeção pelo ritmo (% executado ÷ dias úteis passados).
-- **Contratos e aditivos** (`ContratosCliente.gs`, aba `ContratosCliente` da obra, `#/obra/contratos`): o contrato principal nasce no Gerar obra; aditivo ou novo contrato pelo orçamento aprovado (**Incluir em obra existente**: as etapas viram frentes gerais novas, "Pavimentação · Aditivo 1") ou à mão, com valor, dias úteis a mais, documento (pasta "Contratos do cliente" da obra) e as frentes gerais ligadas (`Frentes.contrato`). Na mesma tela, **outros documentos** (ART, Licença, Projeto, Alvará, Outro: só arquivo, sem valor nem prazo). Cada um tem "o cliente vê" (`ContratosCliente.cliente`; contrato/aditivo marcados por padrão, documentos não), que aparece no portal na área **Documentos** (módulo `documentos`, nos tipos Gerenciamento e Execução; perfis Dono e Financeiro).
-- **Cotas do Google** (`Uso.gs`, conta comum: gatilhos 90 min/dia, 100 destinatários de e-mail/dia; acessos ao app sem limite diário): `pushVarrer` e `capturarEmails` pelo gatilho só rodam das 6h às 20h, e o push só varre quando a geração "notif" mudou (ou a cada 1 h). Cada rodada e cada e-mail enviado são somados por dia (propriedade `USO_aaaa-mm-dd`); Configurações → "Uso do servidor" mostra; o sino avisa o administrador com 15 e-mails ou menos no dia ou tarefas em 80% do tempo.
-- **Telas guardadas no aparelho** (`apiAgora` no app.js): Início, Clientes e Orçamentos de clientes abrem com o que já está no aparelho e conferem por trás (desenham de novo só se mudou). Toda resposta que gravou algo vem com `w` e o app joga fora o guardado. A **base de preços** fica no aparelho e só é baixada de novo quando a versão muda (`ger` em base_dados, `ger_base` no sino a cada minuto); foto de insumo atualiza só aquele insumo.
-- **Verba (VB)**: serviço sem medida (acompanhamento, administração) com unidade VB, verba ou % é lançado e mostrado **em %** do previsto (app `ehVerba`/`qun`, backend `ehVerba_`/`qun_`). Cada lançamento é o que andou no dia (10% + 20% = 30%); o gravado continua a fração (25% de 1 VB = 0,25). Passar de 100% gera aviso, sem travar. Na medição de empreiteiro, a verba é medida **em parcelas** (o lançado até o fim do período que ainda não foi medido), sem exigir FVS.
-- **Cadastro do cliente**: razão social, CNPJ/CPF (conferido), contato, cargo, e-mail, telefone, cidade e observações internas. Ao ligar um orçamento ao cliente, os campos vazios do orçamento vêm do cadastro. A lista mostra a logo publicada e todos os orçamentos ligados (inclusive rascunho).
-- **Importação de planilha**: composição com o mesmo código, mas vinda de **outra planilha** e com outros itens, não sobrescreve a da base. Entra como variante (`código-N`), a não ser que se marque "substituir" na conferência. "Importar composições" (base) não cria orçamento; "Importar orçamento" fica em Orçamentos de clientes.
-- **Na obra** (`#/obra/cronograma`, quem vê o orçamento consulta e quem gerencia altera): por frente geral, **previsto** (datas) × **executado** (registros do RDO dos serviços ligados ao orçamento, pelo preço de venda) × **medido** (medições aprovadas ou pagas — só serviço concluído e com FVS aprovada). A diferença executado − medido é o que já foi feito e espera FVS / medição. Frente sem datas sugere o período das frentes de execução.
-## SINAPI (Caixa)
-`Sinapi.gs` + `sinapi.js`, tela **Orçamentos → SINAPI (Caixa)** (`#/orc/sinapi`).
-- Referência oficial ao lado da base da Size, numa planilha separada no Drive (**Size · SINAPI**, id em `SINAPI_ID`): só o **RS** e o **mês atual** — insumos (preço sem e com desoneração), composições (custo sem e com desoneração, já dividido em material / mão de obra / equipamento / serviço pelo analítico) e os itens de cada composição. Insumos que mudaram de preço ficam em `SinapiHist`.
-- A Caixa publica um arquivo por mês com todas as UFs (`SINAPI-aaaa-mm-formato-xlsx.zip`, ~15 MB; ~110 MB aberto). Ler isso no Apps Script estoura a memória, então **quem lê é o app** (de preferência no computador): o servidor baixa o zip da Caixa e entrega em partes (`sinapi_baixar`), o app separa o RS e manda em lotes (`sinapi_importar`: inicio → lote → fim; as abas novas só passam a valer no fim). Também aceita o arquivo escolhido à mão.
-- **Conferência diária** (gatilho `sinapiVerificar`, 7h): se a Caixa já publicou o mês seguinte (inclusive retificações), aparece no sino de quem gerencia a base e na tela do SINAPI um **"Atualizar agora"**.
-- **No orçamento:** a busca "Incluir serviço" mostra também composições e insumos do SINAPI (etiqueta SINAPI). O regime (**não desonerado / desonerado**) é escolhido em cada orçamento (BDI e gestão); o custo fica congelado no item. "Atualizar preços pela base" puxa o mês importado no regime do orçamento. "Ver insumos" abre a composição do SINAPI.
-- **Copiar para a base da Size:** a composição vira `SINAPI-<código>` (insumos `SINAPI-<código>` com os coeficientes abertos até os insumos), com a origem anotada, para ajustar.
-- O índice da busca (~3 MB) fica guardado no aparelho (IndexedDB) até mudar o mês.## Portal do cliente
-`Clientes.gs` + `portal.js` (o que o cliente vê) + `clientes.js` (cadastro, **Administração → Portal do cliente**, `#/admin/clientes`).
-- Cada cliente (aba central `Clientes`) acompanha, só leitura e com a **logo**, a cor e o nome da empresa dele, os **empreendimentos** que a Size gerencia ou executa (`Clientes.emps_json` = obra, tipo e foto; cadastro antigo com `obra_id` vale como um). Cada empreendimento tem o seu tipo: andamento sempre, mais **Gerenciamento** (cronograma, diário, FVS e financeiro), **Execução** (sem financeiro) ou módulos marcados um a um. Com mais de um, o Início mostra um cartão por empreendimento (foto do cadastro ou a do último diário liberado, andamento) e as telas da obra têm o seletor de empreendimento; as rotas `cli_*` recebem `obra`. Imagens publicadas no endereço do cliente: `logo.png` (topo e login; dela saem os ícones) e `capa.jpg` (fundo do login, opcional).
-- Login próprio por pessoa (`Usuarios.cliente_id`). **Segurança no servidor:** usuário de cliente só chama as rotas `cli_*` e as da própria conta (`CLI_GERAIS_`); as rotas `cli_*` nunca devolvem custo, BDI, compras, fornecedores, estoque, ocorrências ou observações.
-- **Diário:** só os dias que o engenheiro liberar no diário de obra (botão **Mostrar ao cliente**, coluna `Diarios.cliente`): serviços, clima, pessoas e fotos. **Financeiro:** contratos das empreiteiras (contratado, medido, pago, saldo) e medições aprovadas/pagas, com o PDF.
-- **Endereço próprio** `c/<slug>/` (ícone, nome, cor e imagem de fundo no login): o cadastro recorta a imagem no navegador e o servidor publica os arquivos em `app/c/<slug>/` direto no GitHub (chave em `GITHUB_TOKEN`, só no servidor), e o Pages põe no ar em 1–2 min. **Atenção:** depois de publicar um cliente, o GitHub tem commits que não estão nesta pasta — rodar `git pull` antes do próximo `git push`.
-- Avisos (sino e push com o app fechado): diário liberado, medição aprovada/paga e FVS aprovada.
-- **Negociação (antes do contrato):** cliente sem obra só vê **Orçamentos**. No orçamento (quadro **Portal do cliente**) a Size escolhe o cliente e o modo — **aberto** (preço de cada item) ou **fechado** (só total por etapa) — e anexa o contrato. O cliente vê só revisões **enviadas**, com o que mudou desde a anterior; deixa **considerações** por item ou gerais (aba central `PropostaComentarios`), que a Size responde no orçamento (aviso no sino); e pode **aceitar pelo app** (nome, CPF/CNPJ, contrato assinado opcional — fica em `Propostas.aceite_json` e o orçamento vira Aprovado). No mesmo quadro: **quando virar obra, a Size faz** Gerenciamento ou Execução (`Propostas.portal_tipo`) e a **foto do empreendimento** (`foto_id`, o cliente vê no topo do orçamento), com a trilha ligado → enviado → aceito → virou obra. Fechou: **Gerar obra** com "Liberar o acompanhamento" marcado já põe a obra nos empreendimentos do cliente (tipo e foto do orçamento) e avisa "Sua obra começou". Não fechou: **Encerrar acesso**.
-- **Acessos do cliente:** um login por pessoa, cada um com o que vê (`Usuarios.portal_json`): obras (todas, inclusive as próximas, ou só algumas), orçamentos sim/não e áreas (cronograma, diário, FVS, financeiro) dentro do que cada obra libera. Perfis prontos: Dono/diretoria, Engenheiro/fiscal (sem orçamentos e sem financeiro) e Financeiro. Ao criar ou trocar a senha abre a mensagem pronta (copiar, WhatsApp, e-mail); **Compartilhar** reenvia sem a senha; **Excluir este acesso** apaga o login (considerações e aceites continuam no orçamento).
-- O app do cliente leva a assinatura **Plataforma Size Engenharia** (login, menu e rodapé) e o nome completo "<empreendimento> · Size Engenharia".
+**Publicar:**
+1. **App:** a cada mudança em `app/`, subir a versão em `app/sw.js` (`CACHE = 'size-vNN'`) e em `app/index.html` (`style.css?v=NN`), depois `git pull --rebase` e `git push` (o GitHub Pages publica em 1–2 min, depois dos testes).
+2. **Servidor:** `cd backend` → `clasp push -f` → `clasp deploy -i <id da implantação> -d "descrição"` (a URL `/exec` continua a mesma).
