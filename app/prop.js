@@ -880,7 +880,8 @@ async function vPropImportar() {
   const conferir = () => {
     bpPasso(1);
     const R = M.pre, S = R.sugestao, B = R.base, sel = (n, v) => `<select name="${n}">${PP_BASES.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
-    const tile = (n, t, s, cl) => `<div class="bp-tile ${cl || ''} ${n ? '' : 'zero'}"><b>${n}</b><span>${t}</span>${s ? `<small>${s}</small>` : ''}</div>`;
+    // valor em reais grande (ex: R$ 6.952.999,85) usa letra menor para caber no quadro
+    const tile = (n, t, s, cl) => `<div class="bp-tile ${cl || ''} ${n ? '' : 'zero'} ${String(n).length > 10 ? 'longo' : ''}"><b>${n}</b><span>${t}</span>${s ? `<small>${s}</small>` : ''}</div>`;
     $('#ppImp').innerHTML = `<form id="ppIf" autocomplete="off"><div class="card"><div class="bp-h"><h3>${ic('file')} ${esc(M.nome)}</h3><button type="button" class="linkbtn" id="ppOutro">Escolher outro arquivo</button></div>
         <div class="bp-tiles">${tile(R.etapas, 'etapas')}${tile(R.itens, 'itens')}${tile(bpM(R.custo_planilha), 'custo na planilha', 'sem BDI e gestão')}${tile(B.comp_novas, 'composições novas na base', '', 'ok')}${tile(B.comp_atualizar, 'composições a atualizar', '', 'atu')}${tile(B.insumos_novos, 'insumos novos', '', 'ok')}</div>
         ${R.ligados && (R.ligados.sinapi + R.ligados.base + R.ligados.direto) ? `<div class="bp-tiles" style="margin-top:8px">${tile(R.ligados.sinapi, 'ligados ao SINAPI', 'composição ou insumo do mês importado')}${tile(R.ligados.base, 'ligados à sua base', 'composições que já existem')}${tile(R.ligados.direto, 'preço direto', 'sem criar nada na base')}</div>` : ''}
