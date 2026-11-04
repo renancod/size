@@ -78,6 +78,43 @@ test('orçamento: item do SINAPI no regime escolhido, custo congelado e "atualiz
   assert.match(t.adm('orc_dados', { obra }).frentes.find(f => f.nome === 'Fundação').itens[0].obs, /^SINAPI 94962/);
 });
 
+test('mês do SINAPI que a planilha virou data continua "09/2026" (não "ep/Tue")', () => {
+  const t = preparar();
+  importar(t, '2026-09', 100);
+  t.G.rodar(`(() => { const T = sinTab_('SinapiInfo'); const r = T.all().find(x => x.chave === 'mes'); r.valor = new Date(2026, 8, 1); T.update(r); })()`);
+  const i = t.adm('sinapi_info');
+  assert.deepEqual([i.mes, i.mes_txt], ['2026-09', '09/2026']);
+});
+
+test('importar orçamento com "Origem do item": SINAPI do app, composição da base e preço direto não criam nada na base', () => {
+  const t = preparar();
+  importar(t, '2026-09', 100);
+  t.adm('base_insumo_salvar', { insumo: { codigo: 'PAV007', descricao: 'Meio-fio', unidade: 'm', tipo: 'Material', preco: 27 } });
+  t.adm('base_composicao_salvar', { composicao: { codigo: '10014', descricao: 'Guia de sarjeta', unidade: 'm' }, itens: [{ ref: 'PAV007', coef: 1 }] });
+  const antes = t.adm('base_dados');
+  const H = ['ITEM', 'TIPO', 'CÓDIGO', 'DESCRIÇÃO', 'UN', 'QUANT.', 'CUSTO UNIT.', 'ORIGEM DO ITEM', 'MATERIAL UNIT.', 'MÃO DE OBRA UNIT.'];
+  const linhas = [H,
+    ['1.1', '', '94962', 'LASTRO DE CONCRETO MAGRO', 'M3', 10, 300, 'SINAPI'],
+    ['1.2', '', '370', 'AREIA', 'M3', 5, 100, 'SINAPI-INSUMO'],
+    ['1.3', '', '10014', 'MEIO-FIO DA RUA 1', 'M', 20, 27, 'BASE'],
+    ['2.1', '', '', 'VÁLVULA A COTAR', 'UN', 2, 0, 'Preço direto'],
+    ['2.2', '', '', 'SAIBRO POSTO OBRA', 'M3', 4, '', 'Preço direto', 38.4, 5]];
+  const ORC = [['ITEM', 'DESCRIÇÃO', 'UN'], ['1', 'FUNDAÇÃO', ''], ['2', 'REDES', '']];
+  const abas = [{ nome: 'Orçamento', linhas: ORC }, { nome: 'Composições', linhas }];
+  const pre = t.adm('prop_importar', { abas, fonte: 'Planilha · x.xlsx' });
+  assert.deepEqual([pre.itens, pre.etapas, pre.ligados, pre.faltam, pre.base.comp_novas, pre.base.insumos_novos], [5, 2, { sinapi: 2, base: 1, direto: 2 }, 0, 0, 0]);
+  const r = t.adm('prop_importar', { abas, aplicar: true, fonte: 'Planilha · x.xlsx', proposta: { cliente: 'C', empreendimento: 'E' } });
+  const it = t.adm('prop_detalhe', { id: r.id }).itens.filter(i => i.tipo === 'I');
+  assert.deepEqual(it.map(i => [i.fonte || '', i.comp_cod || '', i.unit_mat, i.unit_mo]),
+    [['SINAPI', '94962', 200, 100], ['SINAPI-INSUMO', '370', 100, 0], ['', '10014', 27, 0], ['', '', 0, 0], ['', '', 38.4, 5]]);
+  const depois = t.adm('base_dados');
+  assert.deepEqual([depois.composicoes.length, depois.insumos.length], [antes.composicoes.length, antes.insumos.length]);   // base intacta
+  // código que não existe: aparece na conferência e não deixa criar
+  const ruim = [{ nome: 'Composições', linhas: [H, ['1.1', '', '99999', 'X', 'M', 1, 0, 'SINAPI'], ['1.2', '', 'NAO-EXISTE', 'Y', 'M', 1, 0, 'BASE']] }];
+  assert.equal(t.adm('prop_importar', { abas: ruim }).faltam, 2);
+  assert.throws(() => t.adm('prop_importar', { abas: ruim, aplicar: true, proposta: { cliente: 'C', empreendimento: 'E' } }), /99999 não está no SINAPI/);
+});
+
 test('copiar composição do SINAPI para a base da Size (insumos com os coeficientes e a origem anotada)', () => {
   const t = preparar();
   importar(t, '2026-07', 100);

@@ -35,6 +35,8 @@ function sinInfo_(ss) {
   const o = {};
   if (!ss) return o;
   sinTab_('SinapiInfo', ss).all().forEach(r => { o[String(r.chave)] = r.valor; });
+  // o Google Planilhas transforma "2026-09" em data (aparecia "ep/Tue" no lugar de "09/2026")
+  if (o.mes instanceof Date) o.mes = ymd_(o.mes).slice(0, 7);
   return o;
 }
 function sinInfoGravar_(ss, d) {

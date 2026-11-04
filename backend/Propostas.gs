@@ -266,21 +266,37 @@ function propExcluir_(q, ctx) {
  * com uma etapa por grupo da planilha, cada item ligado à composição e na quantidade da planilha; BDI e gestão vêm do arquivo */
 function propImportar_(q, ctx) {
   const P = baseLerPlanilha_(q.abas), plano = basePlanoImport_(P, q.atualizar !== false && q.atualizar !== 'false', { fonte: q.fonte, substituir: q.substituir });
-  const itens = [];
-  let et = null, precoPlan = 0;
-  P.blocos.forEach(b => {
+  const itens = [], ligados = { sinapi: 0, base: 0, direto: 0 }, faltam = [];
+  let et = null, precoPlan = 0, six = null, ix = null;
+  // na ordem da planilha: composições do arquivo (vão para a base) e itens ligados direto (SINAPI do app, composição da base ou preço direto)
+  P.blocos.map(b => ({ b: b, seq: b.seq })).concat(P.externos.map(x => ({ x: x, seq: x.seq }))).sort((a, b) => a.seq - b.seq).forEach(o => {
+    const b = o.b || o.x;
     const e = String(b.item).split('.')[0] || '1';
     if (e !== et) { et = e; itens.push({ tipo: 'E', descricao: P.etapasNomes[e] || 'Etapa ' + e }); }
-    const fx = P.semTaxa[String(b.item)] || {};
-    itens.push({ tipo: 'I', comp_cod: b.cod_final, descricao: b.descricao, unidade: b.unidade, qtd: num_(b.qtd) || 1, sem_bdi: !!fx.bdi, sem_gestao: !!fx.gestao });
-    precoPlan += (num_(b.qtd) || 1) * (b.unit == null ? 0 : b.unit);
+    const fx = P.semTaxa[String(b.item)] || {}, qtd = num_(b.qtd) || 1;
+    const it = { tipo: 'I', descricao: b.descricao, unidade: b.unidade, qtd: qtd, sem_bdi: !!fx.bdi, sem_gestao: !!fx.gestao };
+    if (o.b) { it.comp_cod = b.cod_final; precoPlan += qtd * (b.unit == null ? 0 : b.unit); }
+    else if (b.origem === 'DIRETO') {
+      it.unit_mat = b.umat != null ? b.umat : (b.unit || 0); it.unit_mo = b.umo || 0; it.unit_eq = 0; it.unit_sv = 0;
+      precoPlan += qtd * (it.unit_mat + it.unit_mo); ligados.direto++;
+    } else if (b.origem === 'BASE') {
+      ix = ix || baseIndice_();
+      if (!ix.C[b.codigo]) faltam.push('Item ' + b.item + ': a composição ' + b.codigo + ' não está na base.');
+      it.comp_cod = b.codigo; precoPlan += qtd * (b.unit || 0); ligados.base++;
+    } else {
+      six = six || sinIndiceServidor_();
+      if (!(b.origem === 'SINAPI' ? six.C : six.I)[b.codigo]) faltam.push('Item ' + b.item + ': ' + (b.origem === 'SINAPI' ? 'composição ' : 'insumo ') + b.codigo + ' não está no SINAPI importado (' + (six.mes || 'nenhum mês') + ').');
+      it.comp_cod = b.codigo; it.fonte = b.origem; precoPlan += qtd * (b.unit || 0); ligados.sinapi++;
+    }
+    itens.push(it);
   });
   const sugestao = { empreendimento: P.titulo, bdi_pct: P.taxas.bdi == null ? '' : P.taxas.bdi, bdi_base: P.taxas.bdi_base || 'servicos', gestao_pct: P.taxas.gestao == null ? '' : P.taxas.gestao, gestao_base: P.taxas.gestao_base || 'total' };
-  const resumo = { base: plano.resumo, etapas: itens.filter(i => i.tipo === 'E').length, itens: itens.filter(i => i.tipo === 'I').length, custo_planilha: propR2_(precoPlan), sugestao: sugestao, avisos: plano.avisos, conflitos: plano.conflitos,
-    sem_bdi: itens.filter(i => i.sem_bdi).map(i => i.descricao), sem_gestao: itens.filter(i => i.sem_gestao).map(i => i.descricao) };
+  const resumo = { base: plano.resumo, etapas: itens.filter(i => i.tipo === 'E').length, itens: itens.filter(i => i.tipo === 'I').length, custo_planilha: propR2_(precoPlan), sugestao: sugestao, avisos: faltam.concat(plano.avisos), conflitos: plano.conflitos,
+    sem_bdi: itens.filter(i => i.sem_bdi).map(i => i.descricao), sem_gestao: itens.filter(i => i.sem_gestao).map(i => i.descricao), ligados: ligados, faltam: faltam.length };
   if (!q.aplicar) return resumo;
+  if (faltam.length) throw new Error(faltam[0] + (faltam.length > 1 ? ' (e mais ' + (faltam.length - 1) + ')' : ''));
   // 1º a base (mesmo plano: os códigos das composições são os mesmos), depois o orçamento
-  baseImportar_({ abas: q.abas, atualizar: q.atualizar, aplicar: true, data_preco: q.data_preco, fonte: q.fonte, substituir: q.substituir }, ctx);
+  if (P.blocos.length) baseImportar_({ abas: q.abas, atualizar: q.atualizar, aplicar: true, data_preco: q.data_preco, fonte: q.fonte, substituir: q.substituir }, ctx);
   const d = Object.assign({}, sugestao, q.proposta || {});
   ['bdi_pct', 'gestao_pct'].forEach(k => { if (d[k] === '' || d[k] == null) d[k] = 0; });
   if (!d.data_base) d.data_base = q.data_preco;

@@ -344,7 +344,11 @@ function baseComposicaoDuplicar_(q, ctx) {
 
 /* ---------- importação de planilha ---------- */
 const PLAN_COLS_ = { item: /^item$/, tipo: /^tipo$/, cod: /^(cod|codigo)\b/, desc: /^descri/, un: /^(un|und|unid|unidade)\.?$/, qtd: /^quant/, unit: /^(custo|preco|valor) unit/,
-  bdi: /^bdi/, gest: /^gestao/, mot: /^mao de obra.*total/, ptot: /^preco total/ };   // as 4 últimas só na aba do orçamento (item sem BDI / sem gestão)
+  bdi: /^bdi/, gest: /^gestao/, mot: /^mao de obra.*total/, ptot: /^preco total/,   // estas 4 só na aba do orçamento (item sem BDI / sem gestão)
+  // só na importação de orçamento: o serviço pode apontar para fora do arquivo (SINAPI do app, composição que já está na base ou preço direto)
+  orig: /^origem do item$/, umat: /^material unit/, umo: /^mao de obra unit/ };
+// valores da coluna "Origem do item": o serviço não vira composição nova, o orçamento liga direto
+const PLAN_ORIGENS_ = { 'sinapi': 'SINAPI', 'sinapi-insumo': 'SINAPI-INSUMO', 'sinapi insumo': 'SINAPI-INSUMO', 'base': 'BASE', 'preco direto': 'DIRETO', 'direto': 'DIRETO' };
 function planCabecalho_(linhas, obrig) {
   for (let r = 0; r < Math.min(linhas.length, 40); r++) {
     const row = (linhas[r] || []).map(x => norm_(x)), c = {};
@@ -397,16 +401,23 @@ function baseLerPlanilha_(abas) {
     }
   }
   const c = comp.h.c, cel = (row, k) => (c[k] >= 0 && row[c[k]] != null ? row[c[k]] : '');
-  const blocos = [], avisos = [];
+  const blocos = [], externos = [], avisos = [];
   let cur = null;
   for (let r = comp.h.r + 1; r < comp.L.length; r++) {
     const row = comp.L[r] || [], desc = String(cel(row, 'desc')).trim();
     if (!desc) continue;
     const tipoTxt = String(cel(row, 'tipo')).trim();
     const l = { item: String(cel(row, 'item')).trim(), codigo: baseCodigo_(cel(row, 'cod')), descricao: desc.slice(0, 300), unidade: String(cel(row, 'un')).trim(), qtd: planNum_(cel(row, 'qtd')), unit: planNum_(cel(row, 'unit')) };
-    if (!tipoTxt) {
-      cur = { item: l.item, codigo: l.codigo, descricao: l.descricao, unidade: l.unidade, qtd: l.qtd || 0, unit: l.unit, grupo: etapas[l.item.split('.')[0]] || '', itens: [] };
+    const orig = PLAN_ORIGENS_[norm_(cel(row, 'orig'))];
+    if (!tipoTxt && orig) {
+      // ligado a algo de fora: não entra na base; as linhas de insumo abaixo dele (se houver) são ignoradas
+      externos.push(Object.assign(l, { seq: blocos.length + externos.length, origem: orig, umat: planNum_(cel(row, 'umat')), umo: planNum_(cel(row, 'umo')) }));
+      cur = 'fora';
+    } else if (!tipoTxt) {
+      cur = { seq: blocos.length + externos.length, item: l.item, codigo: l.codigo, descricao: l.descricao, unidade: l.unidade, qtd: l.qtd || 0, unit: l.unit, grupo: etapas[l.item.split('.')[0]] || '', itens: [] };
       blocos.push(cur);
+    } else if (cur === 'fora') {
+      continue;
     } else if (cur) {
       if (l.unit == null) avisos.push('Linha ' + (r + 1) + ' (' + desc.slice(0, 40) + '): sem custo unitário, entrou com R$ 0,00.');
       cur.itens.push({ tipo: baseTipo_(tipoTxt) || 'Material', codigo: l.codigo, descricao: l.descricao, unidade: l.unidade || cur.unidade, qtd: l.qtd || 0, preco: l.unit || 0 });
@@ -414,8 +425,8 @@ function baseLerPlanilha_(abas) {
   }
   // serviço sem detalhamento: vira um insumo "Serviço" com o preço da composição
   blocos.forEach(b => { if (!b.itens.length) b.itens.push({ tipo: 'Serviço', codigo: b.codigo, descricao: b.descricao, unidade: b.unidade, qtd: b.qtd || 1, preco: b.unit || 0 }); });
-  if (!blocos.length) throw new Error('A aba "' + comp.nome + '" não tem nenhuma composição.');
-  return { aba: comp.nome, blocos: blocos, avisos: avisos, etapas: Object.keys(etapas).length, etapasNomes: etapas, taxas: taxas, semTaxa: semTaxa, titulo: titulo.slice(0, 200) };
+  if (!blocos.length && !externos.length) throw new Error('A aba "' + comp.nome + '" não tem nenhuma composição.');
+  return { aba: comp.nome, blocos: blocos, externos: externos, avisos: avisos, etapas: Object.keys(etapas).length, etapasNomes: etapas, taxas: taxas, semTaxa: semTaxa, titulo: titulo.slice(0, 200) };
 }
 /* arquivo de origem de uma composição ("Planilha · AVA.xlsx" e "RDObras · AVA.xlsx" são o mesmo arquivo) */
 const baseArq_ = s => norm_(String(s || '').split(' · ').pop());

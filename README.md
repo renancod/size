@@ -113,6 +113,8 @@ Módulo **Orçamento da obra** (`#/obra`, `Orcamento.gs` + `orc.js`). Cada **fre
 `#/orc/orcamentos`, `Propostas.gs` + `prop.js`, na planilha central.
 - **Planilha:** etapas (1, 2, 3…) e itens (1.1, 1.2…): serviço da base × quantidade (custo **congelado** no orçamento; "Atualizar preços pela base" puxa de novo) ou **item de preço direto**.
 - **Importar orçamento** (`#/orc/orcamento/importar`): a planilha do orçamento (ex. a do RDObras) cria o orçamento **em rascunho**, com as etapas, as quantidades, o BDI, a gestão e os itens sem BDI, e leva as composições para a base (mesma conferência da importação de composições).
+  - Coluna opcional **"Origem do item"** na aba Composições (linha do serviço): `SINAPI` / `SINAPI-INSUMO` (liga no SINAPI importado, no regime do orçamento), `BASE` (composição que já está na base, pelo código) ou `Preço direto` (com "Material unit." e "Mão de obra unit."). Esses itens **não criam nada na base**; código que não existe aparece na conferência e trava a criação.
+- **Desfazer importação** (Importar composições → Importações feitas): tira da base as composições e os insumos que vieram de um arquivo (origem "Planilha · …"), menos o que está em orçamento, é auxiliar de outra composição, já existia ou foi alterado depois.
 - **BDI e gestão** com % e base configuráveis (mão de obra + equipamento + serviços, ou custo total). Preço de venda do item = custo + BDI + gestão.
 - **Situação:** rascunho → enviado → aprovado | perdido (com motivo) | cancelado; reabrir; **nova revisão** (ORC-0001 rev.1, a anterior fica "Revisado"); copiar como novo; histórico. Só o rascunho é editado.
 - **Proposta para imprimir/PDF** (a do cliente e a planilha interna) e exportação para Excel.
