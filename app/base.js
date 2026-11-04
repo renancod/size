@@ -824,7 +824,9 @@ function bpImpArquivo() {
     <details class="card bp-colar"><summary>${ic('paste')} Ou cole as linhas copiadas do Excel</summary>
       <textarea id="bpTxt" rows="7" placeholder="Copie no Excel a aba Composições inteira (com a linha de títulos) e cole aqui"></textarea><button type="button" class="btn sec" id="bpTxtOk">Conferir as linhas coladas</button></details>
     <div class="card bp-opc"><h3>Opções</h3><div class="g2"><label>Data-base dos preços importados<input type="date" id="bpData" value="${esc(M.data)}"></label>
-      <label class="ck" style="align-self:end"><input type="checkbox" id="bpAtu" ${M.atualizar ? 'checked' : ''}> Atualizar os insumos e as composições que já existem na base (mesmo código)</label></div></div>`;
+      <label class="ck" style="align-self:end"><input type="checkbox" id="bpAtu" ${M.atualizar ? 'checked' : ''}> Atualizar os insumos e as composições que já existem na base (mesmo código)</label></div></div>
+    <div id="bpFeitas"></div>`;
+  bpImportacoes();
   const drop = $('#bpDrop');
   ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('sobre'); }));
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('sobre'); }));
@@ -840,6 +842,35 @@ function bpImpArquivo() {
     bpImpConferir();
   };
 }
+/* importações já feitas (pela origem gravada em cada composição e insumo): desfazer tira da base o que veio do arquivo e ninguém usa */
+async function bpImportacoes() {
+  let L;
+  try { L = (await api('base_importacoes')).importacoes; } catch (e) { return; }
+  const el = $('#bpFeitas');
+  if (!el || !L.length) return;
+  el.innerHTML = `<div class="card"><h3>${ic('clock')} Importações feitas</h3><small class="mute">Desfazer tira da base as composições e os insumos que vieram do arquivo. O que estiver em uso (orçamento de cliente ou outra composição) continua.</small>
+    <table class="tab bp-tab" style="margin-top:8px"><tbody>${L.map((x, i) => `<tr><td><b>${esc(x.fonte.split(' · ').pop())}</b><br><small>${esc(x.fonte.split(' · ')[0])}</small></td>
+      <td class="n">${plural(x.composicoes, 'composição', 'composições')}<br><small>${plural(x.insumos, 'insumo', 'insumos')}</small></td>
+      <td class="n"><button type="button" class="btn sec peq" data-desf="${i}">${ic('x')} Desfazer</button></td></tr>`).join('')}</tbody></table></div>`;
+  $$('[data-desf]', el).forEach(b => { b.onclick = () => bpDesfazer(L[+b.dataset.desf].fonte); });
+}
+async function bpDesfazer(fonte) {
+  let r;
+  try { r = await api('base_desfazer', { fonte: fonte }); } catch (e) { return toast(e.message, 1); }
+  const nome = esc(fonte.split(' · ').pop());
+  if (!r.composicoes && !r.insumos) return modal(`${ic('alert')} Desfazer importação`, `<p>Nada de <b>${nome}</b> pode sair: está tudo em uso.</p>${bpFicam(r)}`, { ok: 'Fechar' });
+  modal(`${ic('x')} Desfazer importação`, `<p>Vão sair da base <b>${plural(r.composicoes, 'composição', 'composições')}</b> e <b>${plural(r.insumos, 'insumo', 'insumos')}</b> que vieram de <b>${nome}</b>. Não dá para voltar atrás (a não ser importando o arquivo de novo).</p>${bpFicam(r)}`, {
+    ok: 'Desfazer', onOk: async () => {
+      const x = await api('base_desfazer', { fonte: fonte, aplicar: true });
+      toast(x.msg);
+      await bpCarregar(true);
+      bpImportacoes();
+    }
+  });
+}
+const bpFicam = r => r.n_ficam ? `<div class="aviso info"><b>${plural(r.n_ficam, 'composição continua', 'composições continuam')}</b> (em uso)${r.insumos_ficam ? ` e ${plural(r.insumos_ficam, 'insumo', 'insumos')} dela${r.insumos_ficam > 1 ? 's' : ''}` : ''}.
+  ${r.orcamentos.length ? `Para tirar tudo, exclua antes ${r.orcamentos.length > 1 ? 'os orçamentos' : 'o orçamento'} <b>${esc(r.orcamentos.join(', '))}</b>.` : ''}
+  <ul>${r.ficam.slice(0, 8).map(f => `<li><code>${esc(f.codigo)}</code> ${esc(f.descricao)} <small>· ${esc(f.motivo)}</small></li>`).join('')}${r.n_ficam > 8 ? `<li>… e mais ${r.n_ficam - 8}</li>` : ''}</ul></div>` : '';
 /* planilha do Excel → abas com as linhas (valores, como o Excel mostra), para mandar ao servidor */
 async function bpLerPlanilha(f) {
   if (!window.XLSX) await bpScript(BP_XLSX);

@@ -171,6 +171,30 @@ test('importar: mesmo código de OUTRA planilha com outra composição não sobr
   assert.deepEqual(itensDe('10075'), ['T110:900']);
 });
 
+test('desfazer importação: sai da base o que veio do arquivo; o que está em orçamento ou já era seu continua', () => {
+  const t = preparar();
+  const fonte = 'Planilha · Morada.xlsx';
+  const linhas = [COMP[0], ['1.1', '', 'X1', 'SUB-BASE', 'M2', 10, '', 5], ['1.1', 'Material', 'SAIBRO', 'Saibro', 'M3', 3, '', 10],
+    ['1.1', 'Mão de obra / serviço', '1146', 'Assentamento de paver', 'M2', 10, '', 17],
+    ['1.2', '', 'X2', 'COTAR', 'UN', 2, '', 0], ['1.2', 'Material', 'PECA', 'Peça a cotar', 'UN', 2, '', 0]];
+  const orc = t.adm('prop_importar', { abas: [{ nome: 'Composições', linhas }], aplicar: true, fonte, proposta: { cliente: 'Teste', empreendimento: 'Morada' } });
+  assert.deepEqual(t.adm('base_importacoes').importacoes.find(x => x.fonte === fonte), { fonte, composicoes: 2, insumos: 2 });
+  // com o orçamento em rascunho usando as composições: nada sai, e avisa qual orçamento excluir
+  const pre = t.adm('base_desfazer', { fonte });
+  assert.deepEqual([pre.composicoes, pre.insumos, pre.n_ficam], [0, 0, 2]);
+  assert.equal(pre.orcamentos.length, 1);
+  t.adm('prop_excluir', { id: orc.id });
+  const r = t.adm('base_desfazer', { fonte, aplicar: true });
+  assert.deepEqual([r.composicoes, r.insumos, r.n_ficam], [2, 2, 0]);
+  const b = t.adm('base_dados');
+  assert.ok(!b.composicoes.some(c => c.codigo === 'X1' || c.codigo === 'X2'));
+  assert.ok(!b.insumos.some(i => i.codigo === 'SAIBRO' || i.codigo === 'PECA'));
+  assert.ok(b.insumos.some(i => i.codigo === '1146') && b.composicoes.some(c => c.codigo === '10011'));   // os seus continuam
+  assert.ok(!t.adm('base_importacoes').importacoes.some(x => x.fonte === fonte));
+  assert.throws(() => t.adm('base_desfazer', { fonte }), /Nada desta importação/);
+  assert.throws(() => t.adm('base_desfazer', { fonte: 'Própria' }), /Escolha uma importação/);
+});
+
 test('obra: localização escolhida no mapa ao criar; excluir pede a sigla, tira do sistema e guarda a pasta em "Obras excluídas"', () => {
   const t = preparar();
   const r = t.adm('admin_obra_criar', { contrato: { nome: 'contrato-assinado.pdf', mime: 'application/pdf', b64: 'JVBERi0xLjQ=' }, nome: 'AVA Residence', sigla: 'AVA', endereco: 'Maquiné/RS', lat: '-29,78378', lng: -50.07392 });

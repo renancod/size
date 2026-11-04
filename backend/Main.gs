@@ -164,6 +164,8 @@ const ROTAS = {
   base_composicao_duplicar: { base: 'Gerir', lock: true, fn: baseComposicaoDuplicar_ },
   base_precos: { base: 'Gerir', lock: true, fn: basePrecos_ },
   base_importar: { base: 'Gerir', lock: true, fn: baseImportar_ },
+  base_importacoes: { base: 'Gerir', fn: baseImportacoes_ },
+  base_desfazer: { base: 'Gerir', lock: true, fn: baseDesfazer_ },
   // orçamentos de clientes (fora de obra) e o painel da empresa (tela Início)
   empresa_dados: { fn: empresaDados_ },
   prop_listar: { base: 'Ver', fn: propListar_ },

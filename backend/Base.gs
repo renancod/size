@@ -542,3 +542,62 @@ function baseImportar_(q, ctx) {
   log_(ctx, 'base_importar', fonte + ' · ' + msg);
   return Object.assign(saida(), { msg: msg, aplicado: true });
 }
+
+/* ---------- desfazer uma importação: tira da base as composições e os insumos que vieram de um arquivo ----------
+ * só o que ninguém mais usa: composição de orçamento de cliente (ou auxiliar de composição que fica) continua,
+ * e o insumo usado por composição que fica também. Conferir (sem gravar) ou aplicar */
+// origem gravada pela importação ("Planilha · arquivo.xlsx"; as mais antigas "RDObras · …"); a digitada no insumo (ex: uma cotação) não entra
+const baseImportada_ = f => /^(Planilha|RDObras) · ./.test(f);
+function baseImportacoes_() {
+  const ix = baseIndice_(), por = {};
+  const add = (f, k) => { f = String(f || ''); if (baseImportada_(f)) (por[f] = por[f] || { fonte: f, composicoes: 0, insumos: 0 })[k]++; };
+  Object.keys(ix.C).forEach(k => add(ix.C[k].fonte, 'composicoes'));
+  Object.keys(ix.I).forEach(k => add(ix.I[k].fonte, 'insumos'));
+  return { importacoes: Object.keys(por).map(f => por[f]).sort((a, b) => a.fonte.localeCompare(b.fonte)) };
+}
+function baseDesfazer_(q, ctx) {
+  const fonte = String(q.fonte || '');
+  if (!baseImportada_(fonte)) throw new Error('Escolha uma importação.');
+  const ix = baseIndice_(), usos = baseUsos_(ix);
+  const doArq = Object.keys(ix.C).filter(k => String(ix.C[k].fonte || '') === fonte);
+  const ins = Object.keys(ix.I).filter(k => String(ix.I[k].fonte || '') === fonte);
+  if (!doArq.length && !ins.length) throw new Error('Nada desta importação está na base.');
+  // a importação que atualiza uma composição que já existia também grava a origem nela: só sai a que nasceu na importação
+  // e não mudou depois (criada = atualizada); a outra fica, para não apagar o que já era seu
+  const t = d => (d instanceof Date ? d : new Date(d)).getTime();
+  const intacta = c => !!c.criado_em && !!c.atualizado_em && t(c.criado_em) === t(c.atualizado_em);
+  const comps = doArq.filter(k => intacta(ix.C[k]));
+  // orçamentos de cliente que usam as composições (item da base, não do SINAPI)
+  const P = {}, emOrc = {};
+  central_('Propostas').all().forEach(p => { P[String(p.id)] = p; });
+  central_('PropostaItens').all().forEach(x => {
+    const c = String(x.comp_cod || '');
+    if (x.tipo === 'I' && !x.fonte && c && P[String(x.proposta)]) (emOrc[c] = emOrc[c] || {})[propRotulo_(P[String(x.proposta)])] = 1;
+  });
+  const tira = {};
+  comps.forEach(c => { if (!emOrc[c]) tira[c] = 1; });
+  // auxiliar de uma composição que fica, fica também (repete até parar de mudar)
+  for (let mudou = true; mudou;) {
+    mudou = false;
+    Object.keys(tira).forEach(c => { if (Object.keys(usos.comp[c] || {}).some(u => !tira[u])) { delete tira[c]; mudou = true; } });
+  }
+  const tiraI = {};
+  ins.forEach(i => { if (!Object.keys(usos.ins[i] || {}).some(u => !tira[u])) tiraI[i] = 1; });
+  const ficam = doArq.filter(c => !tira[c]).map(c => ({ codigo: c, descricao: ix.C[c].descricao,
+    motivo: emOrc[c] ? 'em orçamento: ' + Object.keys(emOrc[c]).join(', ') : comps.indexOf(c) < 0 ? 'já existia ou foi alterada depois' : 'auxiliar de outra composição' }));
+  const orcs = {};
+  ficam.forEach(f => Object.keys(emOrc[f.codigo] || {}).forEach(o => { orcs[o] = 1; }));
+  const r = { fonte: fonte, composicoes: Object.keys(tira).length, insumos: Object.keys(tiraI).length, ficam: ficam.slice(0, 50), n_ficam: ficam.length,
+    insumos_ficam: ins.length - Object.keys(tiraI).length, orcamentos: Object.keys(orcs) };
+  if (!q.aplicar) return r;
+  central_('Composicoes').removeWhere(x => tira[String(x.codigo)]);
+  const IT = central_('ComposicaoItens');
+  IT.substituir(IT.all().filter(x => !tira[String(x.composicao)]));
+  Object.keys(tiraI).forEach(i => baseFotoLixo_(ix.I[i].foto_id));
+  central_('Insumos').removeWhere(x => tiraI[String(x.codigo)]);
+  const H = central_('InsumoPrecos');
+  H.substituir(H.all().filter(x => !tiraI[String(x.insumo)]));
+  log_(ctx, 'base_desfazer', fonte + ' · ' + r.composicoes + ' composições e ' + r.insumos + ' insumos');
+  return Object.assign(r, { aplicado: true, msg: 'Saíram da base ' + plural_(r.composicoes, 'composição', 'composições') + ' e ' + plural_(r.insumos, 'insumo', 'insumos') + ' de ' + fonte.split(' · ').pop() + '.' +
+    (r.n_ficam ? ' ' + plural_(r.n_ficam, 'composição continua', 'composições continuam') + ' porque está em uso.' : '') });
+}
