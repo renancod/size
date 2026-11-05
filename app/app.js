@@ -670,6 +670,8 @@ const ETAPA_NOTIF = {
   medicao_aprovar: ['Medição para aprovar', 'check'], medicao_devolvida: ['Medição devolvida', 'alert'], sinapi: ['SINAPI do mês novo', 'grid2'], prop_cli: ['Portal do cliente', 'eye'],
   topo_nova: ['Topografia · demandas', 'tripod'], topo_amanha: ['Agenda de amanhã', 'calendar'], topo_adiada: ['Topografia · data mudada', 'calendar'], topo_concluida: ['Topografia · concluídas', 'check']
 };
+// avisos só informativos: não contam no número do sino e somem quando abertos ou dispensados (Notificacoes.gs NOTIF_INFO_)
+const NOTIF_INFO = ['meu', 'pago', 'entrega', 'topo_concluida', 'topo_adiada'];
 const NOTIF = { itens: [], timer: null, primeira: true, conhecidos: new Set((() => { try { return JSON.parse(LS.get('cs_notif') || '[]'); } catch (e) { return []; } })()) };
 async function buscarNotif() {
   if (!S.token || !S.sess) return;
@@ -701,7 +703,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && S.
 function atualizarSino() {
   const b = $('#sino .sino-n');
   if (!b) return;
-  const n = NOTIF.itens.filter(i => !['meu', 'pago'].includes(i.etapa)).length; // avisos informativos não contam como pendência
+  const n = NOTIF.itens.filter(i => !NOTIF_INFO.includes(i.etapa)).length; // avisos informativos não contam como pendência
   b.textContent = n > 99 ? '99+' : n;
   b.hidden = !n;
 }
@@ -747,7 +749,17 @@ function tocarAviso(urgente) {
     o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.17);
   });
 }
+/* tira do sino (nesta tela na hora; no servidor vale para todos os aparelhos da pessoa) */
+function dispensarNotif(ids) {
+  ids = ids.filter(Boolean);
+  if (!ids.length) return;
+  NOTIF.itens = NOTIF.itens.filter(i => !ids.includes(i.id));
+  atualizarSino();
+  api('notif_dispensar', { ids }).catch(() => {});
+}
 async function abrirNotif(i) {
+  if (!i) return;
+  if (NOTIF_INFO.includes(i.etapa)) dispensarNotif([i.id]);
   fecharModal();
   if (i.obra && i.obra !== S.obraId) await trocarObra(i.obra);
   location.hash = i.rota || '#/pedido/' + enc(i.numero);
@@ -762,12 +774,14 @@ function painelNotif() {
       : `<button type="button" class="btn" id="ligaNotif">${ic('bell')} Ativar avisos neste aparelho (mesmo com o app fechado)</button>`) : ''}
     ${!pp && perm === 'default' ? `<button type="button" class="btn sec" id="ativarNotif">${ic('bell')} Avisar também quando o app estiver em segundo plano</button>` : ''}
     ${perm === 'denied' ? '<small>Os avisos do aparelho estão bloqueados nas configurações do navegador para este site.</small>' : ''}
-    ${grupos.map(([k, l]) => `<div class="notif-grupo"><div class="notif-tit">${ic(ETAPA_NOTIF[k][1])}<b>${ETAPA_NOTIF[k][0]}</b><span>${l.length}</span></div>
-      ${l.sort((a, b) => String(b.quando).localeCompare(String(a.quando))).map((i, n) => `<button type="button" class="notif" data-n="${esc(i.id)}">
+    ${grupos.map(([k, l]) => { const info = NOTIF_INFO.includes(k); return `<div class="notif-grupo"><div class="notif-tit">${ic(ETAPA_NOTIF[k][1])}<b>${ETAPA_NOTIF[k][0]}</b><span>${l.length}</span>${info ? `<button type="button" class="linkbtn notif-limpa" data-limpa="${k}">limpar</button>` : ''}</div>
+      ${l.sort((a, b) => String(b.quando).localeCompare(String(a.quando))).map((i, n) => `<div class="notif-l"><button type="button" class="notif" data-n="${esc(i.id)}">
         <span><b>${esc(i.numero)}</b>${quente(i) ? ' <span class="urg">' + esc(String(i.prioridade).toUpperCase()) + '</span>' : ''}${variasObras ? ` <small>${esc(i.obra_nome)}</small>` : ''}<br>
-        <small>${esc(i.texto)}${i.resumo ? ' — ' + esc(i.resumo) : ''}</small></span><small>${fdh(i.quando)}</small></button>`).join('')}</div>`).join('')
+        <small>${esc(i.texto)}${i.resumo ? ' — ' + esc(i.resumo) : ''}</small></span><small>${fdh(i.quando)}</small></button>${info ? `<button type="button" class="icbtn notif-x" data-x="${esc(i.id)}" title="Dispensar" aria-label="Dispensar">${ic('x')}</button>` : ''}</div>`).join('')}</div>`; }).join('')
     || '<p class="vazio">Nada pendente para você agora. 🎉</p>'}`, { semRodape: true });
   $$('#modal .notif').forEach(b => { b.onclick = () => abrirNotif(NOTIF.itens.find(i => i.id === b.dataset.n)); });
+  $$('#modal [data-x]').forEach(b => { b.onclick = () => { dispensarNotif([b.dataset.x]); painelNotif(); }; });
+  $$('#modal [data-limpa]').forEach(b => { b.onclick = () => { dispensarNotif(NOTIF.itens.filter(i => i.etapa === b.dataset.limpa).map(i => i.id)); painelNotif(); }; });
   const clique = (id, fn, ok) => { const b = $(id); if (b) b.onclick = async () => { b.disabled = true; try { await fn(); toast(ok); } catch (e) { toast(e.message, 1); } painelNotif(); }; };
   clique('#ligaNotif', pushAtivar, 'Pronto: este aparelho vai avisar das novidades, mesmo com o app fechado.');
   clique('#desligaNotif', pushDesativar, 'Avisos desativados neste aparelho.');

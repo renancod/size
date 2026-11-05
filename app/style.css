@@ -102,6 +102,9 @@ small,.mute{color:var(--mute)}
 .notif{display:flex;justify-content:space-between;gap:10px;text-align:left;background:#FAFCFC;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;cursor:pointer;color:inherit}
 .notif:hover{border-color:var(--teal)}
 .notif b{color:var(--navy)}
+.notif-l{display:flex;gap:6px;align-items:stretch}.notif-l .notif{flex:1;min-width:0}
+.notif-x{flex:none;width:36px;border:1px solid var(--line);border-radius:10px;background:#FAFCFC;color:var(--muted,#6b7a8c)}.notif-x:hover{color:var(--err,#c0392b);border-color:currentColor}
+.notif-tit .notif-limpa{font-size:.78rem;margin-left:4px}
 .convite{white-space:pre-wrap;background:var(--gray-l);border-radius:10px;padding:12px;font:inherit;font-size:.88rem;margin:0}
 
 /* módulos no menu lateral */

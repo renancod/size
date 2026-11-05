@@ -11,7 +11,7 @@ function notificacoes_(q, ctx) {
     return { itens: ci, agora: fmtVal_(new Date()) };
   }
   // guardado 1 minuto por pessoa; qualquer gravação no sistema renova na hora (Db.gs memMudou_('notif'))
-  const itens = memoria_('notif', String(ctx.u.id), () => notifMontar_(ctx), 60);
+  const itens = memoria_('notif', String(ctx.u.id), () => notifSemVistos_(ctx, notifMontar_(ctx)), 60);
   // app aberto com os avisos de fundo ativos: o que ele já mostrou não precisa ir de novo por push
   if (q && q.push) pushMarcarVistos_(String(q.push), ctx.u.id, itens);
   // versão da base de preços: o app só baixa a base de novo quando ela mudou (base.js bpCarregar)
@@ -86,6 +86,25 @@ function notifMontar_(ctx) {
     usoAvisos_((etapa, texto, resumo) => itens.push({ id: 'uso|' + etapa + '|' + hojeStr, obra: '', obra_nome: 'Sistema', numero: '', rota: '#/admin/config', etapa: etapa, texto: texto, resumo: resumo, situacao: '', prioridade: 'alta', quando: '' }));
   } catch (e) { /* não derruba o sino */ }
   return itens;
+}
+
+/* avisos só informativos (não pedem nada): somem do sino quando a pessoa abre ou dispensa; os outros ficam até a tarefa ser feita */
+const NOTIF_INFO_ = ['meu', 'pago', 'entrega', 'topo_concluida', 'topo_adiada'];
+function notifSemVistos_(ctx, itens) {
+  const vistos = {};
+  central_('AvisosVistos').all().forEach(x => { if (String(x.usuario_id) === String(ctx.u.id)) vistos[String(x.aviso_id)] = 1; });
+  return itens.filter(i => !(NOTIF_INFO_.indexOf(i.etapa) >= 0 && vistos[i.id]));
+}
+function notifDispensar_(q, ctx) {
+  const ids = [].concat(q.ids || []).map(String).filter(Boolean).slice(0, 200);
+  if (!ids.length) return { ok: true };
+  const T = central_('AvisosVistos'), eu = String(ctx.u.id), ja = {}, agora = new Date();
+  // os avisos informativos duram no máximo 10 dias: o registro mais velho que isso não serve mais
+  T.removeWhere(x => x.em instanceof Date && agora - x.em > 15 * 864e5);
+  T.all().forEach(x => { if (String(x.usuario_id) === eu) ja[String(x.aviso_id)] = 1; });
+  const novos = ids.filter(id => !ja[id]).map(id => ({ usuario_id: eu, aviso_id: id, em: agora }));
+  if (novos.length) T.insertMany(novos);
+  return { ok: true, dispensados: novos.length };
 }
 
 function diasAte_(d) {

@@ -45,7 +45,9 @@ const SCHEMA_CENTRAL = {
   TopoDiarios: ['id', 'demanda', 'data', 'topografo_id', 'topografo', 'obra_id', 'obra_nome', 'tipo', 'servico', 'local', 'unidade', 'qtd', 'terminou', 'obs', 'arquivo_usado',
     'fotos_json', 'croquis_json', 'arquivos_json', 'lat', 'lng', 'criado_em', 'atualizado_em'],
   // onde o topógrafo estava ao abrir o app (celular da empresa): guarda os últimos pontos de cada um
-  TopoLocais: ['usuario_id', 'usuario', 'lat', 'lng', 'precisao', 'em', 'visto_em']
+  TopoLocais: ['usuario_id', 'usuario', 'lat', 'lng', 'precisao', 'em', 'visto_em'],
+  // aviso só informativo que a pessoa abriu ou dispensou no sino (some em todos os aparelhos dela)
+  AvisosVistos: ['usuario_id', 'aviso_id', 'em']
 };
 const SCHEMA_OBRA = {
   Pedidos: ['numero', 'criado_em', 'solicitante_id', 'solicitante', 'frente', 'prioridade', 'necessidade', 'observacoes',

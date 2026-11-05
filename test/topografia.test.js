@@ -107,6 +107,12 @@ test('mudar a data: topógrafo precisa do motivo e quem abriu é avisado', () =>
   assert.match(d.historico[0].det, /motivo: Chuva forte/);
   const av = t.eng.f('notificacoes').itens.find(i => i.etapa === 'topo_adiada');
   assert.match(av.texto, /Tiago Topógrafo mudou a data .* Chuva forte/);
+  // aviso só informativo: dispensado (ou aberto) some do sino de quem dispensou; o de tarefa não é afetado
+  t.eng.f('notif_dispensar', { ids: [av.id, 'qualquer|outro'] });
+  assert.ok(!t.eng.f('notificacoes').itens.some(i => i.id === av.id));
+  assert.equal(t.eng.f('notif_dispensar', { ids: [av.id] }).dispensados, 0);   // não duplica
+  t.t1.f('notif_dispensar', { ids: t.t1.f('notificacoes').itens.filter(i => i.etapa === 'topo_nova').map(i => i.id) });
+  assert.ok(t.t1.f('notificacoes').itens.some(i => i.etapa === 'topo_nova'));      // demanda nova do topógrafo continua
 });
 
 test('agenda automática: produção média estima os dias, a fila anda quando atrasa e sugere o topógrafo livre', () => {
