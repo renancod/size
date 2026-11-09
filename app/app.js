@@ -190,24 +190,28 @@ function agoraLimpar() {
   Object.keys(AGORA).forEach(k => delete AGORA[k]);
   try { Object.keys(localStorage).filter(k => k.indexOf(LSP + 'cs_agora_') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) { /* sem armazenamento */ }
 }
-async function apiAgora(acao) {
-  const k = agoraChave(acao);
+/* o: { memoria: não guarda no aparelho (só enquanto o app está aberto), pode: () => false quando não dá para desenhar de
+ * novo por trás (ex.: o orçamento tem alteração ainda não salva) } */
+async function apiAgora(acao, dados, o = {}) {
+  const k = agoraChave(acao) + (dados && dados.id ? '_' + dados.id : '');
   let c = AGORA[k];
-  if (!c) { try { const s = LS.get(k); if (s) c = AGORA[k] = { s, ate: 0 }; } catch (e) { /* sem armazenamento */ } }
-  const buscar = () => api(acao).then(d => {
+  if (!c && !o.memoria) { try { const s = LS.get(k); if (s) c = AGORA[k] = { s, ate: 0 }; } catch (e) { /* sem armazenamento */ } }
+  const buscar = () => api(acao, dados).then(d => {
     const s = JSON.stringify(d), mudou = !c || c.s !== s;
     c = AGORA[k] = { s, ate: Date.now() + AGORA_FRESCO };
-    try { LS.set(k, s); } catch (e) { /* cheio: fica só na memória */ }
+    if (!o.memoria) { try { LS.set(k, s); } catch (e) { /* cheio: fica só na memória */ } }
     return { d, mudou };
   });
   if (!c) return (await buscar()).d;
   if (Date.now() > c.ate) {
     const rota = location.hash;
     c.ate = Date.now() + AGORA_FRESCO;
-    buscar().then(r => { if (r.mudou && location.hash === rota && !$('#modal.on')) { const y = scrollY; Promise.resolve(rotear()).then(() => scrollTo(0, y)); } }).catch(() => {});
+    buscar().then(r => { if (r.mudou && location.hash === rota && !$('#modal.on') && (!o.pode || o.pode())) { const y = scrollY; Promise.resolve(rotear()).then(() => scrollTo(0, y)); } }).catch(() => {});
   }
   return JSON.parse(c.s);   // cópia: a tela pode mexer nos dados
 }
+/* orçamento aberto há pouco abre na hora (orçamento, proposta e cronograma usam o mesmo) e confere por trás */
+const propDetalhe = id => apiAgora('prop_detalhe', { id }, { memoria: true, pode: () => !(typeof PP !== 'undefined' && PP.ed && PP.ed.sujo) && !(typeof CR !== 'undefined' && CR.ed && CR.ed.sujo) });
 /* ---------- diagnóstico de lentidão: tempo de cada chamada e de cada tela (fica só neste aparelho) ----------
  * chamada: total (rede + Google acordar + servidor), servidor (srv), login/acesso (auth), abas e linhas lidas.
  * tela: do clique até aparecer, quantas chamadas e se foram uma atrás da outra (soma ≈ total). Vê em Configurações → Velocidade. */
@@ -690,16 +694,24 @@ async function buscarNotif() {
   if (typeof empAtualizarPend === 'function') empAtualizarPend();   // pendências nos cartões das obras do Início
 }
 /* o sino não disputa com a tela: a primeira busca espera a tela abrir; com o aviso no celular ligado o push já
- * avisa na hora, então a consulta fica a cada 3 minutos (senão, a cada minuto) */
+ * avisa na hora, então a consulta fica a cada 3 minutos (senão, a cada 2). App aberto e ninguém mexendo há 10 min
+ * (PC esquecido aberto): para de consultar; no primeiro toque, tecla ou rolagem busca na hora. */
+const NOTIF_PARADO = 600000;
 function iniciarNotif() {
   clearInterval(NOTIF.timer); clearTimeout(NOTIF.ini);
-  NOTIF.primeira = true;
+  NOTIF.primeira = true; NOTIF.mexeu = Date.now();
   NOTIF.ini = setTimeout(() => buscarNotif().then(pushSincronizar), 2500);
   NOTIF.timer = setInterval(() => {
-    if (!document.hidden && Date.now() - (NOTIF.em || 0) >= (LS.get('cs_fcm') && pushLigado() ? 180000 : 60000) - 2000) buscarNotif();
+    if (!document.hidden && Date.now() - (NOTIF.mexeu || 0) < NOTIF_PARADO && Date.now() - (NOTIF.em || 0) >= (LS.get('cs_fcm') && pushLigado() ? 180000 : 120000) - 2000) buscarNotif();
   }, 60000);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sess && Date.now() - (NOTIF.em || 0) > 30000) buscarNotif(); });
+function notifMexeu() {
+  const parado = Date.now() - (NOTIF.mexeu || 0) >= NOTIF_PARADO;
+  NOTIF.mexeu = Date.now();
+  if (parado && S.sess && !document.hidden && Date.now() - (NOTIF.em || 0) > 30000) buscarNotif();
+}
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => document.addEventListener(ev, notifMexeu, { passive: true, capture: true }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) NOTIF.mexeu = Date.now(); if (!document.hidden && S.sess && Date.now() - (NOTIF.em || 0) > 30000) buscarNotif(); });
 function atualizarSino() {
   const b = $('#sino .sino-n');
   if (!b) return;

@@ -101,17 +101,26 @@ function sinapiComposicao_(q, ctx) {
   sinTab_('SinapiComposicoes', ss).all().forEach(c => { C[String(c.codigo)] = c; });
   if (!Array.isArray(q.codigos) && !C[lista[0]]) throw new Error('Composição ' + lista[0] + ' não está no SINAPI deste mês.');
   sinTab_('SinapiInsumos', ss).all().forEach(i => { I[String(i.codigo)] = i; });
-  lista.forEach(k => { por[k] = []; });
-  sinTab_('SinapiItens', ss).all().forEach(x => {
-    const dono = por[String(x.composicao)];
-    if (!dono) return;
+  const todos = {};
+  sinTab_('SinapiItens', ss).all().forEach(x => { const k = String(x.composicao); (todos[k] = todos[k] || []).push(x); });
+  const item = x => {
     const k = String(x.codigo), aux = x.tipo === 'C', r = aux ? C[k] : I[k];
-    dono.push({ tipo: aux ? 'C' : 'I', codigo: k, descricao: r ? r.descricao : '(não encontrado)', unidade: r ? r.unidade : '', classe: aux ? 'COMPOSIÇÃO' : r ? r.classe : '', coef: num_(x.coef),
-      preco_sd: r ? num_(aux ? r.custo_sd : r.preco_sd) : 0, preco_cd: r ? num_(aux ? r.custo_cd : r.preco_cd) : 0 });
-  });
+    const o = { tipo: aux ? 'C' : 'I', codigo: k, descricao: r ? r.descricao : '(não encontrado)', unidade: r ? r.unidade : '', classe: aux ? 'COMPOSIÇÃO' : r ? r.classe : '', coef: num_(x.coef),
+      preco_sd: r ? num_(aux ? r.custo_sd : r.preco_sd) : 0, preco_cd: r ? num_(aux ? r.custo_cd : r.preco_cd) : 0 };
+    if (!r) o.nf = 1;
+    return o;
+  };
+  // as auxiliares (até o fim) também vão para a memória: "Trazer para a base" logo depois não precisa ler o SINAPI de novo
+  const fila = lista.slice();
+  while (fila.length) {
+    const k = fila.shift();
+    if (por[k]) continue;
+    por[k] = (todos[k] || []).map(item);
+    por[k].forEach(x => { if (x.tipo === 'C' && !por[x.codigo]) fila.push(x.codigo); });
+  }
   const comp = k => { const c = C[k]; return { codigo: k, descricao: c.descricao, unidade: c.unidade, grupo: c.grupo, situacao: c.situacao, custo_sd: num_(c.custo_sd), custo_cd: num_(c.custo_cd) }; };
   const res = {}, guardar = {};
-  lista.filter(k => C[k]).forEach(k => {
+  Object.keys(por).filter(k => C[k]).forEach(k => {
     res[k] = { composicao: comp(k), itens: por[k] };
     const s = JSON.stringify(res[k]);
     if (s.length < 90000) guardar[pre + k] = s;
@@ -322,12 +331,22 @@ function sinapiParaBase_(q, ctx) {
   const ss = sinSS_(false);
   if (!ss) throw new Error('O SINAPI ainda não foi importado.');
   const regime = q.regime === 'cd' ? 'cd' : 'sd', cod = String(q.codigo), mes = String(sinInfo_(ss).mes || '');
-  const C = {}, I = {}, itensDe = {};
-  sinTab_('SinapiComposicoes', ss).all().forEach(c => { C[String(c.codigo)] = c; });
-  sinTab_('SinapiInsumos', ss).all().forEach(i => { I[String(i.codigo)] = i; });
-  sinTab_('SinapiItens', ss).all().forEach(x => { (itensDe[String(x.composicao)] = itensDe[String(x.composicao)] || []).push(x); });
-  const c = C[cod];
-  if (!c) throw new Error('Composição ' + cod + ' não está no SINAPI deste mês.');
+  // usa as composições abertas que ficam na memória do Google (quem traz para a base acabou de abrir a composição);
+  // só lê o SINAPI inteiro se alguma não estiver lá
+  const A = {}, tentadas = {}, I = {}, itensDe = {};
+  let falta = [cod];
+  while (falta.length) {
+    falta.forEach(k => { tentadas[k] = 1; });
+    sinapiComposicao_({ codigos: falta }, ctx).composicoes.forEach(x => { A[String(x.composicao.codigo)] = x; });
+    if (!A[cod]) throw new Error('Composição ' + cod + ' não está no SINAPI deste mês.');
+    falta = [];
+    Object.keys(A).forEach(k => A[k].itens.forEach(x => { if (x.tipo === 'C' && !A[x.codigo] && !tentadas[x.codigo] && falta.indexOf(x.codigo) < 0) falta.push(x.codigo); }));
+  }
+  Object.keys(A).forEach(k => {
+    itensDe[k] = A[k].itens;
+    A[k].itens.forEach(x => { if (x.tipo === 'I' && !x.nf && x.descricao !== '(não encontrado)') I[x.codigo] = x; });
+  });
+  const c = A[cod].composicao;
   // abre as composições auxiliares até os insumos (coeficientes multiplicados)
   const acc = {};
   const abrir = (k, f, pilha) => (itensDe[k] || []).forEach(x => {

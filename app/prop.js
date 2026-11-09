@@ -72,7 +72,7 @@ async function vPropLista(qs) {
 async function vProp(id) {
   if (!baseNivel()) return bpSem();
   let d = null;
-  if (id) d = PP.d = (await Promise.all([bpCarregar(), api('prop_detalhe', { id })]))[1];
+  if (id) d = PP.d = (await Promise.all([bpCarregar(), propDetalhe(id)]))[1];
   else await bpCarregar();
   if (!id && !bpGere()) return bpSem('Gerir');
   const p = d ? d.proposta : { cliente: '', empreendimento: '', status: 'Rascunho', bdi_pct: 0, bdi_base: 'servicos', gestao_pct: 0, gestao_base: 'total', validade_dias: 30, data_base: hoje(), rotulo: 'novo' };
@@ -625,7 +625,7 @@ function ppIncluirObra(d) {
 /* ---------- proposta para imprimir / salvar em PDF (cliente ou planilha interna) ---------- */
 async function vPropDoc(id, qs) {
   if (!baseNivel()) return bpSem();
-  const d = await api('prop_detalhe', { id }), p = d.proposta, interna = new URLSearchParams(qs || '').get('m') === 'i', T = d.total;
+  const d = await propDetalhe(id), p = d.proposta, interna = new URLSearchParams(qs || '').get('m') === 'i', T = d.total;
   const val = p.data_base && p.validade_dias ? (() => { const x = new Date(String(p.data_base).slice(0, 10) + 'T12:00'); x.setDate(x.getDate() + p.validade_dias); return iso(x); })() : '';
   titulo((interna ? 'Planilha interna ' : 'Proposta ') + p.rotulo);
   // a planilha interna tem 11 colunas: sai deitada (A4 paisagem)

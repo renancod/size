@@ -129,6 +129,19 @@ test('copiar composição do SINAPI para a base da Size (insumos com os coeficie
   assert.equal(t.adm('base_dados').composicoes.find(x => x.codigo === 'SINAPI-94962').custo.total, 320);
 });
 
+test('copiar composição com auxiliar: abre até os insumos e, se a composição já foi aberta, não lê o SINAPI de novo', () => {
+  const t = preparar();
+  t.adm('sinapi_importar', { etapa: 'inicio', mes: '2026-07', uf: 'RS', origem: 'teste' });
+  t.adm('sinapi_importar', { etapa: 'lote', tab: 'insumos', linhas: [['88316', 'SERVENTE', 'H', 'MÃO DE OBRA', 'C', 25, 22], ['370', 'AREIA MEDIA', 'M3', 'MATERIAL', 'C', 100, 100]] });
+  t.adm('sinapi_importar', { etapa: 'lote', tab: 'composicoes', linhas: [['94962', 'CONCRETO MAGRO', 'M3', 'Concreto', 'COM CUSTO', 300, 288, 200, 100, 0, 0, 200, 88, 0, 0], ['90000', 'LASTRO COM AUXILIAR', 'M2', 'Concreto', 'COM CUSTO', 175, 0, 0, 0, 0, 0, 0, 0, 0, 0]] });
+  t.adm('sinapi_importar', { etapa: 'lote', tab: 'itens', linhas: [['94962', 'I', '370', 2], ['94962', 'I', '88316', 4], ['90000', 'C', '94962', 0.5], ['90000', 'I', '88316', 1]] });
+  t.adm('sinapi_importar', { etapa: 'fim' });
+  t.adm('sinapi_composicao', { codigo: '90000' });
+  assert.match(t.adm('sinapi_para_base', { codigo: '90000', regime: 'sd' }).msg, /SINAPI-90000 \(2 insumos/);
+  const comp = t.adm('base_dados').composicoes.find(x => x.codigo === 'SINAPI-90000');
+  assert.equal(comp.custo.total, 175);   // 0,5 × (2 areia + 4 servente) + 1 servente = 100 + 50 + 25
+});
+
 test('conferência diária: acha o mês novo na Caixa, avisa no sino de quem gerencia e o app baixa o arquivo em partes', () => {
   const t = preparar();
   const ant = m => { let y = +m.slice(0, 4), n = +m.slice(5, 7) - 1; if (n < 1) { n = 12; y--; } return y + '-' + String(n).padStart(2, '0'); };
