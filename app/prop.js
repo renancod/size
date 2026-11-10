@@ -225,8 +225,8 @@ function ppEditorHtml(p, novo) {
       <div class="bp-g3"><label class="bp-span2">Empreendimento / obra<input name="empreendimento" required value="${esc(p.empreendimento || '')}" placeholder="ex: Loteamento Dunas · infraestrutura"></label><label>Local<input name="local" value="${esc(p.local || '')}" placeholder="cidade/UF"></label></div>
       <div class="bp-g3"><label>Data-base dos preços<input name="data_base" type="date" value="${esc(p.data_base || hoje())}"></label><label>Validade da proposta (dias)<input name="validade_dias" inputmode="numeric" value="${esc(p.validade_dias ?? 30)}"></label></div></details>
     <div class="card"><div class="bp-h"><h3>${ic('list')} Planilha <small>etapas e itens</small></h3><span class="acoes"><button type="button" class="btn sec peq" id="ppTodas">${ic('layers')} Recolher tudo</button><button type="button" class="btn sec peq" id="ppEt">${ic('plus')} Etapa</button><button type="button" class="btn sec peq" id="ppDir">${ic('plus')} Item de preço direto</button></span></div>
-      <div class="bp-add"><div class="busca">${ic('search')}<input id="ppBusca" data-busca placeholder="Incluir serviço da base de preços: código ou descrição  ( / )"></div><div class="bp-res" id="ppRes" hidden></div></div>
-      <div class="pp-alvo" id="ppAlvo" hidden></div>
+      <div id="ppAddCasa"><div id="ppAdd"><div class="bp-add"><div class="busca">${ic('search')}<input id="ppBusca" data-busca placeholder="Incluir serviço da base de preços: código ou descrição  ( / )"></div><div class="bp-res" id="ppRes" hidden></div></div>
+      <div class="pp-alvo" id="ppAlvo" hidden></div></div></div>
       <div id="ppLin" class="pp-lin"></div></div>
     <details class="card pp-sec" ${novo ? 'open' : ''}><summary><h3>${ic('percent')} BDI e gestão</h3><small>BDI ${esc(bpV(p.bdi_pct))}% ${p.bdi_base === 'total' ? 'sobre o total' : 's/ serviços'} · gestão ${esc(bpV(p.gestao_pct))}% ${p.gestao_base === 'total' ? 'sobre o total' : 's/ serviços'}</small></summary>
       <div class="pp-taxas"><label>BDI (%)<input name="bdi_pct" inputmode="decimal" value="${esc(bpV(p.bdi_pct))}"></label><label>sobre ${sel('bdi_base', p.bdi_base)}</label>
@@ -255,6 +255,17 @@ function ppEditorLigar() {
   ppBusca();
   ppDesenhar(true);
   ppMostraAlvo();
+}
+/* com uma etapa escolhida ("+ Item"), a busca fica no fim dela, onde o item vai entrar: sem rolar até o topo
+ * a cada item, em etapa com muitos itens. Sem etapa escolhida, volta para o topo da planilha. */
+function ppPosBusca() {
+  const E = PP.ed, box = $('#ppAdd'), lin = $('#ppLin');
+  if (!box || !lin || !E) return;
+  if (!E.alvo || !E.linhas.includes(E.alvo)) { if ($('#ppAddCasa') && box.parentNode !== $('#ppAddCasa')) $('#ppAddCasa').appendChild(box); box.classList.remove('na-etapa'); return; }
+  const i = E.linhas.indexOf(E.alvo), prox = E.linhas.findIndex((x, k) => k > i && x.tipo === 'E');
+  const ref = prox < 0 ? null : lin.querySelector(`.pp-r[data-n="${prox}"]`);
+  lin.insertBefore(box, ref);
+  box.classList.add('na-etapa');
 }
 /* etapa onde entram os itens da busca e do "item de preço direto" (o "+ Item" da etapa escolhe) */
 function ppMostraAlvo() {
@@ -294,6 +305,8 @@ function ppIncluir(l, foco) {
 function ppDesenhar(estrutura) {
   const E = PP.ed, C = ppCalc(E.p, E.linhas);
   if (estrutura) {
+    // a busca pode estar dentro da lista (junto da etapa escolhida): volta para o topo antes de redesenhar a lista
+    if ($('#ppAdd') && $('#ppAddCasa') && $('#ppAdd').parentNode !== $('#ppAddCasa')) $('#ppAddCasa').appendChild($('#ppAdd'));
     // linhas fechadas (só leitura): mexer no item ou na etapa é pelo "Editar"; remover só lá dentro, com confirmação.
     // No computador a quantidade continua editável direto na linha.
     let fechada = false;   // itens de etapa recolhida não são desenhados (continuam no cálculo)
@@ -317,7 +330,11 @@ function ppDesenhar(estrutura) {
     if (tb) tb.lastChild.textContent = E.linhas.some(l => l.tipo === 'E' && !l._fechada) ? ' Recolher tudo' : ' Expandir tudo';
     $$('#ppLin .pp-r').forEach(el => {
       const n = +el.dataset.n;
-      $$('input[data-c]', el).forEach(i => { i.oninput = () => { E.linhas[n][i.dataset.c] = i.value; E.sujo = true; ppDesenhar(false); }; });
+      $$('input[data-c]', el).forEach(i => {
+        i.oninput = () => { E.linhas[n][i.dataset.c] = i.value; E.sujo = true; ppDesenhar(false); };
+        // Enter na quantidade: volta para a busca (que está logo abaixo, na etapa escolhida) para incluir o próximo
+        i.onkeydown = e => { if (e.key === 'Enter' && E.alvo) { e.preventDefault(); $('#ppBusca').focus(); } };
+      });
       // celular: tocar no item abre a edição (os números ficam só para leitura)
       if (el.classList.contains('pi')) el.onclick = e => { if (!e.target.closest('button,input') && ppEstreito()) ppEditarItem(n); };
       $$('[data-a]', el).forEach(b => { b.onclick = () => {
@@ -333,6 +350,7 @@ function ppDesenhar(estrutura) {
         if (a === 'ed') L[n].tipo === 'E' ? ppEditarEtapa(n) : ppEditarItem(n);
       }; });
     });
+    ppPosBusca();
   }
   const etapas = {};
   C.etapas.forEach(e => { etapas[e.codigo] = e; });
