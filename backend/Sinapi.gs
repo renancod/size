@@ -296,7 +296,7 @@ function sinNotif_(ctx) {
   if (ctx.base !== 'Gerir' && !ctx.admin) return [];
   const novo = sinNovo_(sinInfo_(sinSS_(false)));
   if (!novo) return [];
-  return [{ id: 'sinapi|' + novo.mes, obra: '', obra_nome: 'Orçamentos', numero: 'SINAPI ' + sinMesTxt_(novo.mes), rota: '#/orc/sinapi', etapa: 'sinapi', texto: 'SINAPI ' + sinMesTxt_(novo.mes) + (novo.confirmado ? ' publicado pela Caixa' : ' deve ter saído na Caixa') + ' — baixar e importar', resumo: '', situacao: '', prioridade: '', quando: novo.achado_em || '' }];
+  return [{ id: 'sinapi|' + novo.mes, obra: '', obra_nome: 'Orçamentos', numero: 'SINAPI ' + sinMesTxt_(novo.mes), rota: '#/orc/sinapi', etapa: 'sinapi', texto: 'SINAPI ' + sinMesTxt_(novo.mes) + (novo.confirmado ? ' publicado pela Caixa — baixar e importar' : ' sai por estes dias — conferir na Caixa e importar'), resumo: '', situacao: '', prioridade: '', quando: novo.achado_em || '' }];
 }
 
 /* ---------- trazer do SINAPI para a base da Size ---------- */

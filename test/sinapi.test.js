@@ -176,7 +176,7 @@ test('Caixa recusa o servidor: o motivo aparece no erro e o aviso do mês novo s
   const m = d.toLocaleDateString('sv-SE').slice(0, 7), esperado = d.getDate() >= 12 ? ant(m) : ant(ant(m));
   const n = t.adm('sinapi_info').novo;
   assert.deepEqual([n.mes, n.confirmado], [esperado, false]);
-  assert.ok(t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi' && /deve ter saído/.test(i.texto)));
+  assert.ok(t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi' && /sai por estes dias — conferir na Caixa/.test(i.texto)));
 });
 test('editor de composição: insumo do SINAPI vem para a base no regime escolhido (sem duplicar)', () => {
   const t = preparar();
