@@ -1219,6 +1219,13 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .pc-mudou ul{margin:6px 0 0;padding-left:18px;font-size:.88rem}.pc-mudou li{margin:2px 0}
 /* orçamento enviado no celular: lista enxuta no lugar da tabela; o "+" abre valores e composição */
 .pp-mlist{display:none}
+/* computador: o mesmo "+" no fim da linha da tabela abre os detalhes do item */
+.pp-tab .pp-m-mais{width:28px;height:28px;border-radius:8px;border:1px solid #D5DEEC;background:#F4F7FC;color:var(--navy);display:inline-grid;place-items:center;padding:0;cursor:pointer}
+.pp-tab .pp-m-mais .ic{width:14px;height:14px;transition:transform .15s}.pp-tab .pp-m-mais.on .ic{transform:rotate(45deg)}
+.pp-dtr td{background:#F7FAFC;border-top:0}
+.pp-dtab .pp-m-kv{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 16px;margin:2px 0 6px}
+.pp-dtab .pp-m-kv span{display:grid}.pp-dtab .pp-m-kv small{font-size:.66rem;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}.pp-dtab .pp-m-kv b{font-size:.84rem;color:var(--bp-ink)}
+.pp-dtab>small{font-size:.76rem;color:var(--mute)}
 @media (max-width:700px){
   .pp-leit .rolar{display:none}.pp-mlist{display:block;margin:0 -4px}
   .pp-m-et{display:flex;align-items:center;gap:8px;padding:8px 8px;margin-top:8px;border-radius:9px;background:linear-gradient(90deg,#F2F5FB,#fff);border:1px solid #D5DEEC;font-size:.82rem}

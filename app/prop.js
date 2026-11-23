@@ -200,17 +200,20 @@ function ppLeitura(d) {
       <div class="pp-hist">${d.historico.map(h => `<div><small>${esc(h.em)}</small><b>${esc(h.acao)}</b><span>${esc(h.det || '')}</span><small>${esc(h.por || '')}</small></div>`).join('')}</div></details>`;
 }
 /* planilha no celular (no lugar da tabela): só nº, nome (2 linhas) e quantidade; o "+" abre os valores e a composição */
+/* detalhes de um item (o "+" no celular e no computador): valores, composição e ver insumos */
+function ppDetHtml(i) {
+  const kv = (t, v) => `<span><small>${t}</small><b class="bp-mono">${v}</b></span>`;
+  return `<div class="pp-m-kv">${kv('Preço unit.', bpM(i.preco_unit))}${kv('Total', bpM(i.preco))}${kv('Custo unit.', bpM(i.custo_unit))}${kv('Material no total', bpM(i.v_mat))}${kv('MO / serviços no total', bpM(i.v_serv))}${kv('BDI no total', i.sem_bdi ? 'não incide' : bpM(i.bdi))}${kv('Gestão no total', i.sem_gestao ? 'não incide' : bpM(i.gestao))}</div>
+    ${i.comp_cod ? `<small>${i.fonte ? 'SINAPI ' : 'Composição '}<code>${esc(i.comp_cod)}</code>${i.fonte !== 'SINAPI-INSUMO' ? ` · <button type="button" class="linkbtn" data-ver-cod="${esc(i.codigo)}">ver insumos</button>` : ''}</small>` : '<small>Preço direto</small>'}`;
+}
 function ppLista(itens, etapas, T) {
   const et = {};
   etapas.forEach(e => { et[e.codigo] = e; });
-  const kv = (t, v) => `<span><small>${t}</small><b class="bp-mono">${v}</b></span>`;
   return `<div class="pp-mlist">${itens.map(i => i.tipo === 'E'
     ? `<div class="pp-m-et"><span class="pp-m-c">${esc(i.codigo)}</span><b>${esc(i.descricao)}</b><b class="bp-mono">${bpM((et[i.codigo] || {}).preco)}</b></div>`
     : `<div class="pp-m"><div class="pp-m-l"><span class="pp-m-c">${esc(i.codigo)}</span><span class="pp-m-d">${esc(i.descricao)}</span><span class="pp-m-q bp-mono">${nf(i.qtd)} <small>${esc(i.unidade)}</small></span>
         <button type="button" class="pp-m-mais" data-mais aria-label="Ver detalhes">${ic('plus')}</button></div>
-      <div class="pp-m-det"><p>${esc(i.descricao)}</p>
-        <div class="pp-m-kv">${kv('Preço unit.', bpM(i.preco_unit))}${kv('Total', bpM(i.preco))}${kv('Custo unit.', bpM(i.custo_unit))}${kv('Material no total', bpM(i.v_mat))}${kv('MO / serviços no total', bpM(i.v_serv))}${kv('BDI no total', i.sem_bdi ? 'não incide' : bpM(i.bdi))}${kv('Gestão no total', i.sem_gestao ? 'não incide' : bpM(i.gestao))}</div>
-        ${i.comp_cod ? `<small>${i.fonte ? 'SINAPI ' : 'Composição '}<code>${esc(i.comp_cod)}</code>${i.fonte !== 'SINAPI-INSUMO' ? ` · <button type="button" class="linkbtn" data-ver-cod="${esc(i.codigo)}">ver insumos</button>` : ''}</small>` : '<small>Preço direto</small>'}</div></div>`).join('')}
+      <div class="pp-m-det">${ppDetHtml(i)}</div></div>`).join('')}
     <div class="pp-m-tot"><span>Total</span><b class="bp-mono">${bpM(T.preco)}</b></div></div>`;
 }
 /* tabela da planilha (leitura ou proposta): etapas com subtotal, itens com preço de venda; interna mostra o custo */
@@ -220,13 +223,16 @@ function ppTabela(itens, etapas, T, interna, doc) {
   // documento (proposta/interna): sem "R$" em cada célula (fica no cabeçalho), para a descrição caber numa linha
   // e a interna (11 colunas) caber num notebook a 100%
   const vm = doc ? v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : bpM;
-  return `${doc ? '<p class="pp-moeda">Valores em R$</p>' : ''}<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th></tr></thead><tbody>
-    ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${vm((et[i.codigo] || {}).preco)}</b></td></tr>`
+  const mais = !doc;   // na tela (não no documento): "+" no fim da linha abre os detalhes do item
+  const ncol = (interna ? 11 : 6) + (mais ? 1 : 0);
+  return `${doc ? '<p class="pp-moeda">Valores em R$</p>' : ''}<div class="rolar"><table class="tab bp-tab pp-tab"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="n">Quant.</th>${interna ? '<th class="n">Custo unit.</th><th class="n">Material</th><th class="n">MO/serv.</th><th class="n">BDI</th><th class="n">Gestão</th>' : ''}<th class="n">Preço unit.</th><th class="n">Preço total</th>${mais ? '<th></th>' : ''}</tr></thead><tbody>
+    ${itens.map(i => i.tipo === 'E' ? `<tr class="pp-et"><td>${esc(i.codigo)}</td><td colspan="${interna ? 9 : 4}"><b>${esc(i.descricao)}</b></td><td class="n bp-mono"><b>${vm((et[i.codigo] || {}).preco)}</b></td>${mais ? '<td></td>' : ''}</tr>`
       : `<tr><td>${esc(i.codigo)}</td><td>${i.comp_cod && i.fonte !== 'SINAPI-INSUMO' ? `<button type="button" class="bp-lnk pp-ver" data-ver-cod="${esc(i.codigo)}" title="Ver os insumos deste serviço">${esc(i.descricao)}</button>` : esc(i.descricao)}${interna && i.comp_cod ? ` <small>${i.fonte ? 'SINAPI ' : ''}<code>${esc(i.comp_cod)}</code></small>` : ''}${interna && (i.sem_bdi || i.sem_gestao) ? ` <span class="bp-flag">${[i.sem_bdi && 'sem BDI', i.sem_gestao && 'sem gestão'].filter(Boolean).join(' · ')}</span>` : ''}</td><td>${esc(i.unidade)}</td><td class="n bp-mono">${nf(i.qtd)}</td>
         ${interna ? `<td class="n bp-mono">${vm(i.custo_unit)}</td><td class="n bp-mono">${vm(i.v_mat)}</td><td class="n bp-mono">${vm(i.v_serv)}</td><td class="n bp-mono">${vm(i.bdi)}</td><td class="n bp-mono">${vm(i.gestao)}</td>` : ''}
-        <td class="n bp-mono">${vm(i.preco_unit)}</td><td class="n bp-mono"><b>${vm(i.preco)}</b></td></tr>`).join('')}</tbody>
+        <td class="n bp-mono">${vm(i.preco_unit)}</td><td class="n bp-mono"><b>${vm(i.preco)}</b></td>${mais ? `<td class="n"><button type="button" class="pp-m-mais" data-tmais aria-label="Ver detalhes">${ic('plus')}</button></td>` : ''}</tr>
+        ${mais ? `<tr class="pp-dtr" hidden><td></td><td colspan="${ncol - 1}"><div class="pp-dtab">${ppDetHtml(i)}</div></td></tr>` : ''}`).join('')}</tbody>
     ${doc && !interna ? '' /* na proposta o total vem logo abaixo, na faixa "Valor total da proposta" */
-      : `<tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td></tr></tfoot>`}</table></div>`;
+      : `<tfoot><tr><td colspan="${interna ? 10 : 5}">Total${interna ? ` · custo ${bpM(T.custo)} · BDI ${bpM(T.bdi)} · gestão ${bpM(T.gestao)}` : ''}</td><td class="n bp-mono"><b>${bpM(T.preco)}</b></td>${mais ? '<td></td>' : ''}</tr></tfoot>`}</table></div>`;
 }
 
 /* ---------- editor ---------- */
@@ -577,6 +583,7 @@ function ppBusca() {
  * l = linha do orçamento (comp_cod, qtd, custos congelados); c = a mesma linha já calculada (custo_unit) */
 /* descrição do item com composição (leitura, proposta e planilha interna): abre os insumos (base da Size ou SINAPI) */
 function ppLigarVer(d) {
+  $$('.pp-tab [data-tmais]').forEach(b => { b.onclick = () => { const d = b.closest('tr').nextElementSibling; d.hidden = !d.hidden; b.classList.toggle('on', !d.hidden); }; });
   $$('.pp-mlist .pp-m-l').forEach(l => { l.onclick = () => { const m = l.closest('.pp-m'); m.classList.toggle('aberto'); $('[data-mais]', l).setAttribute('aria-expanded', m.classList.contains('aberto')); }; });
   $$('[data-ver-cod]').forEach(b => {
     b.onclick = async () => {
