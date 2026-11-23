@@ -397,3 +397,42 @@ test('contratos do cliente: principal no Gerar obra, aditivo pelo orçamento (fr
   // o cartão do Início mostra o prazo
   assert.equal(adm('empresa_dados').obras.find(o => o.id === obra).prazo.total, P0.total + 10);
 });
+
+test('anexos do orçamento: a Size sobe, escolhe se o cliente vê, liga a item; o cliente abre e comenta como num item', () => {
+  const G = criarGAS();
+  G.setup();
+  const senha = G._logs.join('\n').match(/SENHA PROVISÓRIA: (\S+)/)[1];
+  const call = (acao, d = {}) => { const r = G.chamar({ acao, ...d }); if (!r.ok) throw new Error(r.erro); return r.dados; };
+  const tk = call('login', { login: 'admin', senha }).token, adm = (acao, d = {}) => call(acao, { token: tk, ...d });
+  const cli = adm('cli_salvar', { cliente: { nome: 'Dunas', empresa: 'Mar Azul', obra_id: '', modelo: 'global', cor: '#2B4C7E', slug: 'dunas' } }).id;
+  adm('cli_usuario_salvar', { cliente_id: cli, usuario: { nome: 'Maria Cliente', login: 'maria' }, senha: 'Cliente#2026x' });
+  const sc = call('login', { login: 'maria', senha: 'Cliente#2026x' }), cliente = (acao, d = {}) => call(acao, { token: sc.token, ...d });
+  const bruto = (acao, d = {}) => G.chamar({ acao, token: sc.token, ...d });
+  const id = adm('prop_salvar', { proposta: { cliente: 'Mar Azul', empreendimento: 'Dunas' }, itens: [
+    { tipo: 'E', descricao: 'EBE' }, { descricao: 'Estação elevatória PRFV', unidade: 'un', qtd: 1, unit_mat: 63230, unit_mo: 0 }] }).id;
+  const PDF = { nome: 'proposta-aguas-claras.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 teste').toString('base64') };
+  const a1 = adm('prop_anexo_salvar', { id, arquivo: PDF, nome: 'Proposta Águas Claras', descricao: 'Estação e reservatórios', cliente_ve: true, item: '1.1' }).id;
+  const a2 = adm('prop_anexo_salvar', { id, arquivo: Object.assign({}, PDF, { nome: 'cotacao-interna.pdf' }), nome: 'Cotação interna', cliente_ve: false }).id;
+  let d = adm('prop_detalhe', { id });
+  assert.deepEqual(d.anexos.map(a => [a.nome, a.cliente_ve, a.item]), [['Proposta Águas Claras', true, '1.1'], ['Cotação interna', false, '']]);
+  assert.equal(Buffer.from(adm('prop_anexo_ver', { id, anexo: a1 }).b64, 'base64').toString(), '%PDF-1.4 teste');
+  adm('prop_portal', { id, cliente_id: cli, modo: 'aberto' });
+  adm('prop_status', { id, op: 'enviar' });
+  const o = cliente('cli_orcamento', { id });
+  assert.deepEqual(o.anexos.map(a => a.nome), ['Proposta Águas Claras']);          // o interno não aparece
+  assert.equal(o.anexos[0].item, '1.1');
+  assert.ok(cliente('cli_orc_anexo', { id, anexo: a1 }).b64);
+  assert.match(bruto('cli_orc_anexo', { id, anexo: a2 }).erro, /não disponível/);   // nem pelo id
+  cliente('cli_orc_comentar', { id, item: 'ANX:' + a1, tipo: 'duvida', texto: 'O frete está incluso?' });
+  assert.match(bruto('cli_orc_comentar', { id, item: 'ANX:' + a2, tipo: 'duvida', texto: 'e este?' }).erro, /Anexo não encontrado/);
+  d = adm('prop_detalhe', { id });
+  assert.equal(d.comentarios[0].item_desc, 'Anexo: Proposta Águas Claras');
+  // trocar a visibilidade e remover
+  adm('prop_anexo_salvar', { id, anexo: a2, nome: 'Cotação interna', cliente_ve: true });
+  assert.equal(cliente('cli_orcamento', { id }).anexos.length, 2);
+  adm('prop_anexo_remover', { id, anexo: a2 });
+  assert.equal(adm('prop_detalhe', { id }).anexos.length, 1);
+  // nova revisão continua com os anexos (valem para o número)
+  const r1 = adm('prop_copiar', { id }).id;
+  assert.equal(adm('prop_detalhe', { id: r1 }).anexos.length, 1);
+});

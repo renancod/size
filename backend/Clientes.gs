@@ -640,6 +640,7 @@ function cliOrcamento_(q, ctx) {
   o.revisoes = revs.map(x => ({ id: String(x.id), rotulo: propRotulo_(x), status: x.status }));
   o.diferencas = ant ? Object.assign({ de: propRotulo_(ant) }, cliOrcDif_(cliOrcPub_(ant), o)) : null;
   o.comentarios = propComentarios_(p.numero);
+  o.anexos = propAnexos_(p.numero, true).map(a => ({ id: a.id, nome: a.nome, descricao: a.descricao, mime: a.mime, tamanho: a.tamanho, item: a.item, em: a.em }));
   o.pode_comentar = p.status === 'Enviado';
   o.pode_aceitar = p.status === 'Enviado' && !p.aceite_json;
   o.empresa = String(config_().EMPRESA || 'Size Engenharia');
@@ -653,11 +654,76 @@ function cliOrcComentar_(q, ctx) {
   const texto = String(q.texto || '').trim(), tipo = CLI_ORC_TIPOS_[q.tipo] ? q.tipo : 'geral';
   if (texto.length < 3) throw new Error('Escreva a sua consideração.');
   let desc = '';
-  if (q.item) { const l = propItens_(p.id).find(x => String(x.codigo) === String(q.item) && x.tipo !== 'E'); if (!l) throw new Error('Item não encontrado.'); desc = l.descricao; }
+  if (q.item && /^ANX:/.test(String(q.item))) {   // consideração sobre um anexo
+    const a = central_('PropostaAnexos').all().find(x => 'ANX:' + x.id === String(q.item) && String(x.numero) === String(p.numero) && sim_(x.cliente_ve));
+    if (!a) throw new Error('Anexo não encontrado.');
+    desc = 'Anexo: ' + a.nome;
+  } else if (q.item) { const l = propItens_(p.id).find(x => String(x.codigo) === String(q.item) && x.tipo !== 'E'); if (!l) throw new Error('Item não encontrado.'); desc = l.descricao; }
   central_('PropostaComentarios').insert({ id: 'PC-' + Utilities.getUuid().slice(0, 8), proposta: p.id, numero: p.numero, item: q.item ? String(q.item) : '', item_desc: desc, tipo: tipo,
     texto: texto.slice(0, 2000), autor_tipo: 'cliente', autor: ctx.u.nome, em: new Date(), status: 'aberto' });
   log_(ctx, 'cliente_comentario', propRotulo_(p) + ' · ' + tipo);
   return { msg: 'Enviado à Size. Você recebe a resposta aqui.' };
+}
+/* ---------- anexos do orçamento (cotações de terceiros, projetos, catálogos) ----------
+ * Valem para todas as revisões do mesmo número (como a foto). "cliente_ve" decide se aparece no portal; "item" liga o anexo
+ * a um item da planilha (aparece no "+" do item). O cliente faz consideração no anexo como num item (item = "ANX:<id>"). */
+const ANX_MIMES_ = /^(application\/pdf|image\/(jpeg|png|webp)|application\/vnd\.(openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document)|ms-excel)|application\/msword|text\/csv)$/;
+function propAnexos_(numero, soCliente) {
+  return central_('PropostaAnexos').all().filter(a => String(a.numero) === String(numero) && (!soCliente || sim_(a.cliente_ve)))
+    .map(a => ({ id: String(a.id), nome: a.nome, descricao: a.descricao || '', mime: a.mime, tamanho: num_(a.tamanho), cliente_ve: sim_(a.cliente_ve), item: String(a.item || ''), em: fmtVal_(a.criado_em), por: a.criado_por || '' }))
+    .sort((x, y) => String(x.em).localeCompare(String(y.em)));
+}
+function propAnexoSalvar_(q, ctx) {
+  const p = propAchar_(q.id), T = central_('PropostaAnexos');
+  const nome = String(q.nome || '').trim().slice(0, 140), desc = String(q.descricao || '').trim().slice(0, 400);
+  let a = q.anexo ? T.all().find(x => String(x.id) === String(q.anexo) && String(x.numero) === String(p.numero)) : null;
+  if (q.anexo && !a) throw new Error('Anexo não encontrado.');
+  if (!a && !q.arquivo) throw new Error('Escolha o arquivo.');
+  const novo = !a;
+  if (!a) a = { id: 'AX-' + Utilities.getUuid().slice(0, 8), numero: p.numero, criado_em: new Date(), criado_por: ctx.u.nome };
+  if (q.arquivo) {
+    const arq = q.arquivo, b64 = String(arq.b64 || '').replace(/^data:[^,]+,/, '');
+    if (!b64) throw new Error('Arquivo vazio.');
+    if (b64.length > 14000000) throw new Error('Arquivo grande demais (máx. 10 MB). Se for PDF, salve em qualidade menor.');
+    const mime = ANX_MIMES_.test(arq.mime || '') ? arq.mime : 'application/octet-stream';
+    const nomeArq = String(arq.nome || 'arquivo').replace(/[\\/:*?"<>|]/g, '-').slice(0, 120);
+    const f = cliPasta_(String(p.numero)).createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime, 'Anexo - ' + nomeArq));
+    if (a.arquivo_id) { try { DriveApp.getFileById(a.arquivo_id).setTrashed(true); } catch (e) { /* já foi */ } }
+    Object.assign(a, { arquivo_id: f.getId(), mime: mime, tamanho: Math.round(b64.length * 3 / 4) });
+    if (!nome) a.nome = nomeArq;
+  }
+  if (nome) a.nome = nome;
+  a.descricao = desc;
+  a.cliente_ve = q.cliente_ve === false || q.cliente_ve === 'false' ? 'Não' : 'Sim';
+  a.item = String(q.item || '').trim();
+  if (novo) T.insert(a); else T.update(a);
+  const TP = central_('Propostas');
+  propHist_(p, ctx, novo ? 'Anexo incluído' : 'Anexo alterado', a.nome + (sim_(a.cliente_ve) ? ' · cliente vê' : ' · só interno') + (a.item ? ' · item ' + a.item : ''));
+  TP.update(p);
+  return { msg: novo ? 'Anexo incluído.' : 'Anexo salvo.', id: a.id };
+}
+function propAnexoRemover_(q, ctx) {
+  const p = propAchar_(q.id), T = central_('PropostaAnexos'), a = T.all().find(x => String(x.id) === String(q.anexo) && String(x.numero) === String(p.numero));
+  if (!a) throw new Error('Anexo não encontrado.');
+  try { DriveApp.getFileById(a.arquivo_id).setTrashed(true); } catch (e) { /* já foi */ }
+  T.removeWhere(x => String(x.id) === String(a.id));
+  propHist_(p, ctx, 'Anexo retirado', a.nome);
+  central_('Propostas').update(p);
+  return { msg: 'Anexo retirado.' };
+}
+function propAnexoB64_(a) {
+  const f = DriveApp.getFileById(a.arquivo_id);
+  return { nome: f.getName().replace(/^Anexo - /, ''), mime: a.mime || f.getMimeType(), b64: Utilities.base64Encode(f.getBlob().getBytes()) };
+}
+function propAnexoVer_(q, ctx) {
+  const p = propAchar_(q.id), a = central_('PropostaAnexos').all().find(x => String(x.id) === String(q.anexo) && String(x.numero) === String(p.numero));
+  if (!a) throw new Error('Anexo não encontrado.');
+  return propAnexoB64_(a);
+}
+function cliOrcAnexo_(q, ctx) {
+  const p = cliPropAchar_(ctx, q.id), a = central_('PropostaAnexos').all().find(x => String(x.id) === String(q.anexo) && String(x.numero) === String(p.numero) && sim_(x.cliente_ve));
+  if (!a) throw new Error('Anexo não disponível.');
+  return propAnexoB64_(a);
 }
 function cliPasta_(nome) {
   const r = raizPasta_(), it = r.getFoldersByName('Orçamentos de clientes'), f = it.hasNext() ? it.next() : r.createFolder('Orçamentos de clientes');

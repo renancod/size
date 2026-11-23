@@ -34,6 +34,8 @@ const SCHEMA_CENTRAL = {
     'cliente_id', 'portal_modo', 'contrato_id', 'contrato_nome', 'aceite_json', 'portal_tipo', 'foto_id'],
   // considerações do cliente no orçamento (por item ou geral) e a resposta da Size
   PropostaComentarios: ['id', 'proposta', 'numero', 'item', 'item_desc', 'tipo', 'texto', 'autor_tipo', 'autor', 'em', 'status', 'resposta', 'respondido_por', 'respondido_em'],
+  // anexos do orçamento (cotações de terceiros etc.): valem para todas as revisões do número; cliente_ve = aparece no portal
+  PropostaAnexos: ['id', 'numero', 'nome', 'descricao', 'arquivo_id', 'mime', 'tamanho', 'cliente_ve', 'item', 'criado_em', 'criado_por'],
   // tipo E = etapa (título) · I = item (composição da base ou preço direto); unit_* = custo unitário por categoria
   // sem_bdi / sem_gestao: item fora do BDI ou da gestão (ex. AVA: mobilização e canteiro sem BDI)
   // fonte: vazio = base da Size; SINAPI = composição do SINAPI; SINAPI-INSUMO = insumo do SINAPI (custo congelado do mês e do regime do orçamento)

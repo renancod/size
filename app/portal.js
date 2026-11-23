@@ -294,8 +294,11 @@ async function pcOrc(id) {
       <table class="pc-tab pc-otab"><thead><tr><th>Item</th><th class="n">Quant.</th>${aberto ? '<th class="n pc-vc">Unit.</th><th class="n pc-vc">Total</th>' : ''}<th></th></tr></thead><tbody>
       ${e.itens.map(i => `<tr class="pc-or"><td><small>${esc(i.codigo)}</small> <span class="pc-od">${esc(i.descricao)}</span> ${marca(i.codigo)}
         ${aberto ? `<div class="pc-det">custo ${pcRs(i.custo_unit)}/${esc(i.unidade || 'un')} <small>(material ${pcRs(i.unit_mat)} + MO/serv. ${pcRs(i.unit_serv)})</small> · BDI ${i.sem_bdi ? '<small>não incide</small>' : pcRs(i.bdi)} · adm. ${i.sem_gestao ? '<small>não incide</small>' : pcRs(i.gestao)}${i.insumos ? ` · <button type="button" class="linkbtn" data-ins="${esc(i.codigo)}">ver insumos${i.fonte ? ' (SINAPI)' : ''}</button>` : ''}
+          ${(o.anexos || []).filter(a => a.item === i.codigo).map(a => `<button type="button" class="linkbtn pc-anx-lk" data-panx="${esc(a.id)}">${ic('clip')} ${esc(a.nome)}</button>`).join('')}
           <span class="pc-det-cel">preço unit. <b>${pcRs(i.preco_unit)}</b> · total <b>${pcRs(i.preco)}</b></span>${o.pode_comentar ? `<button type="button" class="linkbtn pc-det-cel" data-com="${esc(i.codigo)}">${ic('plus')} Fazer uma consideração sobre este item</button>` : ''}</div>` : ''}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td>${aberto ? `<td class="n pc-vc">${pcRs(i.preco_unit)}</td><td class="n pc-vc"><b>${pcRs(i.preco)}</b></td>` : ''}
         <td class="n">${aberto ? `<button type="button" class="pc-mini pc-cel" data-mais title="Ver valores">${ic('plus')}</button>` : ''}${o.pode_comentar ? `<button type="button" class="pc-mini ${aberto ? 'pc-pc' : ''}" data-com="${esc(i.codigo)}" title="Comentar este item">${ic('plus')}</button>` : ''}</td></tr>`).join('')}</tbody></table></section>`).join('')}
+    ${(o.anexos || []).length ? `<section class="pc-card pc-anx"><div class="pc-k">${ic('clip')} Anexos</div>${o.anexos.map(a => `<div class="pc-anx-i"><button type="button" class="pc-anx-ab" data-panx="${esc(a.id)}">${ic(/pdf/.test(a.mime) ? 'pdf' : /^image\//.test(a.mime) ? 'camera' : 'file')}<span><b>${esc(a.nome)}</b>${a.descricao ? `<small>${esc(a.descricao)}</small>` : ''}<small>${a.tamanho >= 1048576 ? (a.tamanho / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(a.tamanho / 1024)) + ' KB'}${a.item ? ' · item ' + esc(a.item) : ''}</small></span></button>
+        ${o.pode_comentar ? `<button type="button" class="pc-mini" data-com="ANX:${esc(a.id)}" title="Fazer uma consideração sobre este anexo">${ic('plus')}</button>` : ''}</div>`).join('')}</section>` : ''}
     ${o.cronograma ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Cronograma previsto</div>${o.cronograma.map(c => `<div class="pc-lin"><span>${esc(c.descricao)}</span><small>${pcData(c.ini)} a ${pcData(c.fim)}</small></div>`).join('')}</section>` : ''}
     ${o.prazo_txt || o.pagamento_txt || o.texto_cliente ? `<section class="pc-card"><div class="pc-k">Condições</div>${o.prazo_txt ? `<p><b>Prazo:</b> ${esc(o.prazo_txt)}</p>` : ''}${o.pagamento_txt ? `<p><b>Pagamento:</b> ${esc(o.pagamento_txt)}</p>` : ''}${o.texto_cliente ? `<p style="white-space:pre-wrap">${esc(o.texto_cliente)}</p>` : ''}</section>` : ''}
     </div><aside>
@@ -307,15 +310,27 @@ async function pcOrc(id) {
       ${c.resposta ? `<div class="pc-resp"><small>Size Engenharia · ${esc(c.respondido_por)}</small><p>${esc(c.resposta)}</p></div>` : '<small class="mute">aguardando resposta da Size</small>'}</div>`).join('') : '<small class="mute">Nenhuma ainda. Use o + ao lado de um item ou “Fazer uma consideração”.</small>'}</section>
     </aside></div>`);
   const comentar = item => {
-    const it = item ? o.etapas.flatMap(e => e.itens).find(i => i.codigo === item) : null;
-    modal(it ? 'Sobre: ' + esc(it.descricao) : 'Consideração sobre o orçamento', `<div class="grid"><label>Tipo<select id="pcTipo">${(it ? [['quantidade', 'Mudar quantidade'], ['retirar', 'Retirar este item'], ['duvida', 'Dúvida']] : [['geral', 'Consideração geral'], ['incluir', 'Incluir um item'], ['duvida', 'Dúvida']]).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
-      <label>Sua mensagem<textarea id="pcTxt" rows="4" required placeholder="${it ? 'ex: precisamos de 30 m, não 20 m' : 'ex: incluir iluminação da praça'}"></textarea></label></div>`, {
+    const anx = item && /^ANX:/.test(item) ? (o.anexos || []).find(a => 'ANX:' + a.id === item) : null;
+    const it = item && !anx ? o.etapas.flatMap(e => e.itens).find(i => i.codigo === item) : null;
+    const tipos = anx ? [['duvida', 'Dúvida'], ['geral', 'Consideração']] : it ? [['quantidade', 'Mudar quantidade'], ['retirar', 'Retirar este item'], ['duvida', 'Dúvida']] : [['geral', 'Consideração geral'], ['incluir', 'Incluir um item'], ['duvida', 'Dúvida']];
+    modal(anx ? 'Sobre o anexo: ' + esc(anx.nome) : it ? 'Sobre: ' + esc(it.descricao) : 'Consideração sobre o orçamento', `<div class="grid"><label>Tipo<select id="pcTipo">${tipos.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
+      <label>Sua mensagem<textarea id="pcTxt" rows="4" required placeholder="${anx ? 'ex: o frete está incluso nesta proposta?' : it ? 'ex: precisamos de 30 m, não 20 m' : 'ex: incluir iluminação da praça'}"></textarea></label></div>`, {
       ok: 'Enviar à Size', onOk: async () => { toast((await api('cli_orc_comentar', { id: o.id, item: item || '', tipo: $('#pcTipo').value, texto: $('#pcTxt').value })).msg); pcOrc(o.id); }
     });
   };
   $$('[data-com]').forEach(b => { b.onclick = () => comentar(b.dataset.com); });
   // celular (orçamento aberto): o "+" abre os valores do item e, dentro, a consideração
   $$('.pc-otab [data-mais]').forEach(b => { b.onclick = () => b.closest('tr').classList.toggle('aberto'); });
+  // anexos: PDF e imagem abrem numa aba; os demais baixam
+  $$('[data-panx]').forEach(b => { b.onclick = async () => {
+    b.disabled = true;
+    try {
+      const r = await api('cli_orc_anexo', { id: o.id, anexo: b.dataset.panx }), blob = new Blob([Uint8Array.from(atob(r.b64), c => c.charCodeAt(0))], { type: r.mime }), u = URL.createObjectURL(blob);
+      if (/pdf|^image\//.test(r.mime) && window.open(u, '_blank')) setTimeout(() => URL.revokeObjectURL(u), 120000);
+      else { const a = document.createElement('a'); a.href = u; a.download = r.nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); }
+    } catch (e) { toast(e.message, 1); }
+    b.disabled = false;
+  }; });
   // foto do empreendimento no topo (chega depois da tela)
   if (o.foto) api('cli_orc_foto', { id: o.id }).then(r => { const el = $('#pcOrcFoto'); if (el && r.b64) { el.style.setProperty('--capa', `url('data:image/jpeg;base64,${r.b64}')`); el.classList.add('com-capa'); } }).catch(() => {});
   // insumos da composição: a janela abre na hora e a lista entra quando o servidor responder

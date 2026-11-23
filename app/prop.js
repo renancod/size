@@ -88,13 +88,14 @@ async function vProp(id) {
       <div class="bp-hero-custo"><div><small>Preço de venda</small><b class="bp-mono" id="ppTopo">${bpM(d ? d.total.preco : 0)}</b><small id="ppTopo2">${d ? 'custo ' + bpM(d.total.custo) + ' · BDI + gestão ' + ppPct(d.total.margem) : ''}</small></div></div></div>
     ${p.status === 'Perdido' && p.motivo ? `<div class="aviso warn">Perdido: ${esc(p.motivo)}</div>` : ''}
     ${d && d.revisoes.length > 1 ? `<div class="pp-revs">${d.revisoes.map(r => `<a class="chip ${r.id === id ? 'on' : ''}" href="#/orc/orcamento/${enc(r.id)}">${esc(r.rotulo)} <small>${esc(r.status)}</small></a>`).join('')}</div>` : ''}`;
-  if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d) + (d ? ppPortalHtml(d) : ''));
+  PP_ANX = d ? d.anexos || [] : [];
+  if (edita) bpTela('props', cab + ppEditorHtml(PP.ed.p, !d) + (d ? ppAnexosHtml(d) + ppPortalHtml(d) : ''));
   else {
-    bpTela('props', cab + ppLeitura(d) + ppPortalHtml(d));
+    bpTela('props', cab + ppLeitura(d) + ppAnexosHtml(d) + ppPortalHtml(d));
     ppLigarVer(d);
   }
   ppLigarAcoes(d);
-  if (d) ppPortalLigar(d);
+  if (d) { ppPortalLigar(d); ppAnexosLigar(d); }
   // histórico recolhido por padrão; o aparelho lembra se você deixou aberto
   if ($('#ppHist')) $('#ppHist').ontoggle = e => { if (e.target.open) LS.set('pp_hist', '1'); else LS.del('pp_hist'); };
   if (edita) ppEditorLigar();
@@ -141,6 +142,61 @@ function ppLigarAcoes(d) {
 }
 /* leitura: resumo por etapa e itens (enviado, aprovado, perdido… ou acesso só de consulta) */
 /* ---------- portal do cliente: a quem este orçamento é mostrado, modo, contrato, aceite e considerações ---------- */
+/* ---------- anexos do orçamento (cotações de terceiros etc.): valem para todas as revisões; o cliente vê os marcados ---------- */
+let PP_ANX = [];
+const ppAnxIc = m => /pdf/.test(m) ? 'pdf' : /^image\//.test(m) ? 'camera' : /sheet|excel|csv/.test(m) ? 'grid2' : 'file';
+const ppKb = n => n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function ppAnexosHtml(d) {
+  const g = d.nivel === 'Gerir', L = d.anexos || [];
+  return `<div class="card pp-anx"><div class="bp-h"><h3>${ic('file')} Anexos <small>${L.length ? plural(L.length, 'arquivo', 'arquivos') : 'cotações de terceiros, projetos, catálogos'}</small></h3>
+      ${g ? `<button type="button" class="btn sec peq" id="ppAnxNovo">${ic('plus')} Incluir anexo</button>` : ''}</div>
+    ${L.length ? `<div class="pp-anx-l">${L.map(a => `<div class="pp-anx-i"><span class="pp-anx-ic">${ic(ppAnxIc(a.mime))}</span>
+        <span class="pp-anx-t"><b>${esc(a.nome)}</b>${a.descricao ? `<small>${esc(a.descricao)}</small>` : ''}
+          <small>${ppKb(a.tamanho)} · ${esc(String(a.em).slice(0, 10))}${a.por ? ' · ' + esc(a.por) : ''} · ${a.cliente_ve ? '<span class="pp-anx-ve">cliente vê</span>' : '<span class="pp-anx-int">só interno</span>'}${a.item ? ` · item <b>${esc(a.item)}</b>` : ''}</small></span>
+        <span class="pp-anx-a"><button type="button" class="btn sec peq" data-anx="${esc(a.id)}">${ic('eye')} Abrir</button>${g ? `<button type="button" class="icbtn" data-anx-ed="${esc(a.id)}" title="Editar">${ic('edit')}</button><button type="button" class="icbtn" data-anx-rm="${esc(a.id)}" title="Retirar">${ic('trash')}</button>` : ''}</span></div>`).join('')}</div>`
+      : '<p class="vazio">Nenhum anexo. Suba aqui as cotações de terceiros (materiais, equipamentos) e outros documentos do orçamento.</p>'}
+  </div>`;
+}
+/* abre o anexo: PDF e imagem numa aba nova; os demais baixam */
+async function ppAnxAbrir(acao, dados) {
+  const r = await api(acao, dados), bytes = Uint8Array.from(atob(r.b64), c => c.charCodeAt(0)), blob = new Blob([bytes], { type: r.mime });
+  if (/pdf|^image\//.test(r.mime)) { const u = URL.createObjectURL(blob), w = window.open(u, '_blank'); if (!w) baixarBlob(blob, r.nome); setTimeout(() => URL.revokeObjectURL(u), 120000); }
+  else baixarBlob(blob, r.nome);
+}
+function ppAnexosLigar(d) {
+  const id = d.proposta.id, L = d.anexos || [];
+  // rascunho com alteração na planilha: salva antes, para o recarregar da tela não perder o que foi digitado
+  const recarrega = async () => { if (PP.ed && PP.ed.sujo && $('#ppF')) await ppSalvar(true); vProp(id); };
+  $$('[data-anx]').forEach(b => { b.onclick = async () => { b.disabled = true; try { await ppAnxAbrir('prop_anexo_ver', { id, anexo: b.dataset.anx }); } catch (e) { toast(e.message, 1); } b.disabled = false; }; });
+  const itens = d.itens.filter(i => i.tipo !== 'E');
+  const form = a => modal(a ? 'Editar anexo' : 'Incluir anexo', `<div class="grid">
+      <label>${a ? 'Trocar o arquivo <small>(opcional)</small>' : 'Arquivo <small>(PDF, imagem, Excel ou Word · até 10 MB)</small>'}<input type="file" name="arq" accept=".pdf,image/*,.xlsx,.xls,.docx,.doc,.csv" ${a ? '' : 'required'}></label>
+      <label>Nome<input name="nome" maxlength="140" value="${esc(a ? a.nome : '')}" placeholder="ex: Proposta Águas Claras – estação elevatória"></label>
+      <label>Descrição <small>(opcional)</small><input name="desc" maxlength="400" value="${esc(a ? a.descricao : '')}" placeholder="ex: reservatórios PRFV 70 m³ e EEE 7 m³, validade 30 dias"></label>
+      <label>Ligar a um item <small>(opcional: aparece no "+" do item)</small><select name="item"><option value="">— nenhum —</option>${itens.map(i => `<option value="${esc(i.codigo)}" ${a && a.item === i.codigo ? 'selected' : ''}>${esc(i.codigo)} · ${esc(String(i.descricao).slice(0, 70))}</option>`).join('')}</select></label>
+      <label class="chk"><input type="checkbox" name="ve" ${!a || a.cliente_ve ? 'checked' : ''}> O cliente vê este anexo no portal</label>
+      <div class="aviso warn" id="ppAnxAviso">Cotação de fornecedor mostra o <b>preço de custo</b>: com o cliente vendo, ele enxerga a sua margem naquele item.</div></div>`, {
+    ok: a ? 'Salvar' : 'Incluir anexo',
+    onOk: async f => {
+      const arq = f.arq.files[0];
+      let arquivo = null;
+      if (arq) {
+        if (arq.size > 10 * 1048576) throw new Error('Arquivo grande demais (máx. 10 MB).');
+        const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(arq); });
+        arquivo = { nome: arq.name, mime: arq.type || '', b64 };
+      }
+      toast((await api('prop_anexo_salvar', { id, anexo: a ? a.id : '', arquivo, nome: f.nome.value, descricao: f.desc.value, item: f.item.value, cliente_ve: f.ve.checked })).msg);
+      await recarrega();
+    }
+  });
+  if ($('#ppAnxNovo')) $('#ppAnxNovo').onclick = () => { form(null); const c = $('#modal [name=ve]'), av = $('#ppAnxAviso'); c.onchange = () => { av.hidden = !c.checked; }; };
+  $$('[data-anx-ed]').forEach(b => { b.onclick = () => { form(L.find(x => x.id === b.dataset.anxEd)); const c = $('#modal [name=ve]'), av = $('#ppAnxAviso'); av.hidden = !c.checked; c.onchange = () => { av.hidden = !c.checked; }; }; });
+  $$('[data-anx-rm]').forEach(b => { b.onclick = async () => {
+    const a = L.find(x => x.id === b.dataset.anxRm);
+    if (!confirm('Retirar o anexo "' + a.nome + '"? Ele sai de todas as revisões deste orçamento.')) return;
+    try { toast((await api('prop_anexo_remover', { id, anexo: a.id })).msg); await recarrega(); } catch (e) { toast(e.message, 1); }
+  }; });
+}
 function ppPortalHtml(d) {
   const p = d.proposta, g = d.nivel === 'Gerir', a = p.aceite, C = d.comentarios || [], abertos = C.filter(c => c.status === 'aberto').length;
   if (!g && !p.cliente_id) return '';
@@ -204,7 +260,8 @@ function ppLeitura(d) {
 function ppDetHtml(i) {
   const kv = (t, v) => `<span><small>${t}</small><b class="bp-mono">${v}</b></span>`;
   return `<div class="pp-m-kv">${kv('Preço unit.', bpM(i.preco_unit))}${kv('Total', bpM(i.preco))}${kv('Custo unit.', bpM(i.custo_unit))}${kv('Material no total', bpM(i.v_mat))}${kv('MO / serviços no total', bpM(i.v_serv))}${kv('BDI no total', i.sem_bdi ? 'não incide' : bpM(i.bdi))}${kv('Gestão no total', i.sem_gestao ? 'não incide' : bpM(i.gestao))}</div>
-    ${i.comp_cod ? `<small>${i.fonte ? 'SINAPI ' : 'Composição '}<code>${esc(i.comp_cod)}</code>${i.fonte !== 'SINAPI-INSUMO' ? ` · <button type="button" class="linkbtn" data-ver-cod="${esc(i.codigo)}">ver insumos</button>` : ''}</small>` : '<small>Preço direto</small>'}`;
+    ${i.comp_cod ? `<small>${i.fonte ? 'SINAPI ' : 'Composição '}<code>${esc(i.comp_cod)}</code>${i.fonte !== 'SINAPI-INSUMO' ? ` · <button type="button" class="linkbtn" data-ver-cod="${esc(i.codigo)}">ver insumos</button>` : ''}</small>` : '<small>Preço direto</small>'}
+    ${PP_ANX.filter(a => a.item === i.codigo).map(a => `<div class="pp-anx-it">${ic('clip')} <button type="button" class="linkbtn" data-anx="${esc(a.id)}">${esc(a.nome)}</button>${a.cliente_ve ? '' : ' <small>(só interno)</small>'}</div>`).join('')}`;
 }
 function ppLista(itens, etapas, T) {
   const et = {};

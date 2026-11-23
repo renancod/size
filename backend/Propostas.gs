@@ -100,6 +100,7 @@ function propDetalhe_(q, ctx) {
     empresa: String(config_().EMPRESA || 'Size Engenharia'),
     // portal do cliente: a quem foi enviado, considerações do cliente (todas as revisões deste número) e clientes para escolher
     comentarios: propComentarios_(p.numero),
+    anexos: propAnexos_(p.numero),
     clientes: central_('Clientes').all().filter(c => sim_(c.ativo) || String(c.id) === String(p.cliente_id)).map(c => ({ id: String(c.id), nome: c.nome, empresa: c.empresa || '' }))
   };
 }

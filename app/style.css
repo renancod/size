@@ -1217,6 +1217,15 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 /* portal: "o que mudou" enxuto, retirados recolhidos */
 .pc-mudou{display:block}.pc-mudou details{margin-top:6px}.pc-mudou summary{cursor:pointer;font-weight:600}
 .pc-mudou ul{margin:6px 0 0;padding-left:18px;font-size:.88rem}.pc-mudou li{margin:2px 0}
+/* anexos do orçamento */
+.pp-anx-l{display:grid;gap:6px}
+.pp-anx-i{display:flex;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.pp-anx-ic{width:36px;height:36px;border-radius:9px;background:#EEF3FB;color:var(--navy);display:grid;place-items:center;flex:none}.pp-anx-ic .ic{width:18px;height:18px}
+.pp-anx-t{flex:1;min-width:0;display:grid;gap:1px}.pp-anx-t b{color:var(--bp-ink);font-size:.9rem;overflow-wrap:anywhere}.pp-anx-t small{color:var(--mute);font-size:.76rem}
+.pp-anx-a{display:flex;align-items:center;gap:4px;flex:none}
+.pp-anx-ve{color:#04857A;font-weight:700}.pp-anx-int{color:#B26A00;font-weight:700}
+.pp-anx-it{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:.8rem}.pp-anx-it .ic{width:14px;height:14px;color:var(--mute)}
+@media (max-width:600px){.pp-anx-i{flex-wrap:wrap}.pp-anx-a{width:100%;justify-content:flex-end}}
 /* orçamento enviado no celular: lista enxuta no lugar da tabela; o "+" abre valores e composição */
 .pp-mlist{display:none}
 /* computador: o mesmo "+" no fim da linha da tabela abre os detalhes do item */
@@ -1244,6 +1253,12 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
   .pp-m-det>small{font-size:.74rem;color:var(--mute)}
   .pp-m-tot{display:flex;justify-content:space-between;padding:10px 8px 2px;font-weight:800;color:var(--bp-ink)}
 }
+/* portal: anexos do orçamento */
+.pc-anx-i{display:flex;align-items:center;gap:8px;border-top:1px solid #F0F2F5;padding:8px 0}.pc-anx-i:first-of-type{border-top:0}
+.pc-anx-ab{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0}
+.pc-anx-ab>.ic{width:30px;height:30px;padding:6px;border-radius:8px;background:#EEF3FB;color:var(--pc);flex:none}
+.pc-anx-ab span{display:grid;gap:1px;min-width:0}.pc-anx-ab b{font-size:.88rem;overflow-wrap:anywhere}.pc-anx-ab small{font-size:.74rem;color:var(--mute)}
+.pc-anx-lk{display:flex;align-items:center;gap:4px;font-size:.76rem;padding:0;margin-top:4px}.pc-anx-lk .ic{width:13px;height:13px}
 /* portal: orçamento no celular — nº, nome (2 linhas), quantidade e "+"; aberto: o "+" mostra valores e a consideração */
 .pc-cel,.pc-det-cel{display:none}
 @media (max-width:700px){
