@@ -93,7 +93,8 @@ const NOTIF_INFO_ = ['meu', 'pago', 'entrega', 'topo_concluida', 'topo_adiada'];
 function notifSemVistos_(ctx, itens) {
   const vistos = {};
   central_('AvisosVistos').all().forEach(x => { if (String(x.usuario_id) === String(ctx.u.id)) vistos[String(x.aviso_id)] = 1; });
-  return itens.filter(i => !(NOTIF_INFO_.indexOf(i.etapa) >= 0 && vistos[i.id]));
+  // o aviso do SINAPI do mês também pode ser dispensado (volta depois de 15 dias se o mês ainda não foi importado)
+  return itens.filter(i => !((NOTIF_INFO_.indexOf(i.etapa) >= 0 || i.etapa === 'sinapi') && vistos[i.id]));
 }
 function notifDispensar_(q, ctx) {
   const ids = [].concat(q.ids || []).map(String).filter(Boolean).slice(0, 200);

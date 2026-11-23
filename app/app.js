@@ -18,7 +18,7 @@ const LS = {
 };
 const norm = s => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const fd = s => { if (!s) return ''; const a = String(s).slice(0, 10).split('-'); return a.length === 3 ? `${a[2]}/${a[1]}/${a[0]}` : String(s); };
-const fdh = s => { if (!s) return ''; const h = String(s).slice(11, 16); return fd(s) + (h && h !== '00:00' ? ' ' + h : ''); };
+const fdh = s => { if (!s) return ''; if (/^\d{2}\/\d{2}\/\d{4}/.test(String(s))) return String(s).slice(0, 16); const h = String(s).slice(11, 16); return fd(s) + (h && h !== '00:00' ? ' ' + h : ''); };
 /* prazo da obra em dias úteis (cartão da obra no Início e no portal do cliente): dia X de N, faltam, término e projeção */
 function prazoHtml(P) {
   if (!P) return '';
@@ -833,7 +833,7 @@ function painelNotif() {
       : `<button type="button" class="btn" id="ligaNotif">${ic('bell')} Ativar avisos neste aparelho (mesmo com o app fechado)</button>`) : ''}
     ${!pp && perm === 'default' ? `<button type="button" class="btn sec" id="ativarNotif">${ic('bell')} Avisar também quando o app estiver em segundo plano</button>` : ''}
     ${perm === 'denied' ? '<small>Os avisos do aparelho estão bloqueados nas configurações do navegador para este site.</small>' : ''}
-    ${grupos.map(([k, l]) => { const info = NOTIF_INFO.includes(k); return `<div class="notif-grupo"><div class="notif-tit">${ic(ETAPA_NOTIF[k][1])}<b>${ETAPA_NOTIF[k][0]}</b><span>${l.length}</span>${info ? `<button type="button" class="linkbtn notif-limpa" data-limpa="${k}">limpar</button>` : ''}</div>
+    ${grupos.map(([k, l]) => { const info = NOTIF_INFO.includes(k) || k === 'sinapi'; return `<div class="notif-grupo"><div class="notif-tit">${ic(ETAPA_NOTIF[k][1])}<b>${ETAPA_NOTIF[k][0]}</b><span>${l.length}</span>${info ? `<button type="button" class="linkbtn notif-limpa" data-limpa="${k}">limpar</button>` : ''}</div>
       ${l.sort((a, b) => String(b.quando).localeCompare(String(a.quando))).map((i, n) => `<div class="notif-l"><button type="button" class="notif" data-n="${esc(i.id)}">
         <span><b>${esc(i.numero)}</b>${quente(i) ? ' <span class="urg">' + esc(String(i.prioridade).toUpperCase()) + '</span>' : ''}${variasObras ? ` <small>${esc(i.obra_nome)}</small>` : ''}<br>
         <small>${esc(i.texto)}${i.resumo ? ' — ' + esc(i.resumo) : ''}</small></span><small>${fdh(i.quando)}</small></button>${info ? `<button type="button" class="icbtn notif-x" data-x="${esc(i.id)}" title="Dispensar" aria-label="Dispensar">${ic('x')}</button>` : ''}</div>`).join('')}</div>`; }).join('')

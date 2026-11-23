@@ -157,7 +157,11 @@ test('conferência diária: acha o mês novo na Caixa, avisa no sino de quem ger
   assert.equal(t.G.rodar('sinapiVerificar()'), 'novo ' + novo);
   assert.ok(pedidos.some(u => /_Retificacao01\.zip$/.test(u)));        // procura também as retificações
   assert.equal(t.adm('sinapi_info').novo.mes, novo);
-  assert.ok(t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi' && i.texto.indexOf('publicado pela Caixa') > 0));
+  const av = t.adm('notificacoes').itens.find(i => i.etapa === 'sinapi' && i.texto.indexOf('publicado pela Caixa') > 0);
+  assert.ok(av);
+  // dá para dispensar o aviso (no "x" do sino)
+  t.adm('notif_dispensar', { ids: [av.id] });
+  assert.ok(!t.adm('notificacoes').itens.some(i => i.etapa === 'sinapi'));
   const b = t.adm('sinapi_baixar', { mes: novo, parte: 0 });
   assert.deepEqual([b.partes, Buffer.from(b.b64, 'base64').toString()], [1, 'PK-arquivo-falso']);
   // depois de importar o mês novo, o aviso some
