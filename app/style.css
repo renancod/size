@@ -1212,6 +1212,9 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .pp-add{flex:none;min-height:32px;padding:0 10px}
 .pp-alvo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-2px 0 10px;padding:8px 12px;border-radius:10px;background:#FFF6E3;color:#8A5A00;font-size:.84rem}
 .pp-alvo .ic{width:16px;height:16px}.pp-alvo .linkbtn{margin-left:auto;font-size:.8rem}
+/* portal: "o que mudou" enxuto, retirados recolhidos */
+.pc-mudou{display:block}.pc-mudou details{margin-top:6px}.pc-mudou summary{cursor:pointer;font-weight:600}
+.pc-mudou ul{margin:6px 0 0;padding-left:18px;font-size:.88rem}.pc-mudou li{margin:2px 0}
 /* "Esqueci minha senha" na entrada */
 .login .esqueci,.pc-login .esqueci{display:block;margin:12px auto 0;font-size:.9rem}
 /* busca dentro da etapa escolhida (no fim dela, onde o item entra) */

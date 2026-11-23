@@ -255,6 +255,24 @@ async function pcOrcs() {
       <div class="pc-big sm">${pcRs(o.total)}</div><small>enviado ${pcData(o.data)}${o.respostas ? ` · ${o.respostas} resposta${o.respostas > 1 ? 's' : ''} da Size` : ''}${o.abertos ? ` · ${o.abertos} consideração${o.abertos > 1 ? 'ões' : ''} aguardando` : ''}</small></a>`).join('')}</div>`
     : '<section class="pc-card">Nenhum orçamento enviado ainda.</section>'));
 }
+/* nomes de itens enxutos para o cliente: corta a descrição técnica longa (mantém a espessura, se houver)
+ * e junta os repetidos ("… ×5"), em vez de despejar a especificação inteira de cada linha */
+function pcResumoItens(lista) {
+  const curto = d => {
+    let s = String(d || '').replace(/\s*\([^)]*[=x×][^)]*\)/g, '').replace(/\s+[–-]\s+(EXECUÇÃO|SAIBRO POSTO OBRA|MATERIAL|MÃO DE OBRA)\b.*$/i, '').trim();
+    const esp = (s.match(/ESP(?:ESSURA)?\.?\s*(?:MÍN\.?\s*)?=\s*[\d,]+\s*CM/i) || [''])[0].replace(/\s+/g, ' ');
+    if (s.length > 60) {
+      const v = s.indexOf(',');   // o nome do serviço costuma acabar na primeira vírgula; o resto é especificação
+      s = v >= 15 && v <= 60 ? s.slice(0, v) : s.slice(0, 60).replace(/[\s,;.-]+\S*$/, '') + '…';
+      if (esp) s += ' (' + esp.toLowerCase() + ')';
+    }
+    s = s.charAt(0) + s.slice(1).toLowerCase();
+    return s.replace(/\b(bgs|cbuq|pvc|pead|cbr|dn|fofo|prfv|led|sinapi|pv|ebe|eee)\b/gi, w => w.toUpperCase()).replace(/\bdn(\d)/gi, 'DN$1').replace(/(\d)w\b/g, '$1 W');
+  };
+  const n = {};
+  lista.forEach(d => { const k = curto(d); n[k] = (n[k] || 0) + 1; });
+  return Object.keys(n).map(k => n[k] > 1 ? k + ' ×' + n[k] : k);
+}
 async function pcOrc(id) {
   const o = await api('cli_orcamento', { id }), aberto = o.modo === 'aberto', D = o.diferencas || { novos: [], alterados: [], retirados: [] };
   pcTit('Orçamento ' + o.rotulo);
@@ -269,7 +287,8 @@ async function pcOrc(id) {
     ${o.revisoes.length > 1 ? `<div class="pc-revs">${o.revisoes.map(r => `<a class="pc-chip ${r.id === o.id ? 'on' : ''}" href="#/c/orcamento/${esc(r.id)}">${esc(r.rotulo)}</a>`).join('')}</div>` : ''}
     ${o.obra_id ? `<a class="aviso ok pc-lnk" href="#/c/obra/${enc(o.obra_id)}">${ic('building')} <span>Este orçamento virou obra. <b>Acompanhar a obra</b></span> ${ic('chevron')}</a>`
       : o.aceite ? `<div class="aviso ok">${ic('check')} Aceito por <b>${esc(o.aceite.nome)}</b> em ${esc(o.aceite.em)}. A Size entra em contato para os próximos passos.</div>` : ''}
-    ${o.diferencas && (D.novos.length || D.alterados.length || D.retirados.length) ? `<div class="aviso info"><b>O que mudou desde ${esc(D.de)}:</b> ${[D.novos.length && D.novos.length + ' novo' + (D.novos.length > 1 ? 's' : ''), D.alterados.length && D.alterados.length + ' alterado' + (D.alterados.length > 1 ? 's' : ''), D.retirados.length && D.retirados.length + ' retirado' + (D.retirados.length > 1 ? 's' : '') + ' (' + D.retirados.map(esc).join(', ') + ')'].filter(Boolean).join(' · ')}</div>` : ''}
+    ${o.diferencas && (D.novos.length || D.alterados.length || D.retirados.length) ? `<div class="aviso info pc-mudou"><div><b>O que mudou desde ${esc(D.de)}:</b> ${[D.novos.length && D.novos.length + ' novo' + (D.novos.length > 1 ? 's' : ''), D.alterados.length && D.alterados.length + ' alterado' + (D.alterados.length > 1 ? 's' : ''), D.retirados.length && D.retirados.length + ' retirado' + (D.retirados.length > 1 ? 's' : '')].filter(Boolean).join(' · ')}${D.novos.length || D.alterados.length ? ' <small>(marcados na lista abaixo)</small>' : ''}</div>
+      ${D.retirados.length ? `<details><summary>Ver os itens retirados</summary><ul>${pcResumoItens(D.retirados).map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>` : ''}</div>` : ''}
     <div class="pc-orc-grade"><div>
     ${o.etapas.map(e => `<section class="pc-card pc-et-orc"><div class="pc-lin"><b>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.descricao)}</b><b>${pcRs(e.preco)}</b></div>
       <table class="pc-tab"><thead><tr><th>Item</th><th class="n">Quant.</th>${aberto ? '<th class="n">Unit.</th><th class="n">Total</th>' : ''}<th></th></tr></thead><tbody>
