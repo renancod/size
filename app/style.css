@@ -1140,6 +1140,8 @@ tr.aberto .bp-seta{transform:rotate(90deg)}
 .pp-taxas{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:8px}
 .pp-tab .pp-et td{background:#F2F5FB;color:var(--bp-ink)}
 .pp-tot{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+/* celular: os valores (R$ 10.932.790,93) cabem dentro do cartão em vez de vazar */
+@media (max-width:700px){.bp-cats{gap:8px}.bp-cat{padding:8px 10px}.bp-cat b{font-size:min(1.1rem,3.5vw);white-space:nowrap;letter-spacing:-.02em}.bp-cat small,.bp-cat span{font-size:.72rem}}
 .pp-hist{display:grid;gap:2px}.pp-hist div{display:grid;grid-template-columns:130px 1fr;gap:0 10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:.86rem}
 .pp-hist b{color:var(--bp-ink)}.pp-hist span{grid-column:2;color:var(--mute)}.pp-hist small:last-child{grid-column:2}
 
