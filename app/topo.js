@@ -226,6 +226,7 @@ async function vTopoDemanda(id) {
     <div class="acoes tp-acoes">
       ${aberta && (minha || gere) ? `<a class="btn tp-ac" href="#/topo/lancar/${enc(d.id)}">${ic('camera')} Lançar o dia</a>` : ''}
       ${aberta && (minha || gere) ? `<button type="button" class="btn sec" id="tpData">${ic('calendar')} Mudar a data</button>` : ''}
+      ${r.diarios.length ? `<button type="button" class="btn sec" id="tpRel">${ic('pdf')} Relatório em PDF</button>` : ''}
       ${gere && d.status !== 'Cancelada' ? `<a class="btn sec" href="#/topo/editar/${enc(d.id)}">${ic('edit')} Editar</a>` : ''}
       ${gere && aberta ? `<button type="button" class="btn sec" id="tpConcluir">${ic('check')} Concluir</button><button type="button" class="btn perigo" id="tpCancelar">Cancelar</button>` : ''}
       ${gere && !aberta ? `<button type="button" class="btn sec" id="tpReabrir">${ic('refresh')} Reabrir</button>` : ''}
@@ -255,6 +256,7 @@ async function vTopoDemanda(id) {
     ok: tit, onOk: async f => { const x = await api('topo_status', { id, op, motivo: f.motivo.value, data: f.data ? f.data.value : '' }); toast(x.msg); vTopoDemanda(id); }
   });
   if ($('#tpData')) $('#tpData').onclick = () => tpMudarData(d);
+  if ($('#tpRel')) $('#tpRel').onclick = e => tpRelatorio(id, e.currentTarget);
   if ($('#tpCancelar')) $('#tpCancelar').onclick = () => st('cancelar', 'Cancelar demanda', 'A demanda sai da agenda do topógrafo.');
   if ($('#tpConcluir')) $('#tpConcluir').onclick = () => st('concluir', 'Concluir demanda', 'Marca como concluída sem lançamento do topógrafo (ex: feito por outro meio).');
   if ($('#tpReabrir')) $('#tpReabrir').onclick = () => st('reabrir', 'Reabrir demanda', 'Volta para a agenda do topógrafo.', `<label>Nova data <small>(opcional)</small><input type="date" name="data" min="${hoje()}"></label>`);
@@ -521,6 +523,73 @@ function tpDiaN(d, s) {
 /* =====================================================================
  * DIÁRIOS DO TOPÓGRAFO (separados do RDO da obra)
  * ===================================================================== */
+/* ---------- relatório da execução (PDF): dados, resumo por dia, todas as fotos pequenas, croquis e assinatura ----------
+ * Só a marca da Size; o topógrafo aparece como executor. Usa o mesmo gerador de PDF dos relatórios de obra (pdfDeFolha). */
+async function tpImgPequena(id, max) {
+  const a = await topoArq(id);
+  if (!/^image\//.test(a.mime)) return '';
+  const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = a.url; });
+  const s = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+  c.width = Math.round(im.naturalWidth * s); c.height = Math.round(im.naturalHeight * s);
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function tpRelFolha(d, dias, img) {
+  const un = d.unidade, feito = dias.reduce((t, x) => t + x.qtd, 0), ini = dias.length ? dias[0].data : '', fim = dias.length ? dias[dias.length - 1].data : '';
+  const kpi = (t, v, s) => `<div class="rl-kpi"><small>${t}</small><b>${v}</b>${s ? `<span>${s}</span>` : ''}</div>`;
+  const nFotos = dias.reduce((t, x) => t + x.fotos.length, 0);
+  return `<div class="rl tpr">
+    <div class="rl-top rl-cut"><div class="rl-logo"><img src="logo.png" alt="Size Engenharia"></div>
+      <div class="rl-tit"><small>Size Engenharia · Topografia</small><b>Relatório de execução topográfica</b><span>${esc(d.obra_nome)}${d.cidade ? ' · ' + esc(d.cidade) : ''}</span></div>
+      <div class="rl-per"><small>${esc(d.id)}</small><b>${ini ? (ini === fim ? fc(ini) : fc(ini) + ' a ' + fc(fim)) : '—'}</b><span>${(fim || hoje()).slice(0, 4)}</span></div></div>
+    <div class="rl-kpis rl-cut">${kpi('Executado', tpQ(Math.round(feito * 100) / 100, un), d.qtd_prevista ? 'previsto ' + tpQ(d.qtd_prevista, un) : '')}
+      ${kpi('Concluído', Math.round(d.pct) + '%', esc(d.status))}${kpi('Dias trabalhados', dias.length, nFotos + ' fotos')}</div>
+    <div class="rl-sec rl-cut"><div class="rl-sec-t">Dados da execução</div>
+      <table class="rl-t tpr-dados"><tbody>
+        <tr><th>Serviço</th><td>${esc(d.tipo)} · ${esc(tpTit(d))}</td></tr>
+        <tr><th>Obra</th><td>${esc(d.obra_nome)}${d.cidade ? ' · ' + esc(d.cidade) : ''}</td></tr>
+        <tr><th>Executor</th><td>${esc(d.topografo)}</td></tr>
+        ${d.arquivo_usado ? `<tr><th>Projeto / arquivo usado</th><td>${esc(d.arquivo_usado)}</td></tr>` : ''}
+        ${d.descricao ? `<tr><th>Descrição</th><td>${esc(d.descricao).replace(/\n/g, '<br>')}</td></tr>` : ''}
+      </tbody></table></div>
+    <div class="rl-sec"><div class="rl-sec-t">Resumo por dia</div>
+      <table class="rl-t tpr-res"><thead><tr><th>Data</th><th class="n">Executado</th><th>Observação</th><th class="n">Fotos</th></tr></thead><tbody>
+        ${dias.map(x => `<tr><td>${DSEM[new Date(x.data + 'T12:00').getDay()].slice(0, 3)} ${fc(x.data)}</td><td class="n"><b>${tpQ(x.qtd, un)}</b></td><td>${esc(x.obs || '')}${x.terminou ? ' <i>(conclusão)</i>' : ''}</td><td class="n">${x.fotos.length}</td></tr>`).join('')}
+        <tr class="tot"><td>Total</td><td class="n"><b>${tpQ(Math.round(feito * 100) / 100, un)}</b></td><td></td><td class="n">${nFotos}</td></tr></tbody></table></div>
+    ${dias.map(x => {
+      const fs = x.fotos.filter(f => img[f.id]), cq = x.croquis.filter(c => img[c.id]);
+      if (!fs.length && !cq.length) return '';
+      return `<div class="rl-sec"><div class="rl-sec-t sm">${DSEM[new Date(x.data + 'T12:00').getDay()]}, ${fc(x.data)} · ${tpQ(x.qtd, un)}</div>
+        ${fs.length ? `<div class="tpr-fotos">${fs.map(f => `<div class="tpr-f rl-li"><i style="background-image:url('${img[f.id]}')"></i></div>`).join('')}</div>` : ''}
+        ${cq.length ? `<div class="tpr-cq">${cq.map(c => `<div class="tpr-f rl-li"><i style="background-image:url('${img[c.id]}')"></i><small>Croqui</small></div>`).join('')}</div>` : ''}</div>`;
+    }).join('')}
+    <div class="rl-sec rl-cut tpr-ass"><div><span></span><b>${esc(d.topografo)}</b><small>Executor</small></div><div><span></span><b>Size Engenharia</b><small>Responsável técnico</small></div></div>
+    <div class="rl-nota rl-cut">Relatório gerado pelo sistema da Size Engenharia em ${fd(hoje())} às ${new Date().toTimeString().slice(0, 5)} a partir dos lançamentos diários do topógrafo (fotos e croquis registrados em campo).</div>
+  </div>`;
+}
+async function tpRelatorio(id, botao) {
+  const t = botao ? botao.innerHTML : '';
+  if (botao) { botao.disabled = true; botao.innerHTML = '<span class="spin peq"></span> Preparando…'; }
+  try {
+    const r = await api('topo_demanda', { id }), d = r.demanda, dias = r.diarios.slice().sort((a, b) => a.data.localeCompare(b.data));
+    const ids = [].concat(...dias.map(x => x.fotos.map(f => [f.id, 360]).concat(x.croquis.filter(c => /^image\//.test(c.mime)).map(c => [c.id, 700]))));
+    const img = {};
+    for (let k = 0; k < ids.length; k++) {
+      if (botao) botao.innerHTML = `<span class="spin peq"></span> Fotos ${k + 1} de ${ids.length}…`;
+      try { img[ids[k][0]] = await tpImgPequena(ids[k][0], ids[k][1]); } catch (e) { /* foto que não abriu fica de fora */ }
+    }
+    if (botao) botao.innerHTML = '<span class="spin peq"></span> Gerando PDF…';
+    const blob = await pdfDeFolha(tpRelFolha(d, dias, img), { cab: `Relatório de execução topográfica · ${d.id} · ${d.obra_nome}`, rod: `Size Engenharia · ${d.obra_nome} · ${d.id}` });
+    const nome = `Relatorio_Topografia_${d.id}_${String(d.obra_nome || '').replace(/[^\w]+/g, '_').slice(0, 40)}.pdf`;
+    const arq = new File([blob], nome, { type: 'application/pdf' }), pode = navigator.canShare && navigator.canShare({ files: [arq] });
+    modal('Relatório pronto', `<p><b>${esc(d.id)}</b> · ${esc(tpTit(d))}<br><small>${plural(dias.length, 'dia', 'dias')} · ${ids.length} imagens · ${Math.max(1, Math.round(blob.size / 1024))} KB</small></p>
+      <div class="linha-btn"><button type="button" class="btn" id="tprBaixar">${ic('download')} Baixar PDF</button>${pode ? `<button type="button" class="btn sec" id="tprEnviar">${ic('send')} Enviar</button>` : ''}</div>`, { semRodape: true });
+    $('#tprBaixar').onclick = () => { baixarBlob(blob, nome); toast('PDF baixado.'); };
+    if ($('#tprEnviar')) $('#tprEnviar').onclick = () => navigator.share({ files: [arq], title: nome, text: `Relatório de execução topográfica · ${d.id} · ${d.obra_nome} · Size Engenharia` }).catch(() => {});
+  } catch (e) { toast(e.message || 'Não consegui gerar o relatório.', 1); }
+  if (botao) { botao.disabled = false; botao.innerHTML = t; }
+}
+const TD_ABERTAS = new Set();   // execuções abertas na lista de diários (começam recolhidas)
 async function vTopoDiarios(qs) {
   titulo('Diários do topógrafo');
   const p = new URLSearchParams(qs || ''), mes = p.get('m') || hoje().slice(0, 7), gere = topoGere();
@@ -540,16 +609,20 @@ async function vTopoDiarios(qs) {
     const exs = [...new Set(l.map(x => x.demanda))].map(dm => l.filter(x => x.demanda === dm).sort((a, b) => String(b.data).localeCompare(String(a.data))))
       .sort((a, b) => String(b[0].data).localeCompare(String(a[0].data)));
     const tot = xs => ['m', 'pt', 'un'].map(u => { const t = xs.filter(x => x.unidade === u).reduce((a, x) => a + x.qtd, 0); return t ? tpQ(t, u) : ''; }).filter(Boolean).join(' · ');
-    $('#tdLst').innerHTML = exs.map(xs => {
-      const x0 = xs[0], fim = xs[0].data, ini = xs[xs.length - 1].data, terminou = xs.some(x => x.terminou);
-      return `<div class="card tp-dia tp-ex"><a class="tp-ex-h" href="#/topo/demanda/${enc(x0.demanda)}"><span class="tp-di-t">${tpTag(x0.tipo)}<b>${esc([x0.servico, x0.local].filter(Boolean).join(' · '))}</b>
-          <small>${esc(x0.obra_nome)} · ${esc(x0.topografo)} · <code>${esc(x0.demanda)}</code> · ${plural(xs.length, 'dia', 'dias')}${ini !== fim ? ` · ${fd(ini).slice(0, 5)} a ${fd(fim).slice(0, 5)}` : ''}</small></span>
-          <span class="tp-di-q"><b>${tot(xs)}</b><small>${terminou ? '<span class="ok">terminou</span>' : 'em andamento'} ${ic('chevron')}</small></span></a>
-        ${xs.map(x => `<button type="button" class="tp-di tp-ex-dia" data-d="${esc(x.id)}"><span class="tp-dia-n"><b>${fd(x.data).slice(0, 2)}</b><small>${DSEM[new Date(x.data + 'T12:00').getDay()].slice(0, 3)}</small></span>
+    $('#tdLst').innerHTML = (exs.length > 1 ? `<div class="tp-ex-todos"><button type="button" class="linkbtn" id="tdTodos">${exs.every(xs => TD_ABERTAS.has(xs[0].demanda)) ? 'Recolher todos' : 'Abrir todos'}</button></div>` : '') + exs.map(xs => {
+      const x0 = xs[0], fim = xs[0].data, ini = xs[xs.length - 1].data, terminou = xs.some(x => x.terminou), aberta = TD_ABERTAS.has(x0.demanda);
+      return `<div class="card tp-dia tp-ex ${aberta ? 'aberta' : ''}"><button type="button" class="tp-ex-h" data-tg="${esc(x0.demanda)}" aria-expanded="${aberta}"><span class="tp-di-t">${tpTag(x0.tipo)}<b>${esc([x0.servico, x0.local].filter(Boolean).join(' · '))}</b>
+          <small>${esc(x0.obra_nome)} · ${esc(x0.topografo)} · <code>${esc(x0.demanda)}</code> · ${plural(xs.length, 'dia', 'dias')}${ini !== fim ? ` · ${fd(ini).slice(0, 5)} a ${fd(fim).slice(0, 5)}` : ` · ${fd(ini).slice(0, 5)}`}</small></span>
+          <span class="tp-di-q"><b>${tot(xs)}</b><small>${terminou ? '<span class="ok">terminou</span>' : 'em andamento'}</small></span><span class="tp-ex-seta">${ic('chevron')}</span></button>
+        <div class="tp-ex-acoes"><a class="linkbtn" href="#/topo/demanda/${enc(x0.demanda)}">${ic('estaca')} Abrir a demanda</a><button type="button" class="linkbtn" data-rel="${esc(x0.demanda)}">${ic('pdf')} Relatório em PDF</button></div>
+        <div class="tp-ex-dias">${xs.map(x => `<button type="button" class="tp-di tp-ex-dia" data-d="${esc(x.id)}"><span class="tp-dia-n"><b>${fd(x.data).slice(0, 2)}</b><small>${DSEM[new Date(x.data + 'T12:00').getDay()].slice(0, 3)}</small></span>
           <span class="tp-di-t"><b>${fdc(x.data)}</b>${x.obs ? `<small>${esc(x.obs)}</small>` : ''}</span>
-          <span class="tp-di-q"><b>${tpQ(x.qtd, x.unidade)}</b><small>${ic('camera')} ${x.fotos.length}${x.croquis.length ? ' · croqui' : ''}${x.terminou ? ' · <span class="ok">terminou</span>' : ''}</small></span></button>`).join('')}</div>`;
+          <span class="tp-di-q"><b>${tpQ(x.qtd, x.unidade)}</b><small>${ic('camera')} ${x.fotos.length}${x.croquis.length ? ' · croqui' : ''}${x.terminou ? ' · <span class="ok">terminou</span>' : ''}</small></span></button>`).join('')}</div></div>`;
     }).join('') || `<p class="vazio">Nenhum lançamento em ${tpMesNome(mes).toLowerCase()}.</p>`;
     $$('#tdLst [data-d]').forEach(b => { b.onclick = () => tpDiarioModal(L.find(x => x.id === b.dataset.d)); });
+    $$('#tdLst [data-tg]').forEach(b => { b.onclick = () => { const k = b.dataset.tg; if (TD_ABERTAS.has(k)) TD_ABERTAS.delete(k); else TD_ABERTAS.add(k); desenhar(); }; });
+    $$('#tdLst [data-rel]').forEach(b => { b.onclick = () => tpRelatorio(b.dataset.rel, b); });
+    if ($('#tdTodos')) $('#tdTodos').onclick = () => { const todas = exs.every(xs => TD_ABERTAS.has(xs[0].demanda)); exs.forEach(xs => todas ? TD_ABERTAS.delete(xs[0].demanda) : TD_ABERTAS.add(xs[0].demanda)); desenhar(); };
   };
   if ($('#tdQuem')) $('#tdQuem').onchange = desenhar;
   $('#tdObra').onchange = desenhar;
