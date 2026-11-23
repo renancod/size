@@ -291,10 +291,11 @@ async function pcOrc(id) {
       ${D.retirados.length ? `<details><summary>Ver os itens retirados</summary><ul>${pcResumoItens(D.retirados).map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>` : ''}</div>` : ''}
     <div class="pc-orc-grade"><div>
     ${o.etapas.map(e => `<section class="pc-card pc-et-orc"><div class="pc-lin"><b>${esc(e.codigo ? e.codigo + ' · ' : '')}${esc(e.descricao)}</b><b>${pcRs(e.preco)}</b></div>
-      <table class="pc-tab"><thead><tr><th>Item</th><th class="n">Quant.</th>${aberto ? '<th class="n">Unit.</th><th class="n">Total</th>' : ''}<th></th></tr></thead><tbody>
-      ${e.itens.map(i => `<tr><td><small>${esc(i.codigo)}</small> ${esc(i.descricao)} ${marca(i.codigo)}
-        ${aberto ? `<div class="pc-det">custo ${pcRs(i.custo_unit)}/${esc(i.unidade || 'un')} <small>(material ${pcRs(i.unit_mat)} + MO/serv. ${pcRs(i.unit_serv)})</small> · BDI ${i.sem_bdi ? '<small>não incide</small>' : pcRs(i.bdi)} · adm. ${i.sem_gestao ? '<small>não incide</small>' : pcRs(i.gestao)}${i.insumos ? ` · <button type="button" class="linkbtn" data-ins="${esc(i.codigo)}">ver insumos${i.fonte ? ' (SINAPI)' : ''}</button>` : ''}</div>` : ''}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td>${aberto ? `<td class="n">${pcRs(i.preco_unit)}</td><td class="n"><b>${pcRs(i.preco)}</b></td>` : ''}
-        <td class="n">${o.pode_comentar ? `<button type="button" class="pc-mini" data-com="${esc(i.codigo)}" title="Comentar este item">${ic('plus')}</button>` : ''}</td></tr>`).join('')}</tbody></table></section>`).join('')}
+      <table class="pc-tab pc-otab"><thead><tr><th>Item</th><th class="n">Quant.</th>${aberto ? '<th class="n pc-vc">Unit.</th><th class="n pc-vc">Total</th>' : ''}<th></th></tr></thead><tbody>
+      ${e.itens.map(i => `<tr class="pc-or"><td><small>${esc(i.codigo)}</small> <span class="pc-od">${esc(i.descricao)}</span> ${marca(i.codigo)}
+        ${aberto ? `<div class="pc-det">custo ${pcRs(i.custo_unit)}/${esc(i.unidade || 'un')} <small>(material ${pcRs(i.unit_mat)} + MO/serv. ${pcRs(i.unit_serv)})</small> · BDI ${i.sem_bdi ? '<small>não incide</small>' : pcRs(i.bdi)} · adm. ${i.sem_gestao ? '<small>não incide</small>' : pcRs(i.gestao)}${i.insumos ? ` · <button type="button" class="linkbtn" data-ins="${esc(i.codigo)}">ver insumos${i.fonte ? ' (SINAPI)' : ''}</button>` : ''}
+          <span class="pc-det-cel">preço unit. <b>${pcRs(i.preco_unit)}</b> · total <b>${pcRs(i.preco)}</b></span>${o.pode_comentar ? `<button type="button" class="linkbtn pc-det-cel" data-com="${esc(i.codigo)}">${ic('plus')} Fazer uma consideração sobre este item</button>` : ''}</div>` : ''}</td><td class="n">${nf(i.qtd)} ${esc(i.unidade || '')}</td>${aberto ? `<td class="n pc-vc">${pcRs(i.preco_unit)}</td><td class="n pc-vc"><b>${pcRs(i.preco)}</b></td>` : ''}
+        <td class="n">${aberto ? `<button type="button" class="pc-mini pc-cel" data-mais title="Ver valores">${ic('plus')}</button>` : ''}${o.pode_comentar ? `<button type="button" class="pc-mini ${aberto ? 'pc-pc' : ''}" data-com="${esc(i.codigo)}" title="Comentar este item">${ic('plus')}</button>` : ''}</td></tr>`).join('')}</tbody></table></section>`).join('')}
     ${o.cronograma ? `<section class="pc-card"><div class="pc-k">${ic('cal')} Cronograma previsto</div>${o.cronograma.map(c => `<div class="pc-lin"><span>${esc(c.descricao)}</span><small>${pcData(c.ini)} a ${pcData(c.fim)}</small></div>`).join('')}</section>` : ''}
     ${o.prazo_txt || o.pagamento_txt || o.texto_cliente ? `<section class="pc-card"><div class="pc-k">Condições</div>${o.prazo_txt ? `<p><b>Prazo:</b> ${esc(o.prazo_txt)}</p>` : ''}${o.pagamento_txt ? `<p><b>Pagamento:</b> ${esc(o.pagamento_txt)}</p>` : ''}${o.texto_cliente ? `<p style="white-space:pre-wrap">${esc(o.texto_cliente)}</p>` : ''}</section>` : ''}
     </div><aside>
@@ -313,6 +314,8 @@ async function pcOrc(id) {
     });
   };
   $$('[data-com]').forEach(b => { b.onclick = () => comentar(b.dataset.com); });
+  // celular (orçamento aberto): o "+" abre os valores do item e, dentro, a consideração
+  $$('.pc-otab [data-mais]').forEach(b => { b.onclick = () => b.closest('tr').classList.toggle('aberto'); });
   // foto do empreendimento no topo (chega depois da tela)
   if (o.foto) api('cli_orc_foto', { id: o.id }).then(r => { const el = $('#pcOrcFoto'); if (el && r.b64) { el.style.setProperty('--capa', `url('data:image/jpeg;base64,${r.b64}')`); el.classList.add('com-capa'); } }).catch(() => {});
   // insumos da composição: a janela abre na hora e a lista entra quando o servidor responder

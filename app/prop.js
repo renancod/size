@@ -193,11 +193,25 @@ function ppLeitura(d) {
   const T = d.total, p = d.proposta;
   return `<div class="bp-cats pp-tot">${[['Custo direto', T.custo, ''], ['Material', T.v_mat, 'k-mat'], ['Mão de obra e serviços', T.v_serv, 'k-mo'], ['BDI ' + ppPct(p.bdi_pct), T.bdi, 'k-eq'], ['Gestão ' + ppPct(p.gestao_pct), T.gestao, 'k-sv']]
       .map(([t, v, k]) => `<div class="bp-cat ${k}"><small>${t}</small><b class="bp-mono">${bpM(v)}</b><span>${T.preco ? ppPct(v / T.preco * 100) + ' do preço' : ''}</span></div>`).join('')}</div>
-    <div class="card"><div class="bp-h"><h3>${ic('list')} Planilha</h3><small>data-base ${fd(p.data_base)} · validade ${p.validade_dias} dias</small></div>${ppTabela(d.itens, d.etapas, T, false)}</div>
+    <div class="card pp-leit"><div class="bp-h"><h3>${ic('list')} Planilha</h3><small>data-base ${fd(p.data_base)} · validade ${p.validade_dias} dias</small></div>${ppTabela(d.itens, d.etapas, T, false)}${ppLista(d.itens, d.etapas, T)}</div>
     ${p.prazo_txt || p.pagamento_txt || p.texto_cliente ? `<div class="card"><h3>Condições da proposta</h3><dl class="kv">${p.prazo_txt ? `<dt>Prazo</dt><dd>${esc(p.prazo_txt)}</dd>` : ''}${p.pagamento_txt ? `<dt>Pagamento</dt><dd>${esc(p.pagamento_txt)}</dd>` : ''}${p.texto_cliente ? `<dt>Observações</dt><dd style="white-space:pre-wrap">${esc(p.texto_cliente)}</dd>` : ''}</dl></div>` : ''}
     ${p.obs ? `<div class="card"><h3>Observações internas</h3><p style="white-space:pre-wrap;margin:0">${esc(p.obs)}</p></div>` : ''}
     <details class="card pp-histc" id="ppHist" ${LS.get('pp_hist') ? 'open' : ''}><summary><h3>${ic('clock')} Histórico <small>${d.historico.length} ${d.historico.length === 1 ? 'registro' : 'registros'}${d.historico[0] ? ' · último: ' + esc(d.historico[0].acao) + ' em ' + esc(d.historico[0].em) : ''}</small></h3>${ic('chevron')}</summary>
       <div class="pp-hist">${d.historico.map(h => `<div><small>${esc(h.em)}</small><b>${esc(h.acao)}</b><span>${esc(h.det || '')}</span><small>${esc(h.por || '')}</small></div>`).join('')}</div></details>`;
+}
+/* planilha no celular (no lugar da tabela): só nº, nome (2 linhas) e quantidade; o "+" abre os valores e a composição */
+function ppLista(itens, etapas, T) {
+  const et = {};
+  etapas.forEach(e => { et[e.codigo] = e; });
+  const kv = (t, v) => `<span><small>${t}</small><b class="bp-mono">${v}</b></span>`;
+  return `<div class="pp-mlist">${itens.map(i => i.tipo === 'E'
+    ? `<div class="pp-m-et"><span class="pp-m-c">${esc(i.codigo)}</span><b>${esc(i.descricao)}</b><b class="bp-mono">${bpM((et[i.codigo] || {}).preco)}</b></div>`
+    : `<div class="pp-m"><div class="pp-m-l"><span class="pp-m-c">${esc(i.codigo)}</span><span class="pp-m-d">${esc(i.descricao)}</span><span class="pp-m-q bp-mono">${nf(i.qtd)} <small>${esc(i.unidade)}</small></span>
+        <button type="button" class="pp-m-mais" data-mais aria-label="Ver detalhes">${ic('plus')}</button></div>
+      <div class="pp-m-det"><p>${esc(i.descricao)}</p>
+        <div class="pp-m-kv">${kv('Preço unit.', bpM(i.preco_unit))}${kv('Total', bpM(i.preco))}${kv('Custo unit.', bpM(i.custo_unit))}${kv('Material no total', bpM(i.v_mat))}${kv('MO / serviços no total', bpM(i.v_serv))}${kv('BDI no total', i.sem_bdi ? 'não incide' : bpM(i.bdi))}${kv('Gestão no total', i.sem_gestao ? 'não incide' : bpM(i.gestao))}</div>
+        ${i.comp_cod ? `<small>${i.fonte ? 'SINAPI ' : 'Composição '}<code>${esc(i.comp_cod)}</code>${i.fonte !== 'SINAPI-INSUMO' ? ` · <button type="button" class="linkbtn" data-ver-cod="${esc(i.codigo)}">ver insumos</button>` : ''}</small>` : '<small>Preço direto</small>'}</div></div>`).join('')}
+    <div class="pp-m-tot"><span>Total</span><b class="bp-mono">${bpM(T.preco)}</b></div></div>`;
 }
 /* tabela da planilha (leitura ou proposta): etapas com subtotal, itens com preço de venda; interna mostra o custo */
 function ppTabela(itens, etapas, T, interna, doc) {
@@ -310,7 +324,7 @@ function ppDesenhar(estrutura) {
     // linhas fechadas (só leitura): mexer no item ou na etapa é pelo "Editar"; remover só lá dentro, com confirmação.
     // No computador a quantidade continua editável direto na linha.
     let fechada = false;   // itens de etapa recolhida não são desenhados (continuam no cálculo)
-    const ed = t => `<button type="button" class="pp-edit" data-a="ed" title="Editar ${t}">${ic('edit')}<span>Editar</span></button>`;
+    const ed = t => `<button type="button" class="pp-edit" data-a="ed" title="Editar ${t}">${ic('edit')}${ic('plus')}<span>Editar</span></button>`;   // no celular o item mostra "+"
     $('#ppLin').innerHTML = E.linhas.length ? E.linhas.map((l, n) => {
       const c = C.linhas[n];
       if (l.tipo === 'E') {
@@ -563,6 +577,7 @@ function ppBusca() {
  * l = linha do orçamento (comp_cod, qtd, custos congelados); c = a mesma linha já calculada (custo_unit) */
 /* descrição do item com composição (leitura, proposta e planilha interna): abre os insumos (base da Size ou SINAPI) */
 function ppLigarVer(d) {
+  $$('.pp-mlist .pp-m-l').forEach(l => { l.onclick = () => { const m = l.closest('.pp-m'); m.classList.toggle('aberto'); $('[data-mais]', l).setAttribute('aria-expanded', m.classList.contains('aberto')); }; });
   $$('[data-ver-cod]').forEach(b => {
     b.onclick = async () => {
       const i = d.itens.find(x => x.codigo === b.dataset.verCod);
