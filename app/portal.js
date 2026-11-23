@@ -79,7 +79,8 @@ function portalLogin(msg) {
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
-    <button class="btn full">Entrar</button>${botaoInstalar('no-login')}${pcAssina()}</form></div>`;
+    <button class="btn full">Entrar</button><button type="button" class="linkbtn esqueci" data-esqueci>Esqueci minha senha</button>${botaoInstalar('no-login')}${pcAssina()}</form></div>`;
+  ligarEsqueci();
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, b = $('button', f);

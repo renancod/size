@@ -554,7 +554,8 @@ function telaLogin(msg) {
     ${msg ? `<div class="aviso warn">${esc(msg)}</div>` : ''}
     <label>Usuário ou e-mail<input name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
     <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
-    <button class="btn full">Entrar</button>${botaoInstalar('no-login')}</form></div>`;
+    <button class="btn full">Entrar</button><button type="button" class="linkbtn esqueci" data-esqueci>Esqueci minha senha</button>${botaoInstalar('no-login')}</form></div>`;
+  ligarEsqueci();
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, b = $('button', f);
@@ -565,6 +566,50 @@ function telaLogin(msg) {
       S.sess = d; LS.set('cs_sess', JSON.stringify(d));
       iniciar();
     } catch (x) { toast(x.message, 1); b.disabled = false; b.textContent = 'Entrar'; }
+  };
+}
+/* esqueci minha senha: pede o usuário ou e-mail; o servidor manda um link (30 min) para o e-mail do cadastro */
+function ligarEsqueci() {
+  const b = $('[data-esqueci]');
+  if (!b) return;
+  b.onclick = () => {
+    const ja = $('#f') && $('#f').login ? $('#f').login.value.trim() : '';
+    modal('Esqueci minha senha', `<p>Digite o seu usuário ou e-mail. Enviamos um link para o <b>e-mail do seu cadastro</b> para você criar uma senha nova.</p>
+      <label>Usuário ou e-mail<input name="login" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" value="${esc(ja)}"></label>
+      <small>Não tem e-mail no cadastro? Peça uma senha provisória ao administrador.</small>`, {
+      ok: 'Enviar link',
+      onOk: async f => {
+        const r = await api('senha_esqueci', { login: f.login.value });
+        modal('Confira o seu e-mail', `<div class="aviso info">${esc(r.msg)}</div>`, { semRodape: true });
+        return false;
+      }
+    });
+  };
+}
+/* link do e-mail (?redef=...): cria a senha nova e já entra */
+function telaRedefinir(tk) {
+  const C = window.CLIENTE;
+  if (C && typeof pcTema === 'function') pcTema(C.cor);
+  $('#raiz').innerHTML = `<div class="login"><form class="card" id="f">
+    <div class="marca"><img src="${C ? 'c/' + esc(C.slug) + '/icon-192.png' : 'icon-192.png'}" alt=""><div><b>Criar senha nova</b><small>${esc(C ? C.nome || '' : 'Size Engenharia')}</small></div></div>
+    <label>Nova senha (mín. 10 caracteres)<input name="nova" type="password" minlength="10" autocomplete="new-password" required></label>
+    <label>Repita a nova senha<input name="nova2" type="password" minlength="10" autocomplete="new-password" required></label>
+    <button class="btn full">Salvar e entrar</button><button type="button" class="linkbtn" id="vol">Voltar para a entrada</button></form></div>`;
+  const limpar = () => history.replaceState(null, '', location.pathname + location.hash);
+  $('#vol').onclick = () => { limpar(); telaLogin(); };
+  $('#f').onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, b = $('button', f);
+    if (f.nova.value !== f.nova2.value) return toast('As senhas não conferem.', 1);
+    b.disabled = true; b.textContent = 'Salvando…';
+    try {
+      const d = await api('senha_redefinir', { t: tk, nova: f.nova.value });
+      limpar();
+      S.token = d.token; LS.set('cs_token', d.token);
+      S.sess = d; LS.set('cs_sess', JSON.stringify(d));
+      toast(d.msg);
+      iniciar();
+    } catch (x) { toast(x.message, 1); b.disabled = false; b.textContent = 'Salvar e entrar'; }
   };
 }
 function sair(msg) {
@@ -630,6 +675,8 @@ async function boot() {
     $('#raiz').innerHTML = '<div class="login"><div class="card"><b>Configuração pendente</b><p>Cole a URL do Apps Script em <code>config.js</code>.</p></div></div>';
     return;
   }
+  // link de "Esqueci minha senha" (vale mesmo com outra pessoa logada neste aparelho: quem tem o link cria a senha e entra)
+  if (qs.get('redef')) return telaRedefinir(qs.get('redef'));
   if (!S.token) return telaLogin();
   try { S.sess = await api('sessao'); LS.set('cs_sess', JSON.stringify(S.sess)); } catch (e) {
     // sem sinal: abre com a última sessão guardada (o diário funciona offline)

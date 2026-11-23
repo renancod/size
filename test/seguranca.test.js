@@ -115,3 +115,32 @@ test('memória do login: segunda chamada não relê usuários e acessos; desativ
   t.adm('admin_usuario_salvar', { usuario: { id, nome: 'Joca', login: 'joca', ativo: false }, acessos: ac });
   assert.match(chamar('estoque_saldo').erro, /usuário desativado/);
 });
+
+test('esqueci minha senha: link no e-mail do cadastro, vale uma vez, só o último; resposta igual para quem não existe', () => {
+  const t = preparar();
+  t.G.rodar(`(() => { const T = central_('Usuarios'), u = T.all().find(x => x.login === 'admin'); u.email = 'chefe@size.com'; T.update(u); })()`);
+  const antes = t.G._enviados.length;
+  const r1 = t.call('senha_esqueci', { login: 'admin' });
+  const r0 = t.call('senha_esqueci', { login: 'fantasma' });
+  assert.equal(r1.msg, r0.msg);                                    // não revela quem tem conta
+  const em = t.G._enviados.slice(antes);
+  assert.equal(em.length, 1);
+  assert.equal(em[0].para, 'chefe@size.com');
+  const tk1 = em[0].html.match(/redef=([0-9a-f]+)/)[1];
+  // pedir de novo invalida o link anterior
+  t.call('senha_esqueci', { login: 'chefe@size.com' });
+  const tk2 = t.G._enviados.slice(-1)[0].html.match(/redef=([0-9a-f]+)/)[1];
+  falha(() => t.call('senha_redefinir', { t: tk1, nova: 'Senha-Nova-2026' }), /expirou ou já foi usado/);
+  // a senha antiga continua valendo até criar a nova
+  assert.ok(t.call('login', { login: 'admin', senha: t.senha }).token);
+  falha(() => t.call('senha_redefinir', { t: tk2, nova: '123' }), /10 caracteres/);
+  const d = t.call('senha_redefinir', { t: tk2, nova: 'Senha-Nova-2026' });
+  assert.ok(d.token && d.usuario.login === 'admin' && d.usuario.trocar_senha === false);
+  falha(() => t.call('senha_redefinir', { t: tk2, nova: 'Outra-Senha-2026' }), /expirou ou já foi usado/);   // uma vez só
+  falha(() => t.call('login', { login: 'admin', senha: t.senha }), /incorretos/);
+  assert.ok(t.call('login', { login: 'admin', senha: 'Senha-Nova-2026' }).token);
+  // no máximo 3 e-mails por hora para o mesmo usuário
+  const n = t.G._enviados.length;
+  for (let i = 0; i < 4; i++) t.call('senha_esqueci', { login: 'admin' });
+  assert.equal(t.G._enviados.length - n, 1);                       // 2 já usados acima + 1
+});

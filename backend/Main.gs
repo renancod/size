@@ -41,6 +41,8 @@ const TEMPO_ = { ini: 0, auth: 0, abas: 0, linhas: 0, cache: '', gravou: 0 };
  */
 const ROTAS = {
   login: { pub: true, fn: login_ },
+  senha_esqueci: { pub: true, fn: senhaEsqueci_ },
+  senha_redefinir: { pub: true, lock: true, fn: senhaRedefinir_ },
   forn_dados: { pub: true, fn: fornRota_ },
   forn_orcamento: { pub: true, fn: fornRota_ },
   forn_entrega: { pub: true, fn: fornRota_ },
@@ -437,6 +439,66 @@ function trocarSenha_(q, ctx) {
   T.update(u);
   // as outras sessões deste usuário caem (a versão da senha mudou); esta recebe um token novo
   return { msg: 'Senha alterada.', token: token_(u) };
+}
+/* ---------- esqueci minha senha ----------
+ * A pessoa digita o usuário ou o e-mail; se o cadastro tem e-mail, vai um link que vale 30 minutos e uma vez só.
+ * A senha atual continua valendo até ela criar a nova (pedir o link não tranca ninguém para fora).
+ * A resposta é sempre a mesma, exista o usuário ou não (não revela quem tem conta). */
+const SENHA_LINK_MIN = 30;
+function senhaEsqueci_(q) {
+  const login = norm_(q.login);
+  if (!login) throw new Error('Digite o seu usuário ou e-mail.');
+  const resp = { msg: 'Se esse usuário tiver e-mail no cadastro, enviamos um link para criar uma senha nova. Confira a caixa de entrada e o spam. O link vale ' + SENHA_LINK_MIN + ' minutos.' };
+  const cache = CacheService.getScriptCache(), kp = 'sp|' + login.slice(0, 80), pedidos = Number(cache.get(kp)) || 0;
+  if (pedidos >= 3) { Utilities.sleep(600); return resp; }          // no máximo 3 e-mails por hora para o mesmo usuário
+  cache.put(kp, String(pedidos + 1), 3600);
+  const u = central_('Usuarios').all().find(x => norm_(x.login) === login || (x.email && norm_(x.email) === login));
+  const email = u ? String(u.email || '').trim() : '';
+  if (!u || !sim_(u.ativo) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { Utilities.sleep(600); return resp; }
+  const ku = 'spu|' + u.id, doUsuario = Number(cache.get(ku)) || 0;   // conta também por pessoa (usuário ou e-mail digitado)
+  if (doUsuario >= 3) return resp;
+  cache.put(ku, String(doUsuario + 1), 3600);
+  const tk = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  cache.put('sr|' + hash_(tk, 'redef'), String(u.id), SENHA_LINK_MIN * 60);
+  cache.put('sru|' + u.id, hash_(tk, 'redef'), SENHA_LINK_MIN * 60);   // só o último link pedido vale
+  let base = String(config_().APP_URL || APP_URL_PADRAO).replace(/\/?$/, '/'), marca = empresa_(), cor = '#0E2A6B';
+  if (u.cliente_id) {   // pessoa do portal do cliente: o link abre no endereço do portal dela
+    const c = central_('Clientes').all().find(x => String(x.id) === String(u.cliente_id));
+    if (c && c.slug && c.publicado_em) { base = cliUrl_(c.slug); marca = c.nome; }
+    if (c && /^#[0-9a-f]{6}$/i.test(String(c.cor))) cor = c.cor;
+  }
+  const link = base + '?redef=' + tk, nome = String(u.nome || '').split(' ')[0];
+  const texto = 'Olá, ' + nome + '!\n\nRecebemos um pedido para criar uma senha nova para o usuário ' + u.login + '.\n\nAbra o link abaixo (vale ' + SENHA_LINK_MIN + ' minutos e funciona uma vez só):\n' + link
+    + '\n\nSe não foi você, ignore este e-mail: a sua senha atual continua valendo.\n\n' + empresa_();
+  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2433;max-width:560px">'
+    + '<div style="background:' + cor + ';padding:16px 20px;border-radius:12px 12px 0 0;color:#fff"><b style="font-size:18px">' + h_(marca) + '</b></div>'
+    + '<div style="border:1px solid #e3e6ec;border-top:0;border-radius:0 0 12px 12px;padding:20px">'
+    + '<p>Olá, ' + h_(nome) + '!</p><p>Recebemos um pedido para criar uma <b>senha nova</b> para o usuário <b>' + h_(u.login) + '</b>.</p>'
+    + botaoPortal_(link, 'Criar senha nova')
+    + '<p style="color:#6b7280;font-size:13px">O link vale ' + SENHA_LINK_MIN + ' minutos e funciona uma vez só. Se não foi você, ignore este e-mail: a sua senha atual continua valendo.</p>'
+    + '<p style="color:#6b7280;font-size:13px">' + h_(empresa_()) + '</p></div></div>';
+  try {
+    GmailApp.sendEmail(email, 'Criar senha nova · ' + marca, texto, { htmlBody: html, name: empresa_() });
+    usoEmail_(email);
+    log_({ u: u }, 'senha_link', u.login);
+  } catch (e) { /* cota de e-mails do dia: a resposta continua a mesma */ }
+  return resp;
+}
+function senhaRedefinir_(q) {
+  const tk = String(q.t || ''), cache = CacheService.getScriptCache();
+  const id = tk.length >= 40 ? cache.get('sr|' + hash_(tk, 'redef')) : null;
+  if (!id || cache.get('sru|' + id) !== hash_(tk, 'redef')) throw new Error('Este link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".');
+  const T = central_('Usuarios'), u = T.all().find(x => String(x.id) === String(id));
+  if (!u || !sim_(u.ativo)) throw new Error('Este acesso não está ativo. Fale com o administrador.');
+  definirSenha_(u, q.nova);
+  u.trocar_senha = 'Não';
+  u.ultimo_acesso = new Date();
+  T.update(u);
+  cache.remove('sr|' + hash_(tk, 'redef')); cache.remove('sru|' + id);
+  cache.remove('lf|' + norm_(u.login).slice(0, 80));   // libera o bloqueio por tentativas erradas
+  log_({ u: u }, 'senha_redefinida', u.login);
+  // as sessões antigas caem (a versão da senha mudou); esta já entra
+  return Object.assign({ token: token_(u), msg: 'Senha nova criada.' }, sessaoDe_(u));
 }
 const SENHAS_FRACAS_ = ['1234567890', '0123456789', '12345678910', '1234567890a', 'senha12345', 'senha123456', 'password12', 'password123', 'qwertyuiop', 'abcdefghij', 'admin12345', 'size123456', 'sizeengenharia'];
 function definirSenha_(u, senha) {
