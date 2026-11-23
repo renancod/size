@@ -1841,6 +1841,11 @@ label.chk{display:flex;gap:8px;align-items:center;font-weight:500;color:var(--tx
 .tp-dia-n b{color:#fff;font-family:var(--bp-mono);font-size:1.25rem}.tp-dia-n small{color:var(--tp-ac2)!important;font-size:.66rem;text-transform:uppercase;font-weight:800}
 .tp-di{display:flex;align-items:center;gap:12px;width:100%;padding:10px 4px;border:0;border-top:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:6px}
 .tp-di:hover{background:#F7FAFA}.tp-di-t{flex:1;min-width:0;display:grid;gap:2px}.tp-di-t b{color:var(--tp-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp-di-t small{color:var(--mute);font-size:.76rem}
+/* diários agrupados por execução: cabeçalho da execução (abre a demanda) e os dias dentro */
+.tp-ex-h{display:flex;align-items:center;gap:12px;padding:4px 4px 10px;color:inherit;text-decoration:none;border-radius:6px}.tp-ex-h:hover{background:#F7FAFA}
+.tp-ex-h .tp-di-q b{font-size:1.05rem}
+.tp-ex-dia{padding:8px 4px 8px 10px}.tp-ex-dia .tp-dia-n{width:38px;height:40px}.tp-ex-dia .tp-dia-n b{font-size:1.05rem}
+.tp-ex-dia .tp-di-t b{text-transform:capitalize}.tp-ex-dia .tp-di-t small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tp-di-q{display:grid;justify-items:end;gap:2px}.tp-di-q b{font-family:var(--bp-mono);color:#C2410C}.tp-di-q small{color:var(--mute);font-size:.74rem;display:flex;align-items:center;gap:3px}.tp-di-q .ic{width:12px;height:12px}
 /* produção */
 .tp-tiles{margin-bottom:12px}

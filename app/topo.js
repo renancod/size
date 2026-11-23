@@ -535,12 +535,18 @@ async function vTopoDiarios(qs) {
     <div id="tdLst"></div></div>`);
   const desenhar = () => {
     const q = $('#tdQuem') ? $('#tdQuem').value : '', o = $('#tdObra').value;
-    const l = L.filter(x => (!q || x.topografo_id === q) && (!o || x.obra_nome === o)), dias = [...new Set(l.map(x => x.data))];
-    $('#tdLst').innerHTML = dias.map(s => {
-      const xs = l.filter(x => x.data === s);
-      return `<div class="card tp-dia"><div class="tp-dia-h"><span class="tp-dia-n"><b>${fd(s).slice(0, 2)}</b><small>${DSEM[new Date(s + 'T12:00').getDay()].slice(0, 3)}</small></span>
-        <span><b>${fdc(s)}</b><small>${plural(xs.length, 'lançamento', 'lançamentos')} · ${['m', 'pt', 'un'].map(u => { const t = xs.filter(x => x.unidade === u).reduce((a, x) => a + x.qtd, 0); return t ? tpQ(t, u) : ''; }).filter(Boolean).join(' · ')}</small></span></div>
-        ${xs.map(x => `<button type="button" class="tp-di" data-d="${esc(x.id)}"><span class="tp-di-t">${tpTag(x.tipo)}<b>${esc([x.servico, x.local].filter(Boolean).join(' · '))}</b><small>${esc(x.obra_nome)} · ${esc(x.topografo)} · <code>${esc(x.demanda)}</code></small></span>
+    const l = L.filter(x => (!q || x.topografo_id === q) && (!o || x.obra_nome === o));
+    // um cartão por execução (demanda) com os dias lançados dentro; a do lançamento mais recente em cima
+    const exs = [...new Set(l.map(x => x.demanda))].map(dm => l.filter(x => x.demanda === dm).sort((a, b) => String(b.data).localeCompare(String(a.data))))
+      .sort((a, b) => String(b[0].data).localeCompare(String(a[0].data)));
+    const tot = xs => ['m', 'pt', 'un'].map(u => { const t = xs.filter(x => x.unidade === u).reduce((a, x) => a + x.qtd, 0); return t ? tpQ(t, u) : ''; }).filter(Boolean).join(' · ');
+    $('#tdLst').innerHTML = exs.map(xs => {
+      const x0 = xs[0], fim = xs[0].data, ini = xs[xs.length - 1].data, terminou = xs.some(x => x.terminou);
+      return `<div class="card tp-dia tp-ex"><a class="tp-ex-h" href="#/topo/demanda/${enc(x0.demanda)}"><span class="tp-di-t">${tpTag(x0.tipo)}<b>${esc([x0.servico, x0.local].filter(Boolean).join(' · '))}</b>
+          <small>${esc(x0.obra_nome)} · ${esc(x0.topografo)} · <code>${esc(x0.demanda)}</code> · ${plural(xs.length, 'dia', 'dias')}${ini !== fim ? ` · ${fd(ini).slice(0, 5)} a ${fd(fim).slice(0, 5)}` : ''}</small></span>
+          <span class="tp-di-q"><b>${tot(xs)}</b><small>${terminou ? '<span class="ok">terminou</span>' : 'em andamento'} ${ic('chevron')}</small></span></a>
+        ${xs.map(x => `<button type="button" class="tp-di tp-ex-dia" data-d="${esc(x.id)}"><span class="tp-dia-n"><b>${fd(x.data).slice(0, 2)}</b><small>${DSEM[new Date(x.data + 'T12:00').getDay()].slice(0, 3)}</small></span>
+          <span class="tp-di-t"><b>${fdc(x.data)}</b>${x.obs ? `<small>${esc(x.obs)}</small>` : ''}</span>
           <span class="tp-di-q"><b>${tpQ(x.qtd, x.unidade)}</b><small>${ic('camera')} ${x.fotos.length}${x.croquis.length ? ' · croqui' : ''}${x.terminou ? ' · <span class="ok">terminou</span>' : ''}</small></span></button>`).join('')}</div>`;
     }).join('') || `<p class="vazio">Nenhum lançamento em ${tpMesNome(mes).toLowerCase()}.</p>`;
     $$('#tdLst [data-d]').forEach(b => { b.onclick = () => tpDiarioModal(L.find(x => x.id === b.dataset.d)); });
