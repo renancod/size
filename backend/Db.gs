@@ -201,13 +201,18 @@ function tabela_(ss, nome, cols) {
   return (_tabs[k] = t);
 }
 
+const NOTIF_IGNORA_ = { PropostaItens: 1, PropostaAnexos: 1, Insumos: 1, Composicoes: 1, ComposicaoItens: 1, InsumoPrecos: 1, Unidades: 1, SinapiInsumos: 1, SinapiComposicoes: 1, SinapiItens: 1, SinapiHist: 1 };
 function Tabela_(sh, head) { this.sh = sh; this.head = head; this._rows = null; }
 /* gravou: invalida o que estava guardado na memória do Google sobre esta aba */
 Tabela_.prototype.mudou_ = function () {
   if (this.auth) authMudou_();
   if (this.grupo) memMudou_(this.grupo);
   const n = this.sh.getName();
-  if (n !== 'Log' && n !== 'Aparelhos') { memMudou_('notif'); TEMPO_.gravou = 1; }
+  if (n !== 'Log' && n !== 'Aparelhos') {
+    TEMPO_.gravou = 1;
+    // o sino só recalcula quando muda algo que aparece nele: planilha do orçamento, anexos, base de preços e SINAPI não geram aviso
+    if (!NOTIF_IGNORA_[n] && n.indexOf('_novo_') !== 0) memMudou_('notif');
+  }
   // planilha da obra: renova o que estiver guardado dela (ex.: lista de pedidos)
   if (this.ssId && n !== 'Log') memMudou_('ss' + this.ssId);
 };

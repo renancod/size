@@ -640,7 +640,7 @@ function cliOrcamento_(q, ctx) {
   o.revisoes = revs.map(x => ({ id: String(x.id), rotulo: propRotulo_(x), status: x.status }));
   o.diferencas = ant ? Object.assign({ de: propRotulo_(ant) }, cliOrcDif_(cliOrcPub_(ant), o)) : null;
   o.comentarios = propComentarios_(p.numero);
-  o.anexos = propAnexos_(p.numero, true).map(a => ({ id: a.id, nome: a.nome, descricao: a.descricao, mime: a.mime, tamanho: a.tamanho, item: a.item, em: a.em }));
+  o.anexos = propAnexos_(p.numero, true).map(a => ({ id: a.id, nome: a.nome, descricao: a.descricao, mime: a.mime, tamanho: a.tamanho, item: a.item, itens: a.itens, em: a.em }));
   o.pode_comentar = p.status === 'Enviado';
   o.pode_aceitar = p.status === 'Enviado' && !p.aceite_json;
   o.empresa = String(config_().EMPRESA || 'Size Engenharia');
@@ -670,7 +670,7 @@ function cliOrcComentar_(q, ctx) {
 const ANX_MIMES_ = /^(application\/pdf|image\/(jpeg|png|webp)|application\/vnd\.(openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document)|ms-excel)|application\/msword|text\/csv)$/;
 function propAnexos_(numero, soCliente) {
   return central_('PropostaAnexos').all().filter(a => String(a.numero) === String(numero) && (!soCliente || sim_(a.cliente_ve)))
-    .map(a => ({ id: String(a.id), nome: a.nome, descricao: a.descricao || '', mime: a.mime, tamanho: num_(a.tamanho), cliente_ve: sim_(a.cliente_ve), item: String(a.item || ''), em: fmtVal_(a.criado_em), por: a.criado_por || '' }))
+    .map(a => ({ id: String(a.id), nome: a.nome, descricao: a.descricao || '', mime: a.mime, tamanho: num_(a.tamanho), cliente_ve: sim_(a.cliente_ve), item: String(a.item || ''), itens: String(a.item || '').split(',').map(s => s.trim()).filter(Boolean), em: fmtVal_(a.criado_em), por: a.criado_por || '' }))
     .sort((x, y) => String(x.em).localeCompare(String(y.em)));
 }
 function propAnexoSalvar_(q, ctx) {
@@ -695,10 +695,12 @@ function propAnexoSalvar_(q, ctx) {
   if (nome) a.nome = nome;
   a.descricao = desc;
   a.cliente_ve = q.cliente_ve === false || q.cliente_ve === 'false' ? 'Não' : 'Sim';
-  a.item = String(q.item || '').trim();
+  // um anexo pode valer para vários itens (ex.: a mesma proposta de fornecedor para a estação e os reservatórios)
+  const its = (Array.isArray(q.itens) ? q.itens : String(q.item || '').split(',')).map(s => String(s).trim()).filter(Boolean);
+  a.item = [...new Set(its)].slice(0, 60).join(', ');
   if (novo) T.insert(a); else T.update(a);
   const TP = central_('Propostas');
-  propHist_(p, ctx, novo ? 'Anexo incluído' : 'Anexo alterado', a.nome + (sim_(a.cliente_ve) ? ' · cliente vê' : ' · só interno') + (a.item ? ' · item ' + a.item : ''));
+  propHist_(p, ctx, novo ? 'Anexo incluído' : 'Anexo alterado', a.nome + (sim_(a.cliente_ve) ? ' · cliente vê' : ' · só interno') + (a.item ? ' · ' + (a.item.indexOf(',') > 0 ? 'itens ' : 'item ') + a.item : ''));
   TP.update(p);
   return { msg: novo ? 'Anexo incluído.' : 'Anexo salvo.', id: a.id };
 }

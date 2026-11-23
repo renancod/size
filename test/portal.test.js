@@ -411,16 +411,16 @@ test('anexos do orçamento: a Size sobe, escolhe se o cliente vê, liga a item; 
   const id = adm('prop_salvar', { proposta: { cliente: 'Mar Azul', empreendimento: 'Dunas' }, itens: [
     { tipo: 'E', descricao: 'EBE' }, { descricao: 'Estação elevatória PRFV', unidade: 'un', qtd: 1, unit_mat: 63230, unit_mo: 0 }] }).id;
   const PDF = { nome: 'proposta-aguas-claras.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 teste').toString('base64') };
-  const a1 = adm('prop_anexo_salvar', { id, arquivo: PDF, nome: 'Proposta Águas Claras', descricao: 'Estação e reservatórios', cliente_ve: true, item: '1.1' }).id;
+  const a1 = adm('prop_anexo_salvar', { id, arquivo: PDF, nome: 'Proposta Águas Claras', descricao: 'Estação e reservatórios', cliente_ve: true, itens: ['1.1', '1.2'] }).id;
   const a2 = adm('prop_anexo_salvar', { id, arquivo: Object.assign({}, PDF, { nome: 'cotacao-interna.pdf' }), nome: 'Cotação interna', cliente_ve: false }).id;
   let d = adm('prop_detalhe', { id });
-  assert.deepEqual(d.anexos.map(a => [a.nome, a.cliente_ve, a.item]), [['Proposta Águas Claras', true, '1.1'], ['Cotação interna', false, '']]);
+  assert.deepEqual(d.anexos.map(a => [a.nome, a.cliente_ve, a.itens]), [['Proposta Águas Claras', true, ['1.1', '1.2']], ['Cotação interna', false, []]]);
   assert.equal(Buffer.from(adm('prop_anexo_ver', { id, anexo: a1 }).b64, 'base64').toString(), '%PDF-1.4 teste');
   adm('prop_portal', { id, cliente_id: cli, modo: 'aberto' });
   adm('prop_status', { id, op: 'enviar' });
   const o = cliente('cli_orcamento', { id });
   assert.deepEqual(o.anexos.map(a => a.nome), ['Proposta Águas Claras']);          // o interno não aparece
-  assert.equal(o.anexos[0].item, '1.1');
+  assert.deepEqual(o.anexos[0].itens, ['1.1', '1.2']);
   assert.ok(cliente('cli_orc_anexo', { id, anexo: a1 }).b64);
   assert.match(bruto('cli_orc_anexo', { id, anexo: a2 }).erro, /não disponível/);   // nem pelo id
   cliente('cli_orc_comentar', { id, item: 'ANX:' + a1, tipo: 'duvida', texto: 'O frete está incluso?' });

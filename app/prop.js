@@ -152,7 +152,7 @@ function ppAnexosHtml(d) {
       ${g ? `<button type="button" class="btn sec peq" id="ppAnxNovo">${ic('plus')} Incluir anexo</button>` : ''}</div>
     ${L.length ? `<div class="pp-anx-l">${L.map(a => `<div class="pp-anx-i"><span class="pp-anx-ic">${ic(ppAnxIc(a.mime))}</span>
         <span class="pp-anx-t"><b>${esc(a.nome)}</b>${a.descricao ? `<small>${esc(a.descricao)}</small>` : ''}
-          <small>${ppKb(a.tamanho)} · ${esc(String(a.em).slice(0, 10))}${a.por ? ' · ' + esc(a.por) : ''} · ${a.cliente_ve ? '<span class="pp-anx-ve">cliente vê</span>' : '<span class="pp-anx-int">só interno</span>'}${a.item ? ` · item <b>${esc(a.item)}</b>` : ''}</small></span>
+          <small>${ppKb(a.tamanho)} · ${esc(String(a.em).slice(0, 10))}${a.por ? ' · ' + esc(a.por) : ''} · ${a.cliente_ve ? '<span class="pp-anx-ve">cliente vê</span>' : '<span class="pp-anx-int">só interno</span>'}${(a.itens || []).length ? ` · ${a.itens.length > 1 ? 'itens' : 'item'} <b>${esc(a.itens.join(', '))}</b>` : ''}</small></span>
         <span class="pp-anx-a"><button type="button" class="btn sec peq" data-anx="${esc(a.id)}">${ic('eye')} Abrir</button>${g ? `<button type="button" class="icbtn" data-anx-ed="${esc(a.id)}" title="Editar">${ic('edit')}</button><button type="button" class="icbtn" data-anx-rm="${esc(a.id)}" title="Retirar">${ic('trash')}</button>` : ''}</span></div>`).join('')}</div>`
       : '<p class="vazio">Nenhum anexo. Suba aqui as cotações de terceiros (materiais, equipamentos) e outros documentos do orçamento.</p>'}
   </div>`;
@@ -173,7 +173,9 @@ function ppAnexosLigar(d) {
       <label>${a ? 'Trocar o arquivo <small>(opcional)</small>' : 'Arquivo <small>(PDF, imagem, Excel ou Word · até 10 MB)</small>'}<input type="file" name="arq" accept=".pdf,image/*,.xlsx,.xls,.docx,.doc,.csv" ${a ? '' : 'required'}></label>
       <label>Nome<input name="nome" maxlength="140" value="${esc(a ? a.nome : '')}" placeholder="ex: Proposta Águas Claras – estação elevatória"></label>
       <label>Descrição <small>(opcional)</small><input name="desc" maxlength="400" value="${esc(a ? a.descricao : '')}" placeholder="ex: reservatórios PRFV 70 m³ e EEE 7 m³, validade 30 dias"></label>
-      <label>Ligar a um item <small>(opcional: aparece no "+" do item)</small><select name="item"><option value="">— nenhum —</option>${itens.map(i => `<option value="${esc(i.codigo)}" ${a && a.item === i.codigo ? 'selected' : ''}>${esc(i.codigo)} · ${esc(String(i.descricao).slice(0, 70))}</option>`).join('')}</select></label>
+      <div><b class="pp-anx-lb">Ligar a itens <small>(opcional: o anexo aparece no "+" de cada item marcado)</small></b>
+        <input type="search" class="pp-anx-busca" placeholder="Filtrar itens: número ou descrição">
+        <div class="pp-anx-its">${itens.map(i => `<label class="chk"><input type="checkbox" name="itens" value="${esc(i.codigo)}" ${a && (a.itens || []).includes(i.codigo) ? 'checked' : ''}> <code>${esc(i.codigo)}</code> ${esc(String(i.descricao).slice(0, 80))}</label>`).join('')}</div></div>
       <label class="chk"><input type="checkbox" name="ve" ${!a || a.cliente_ve ? 'checked' : ''}> O cliente vê este anexo no portal</label>
       <div class="aviso warn" id="ppAnxAviso">Cotação de fornecedor mostra o <b>preço de custo</b>: com o cliente vendo, ele enxerga a sua margem naquele item.</div></div>`, {
     ok: a ? 'Salvar' : 'Incluir anexo',
@@ -185,12 +187,17 @@ function ppAnexosLigar(d) {
         const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(arq); });
         arquivo = { nome: arq.name, mime: arq.type || '', b64 };
       }
-      toast((await api('prop_anexo_salvar', { id, anexo: a ? a.id : '', arquivo, nome: f.nome.value, descricao: f.desc.value, item: f.item.value, cliente_ve: f.ve.checked })).msg);
+      toast((await api('prop_anexo_salvar', { id, anexo: a ? a.id : '', arquivo, nome: f.nome.value, descricao: f.desc.value, itens: $$('input[name=itens]:checked', f).map(c => c.value), cliente_ve: f.ve.checked })).msg);
       await recarrega();
     }
   });
-  if ($('#ppAnxNovo')) $('#ppAnxNovo').onclick = () => { form(null); const c = $('#modal [name=ve]'), av = $('#ppAnxAviso'); c.onchange = () => { av.hidden = !c.checked; }; };
-  $$('[data-anx-ed]').forEach(b => { b.onclick = () => { form(L.find(x => x.id === b.dataset.anxEd)); const c = $('#modal [name=ve]'), av = $('#ppAnxAviso'); av.hidden = !c.checked; c.onchange = () => { av.hidden = !c.checked; }; }; });
+  const ligarForm = () => {
+    const c = $('#modal [name=ve]'), av = $('#ppAnxAviso'), bq = $('#modal .pp-anx-busca');
+    av.hidden = !c.checked; c.onchange = () => { av.hidden = !c.checked; };
+    bq.oninput = () => { const t = norm(bq.value); $$('#modal .pp-anx-its label').forEach(l => { l.hidden = !!t && !norm(l.textContent).includes(t); }); };
+  };
+  if ($('#ppAnxNovo')) $('#ppAnxNovo').onclick = () => { form(null); ligarForm(); };
+  $$('[data-anx-ed]').forEach(b => { b.onclick = () => { form(L.find(x => x.id === b.dataset.anxEd)); ligarForm(); }; });
   $$('[data-anx-rm]').forEach(b => { b.onclick = async () => {
     const a = L.find(x => x.id === b.dataset.anxRm);
     if (!confirm('Retirar o anexo "' + a.nome + '"? Ele sai de todas as revisões deste orçamento.')) return;
@@ -261,7 +268,7 @@ function ppDetHtml(i) {
   const kv = (t, v) => `<span><small>${t}</small><b class="bp-mono">${v}</b></span>`;
   return `<div class="pp-m-kv">${kv('Preço unit.', bpM(i.preco_unit))}${kv('Total', bpM(i.preco))}${kv('Custo unit.', bpM(i.custo_unit))}${kv('Material no total', bpM(i.v_mat))}${kv('MO / serviços no total', bpM(i.v_serv))}${kv('BDI no total', i.sem_bdi ? 'não incide' : bpM(i.bdi))}${kv('Gestão no total', i.sem_gestao ? 'não incide' : bpM(i.gestao))}</div>
     ${i.comp_cod ? `<small>${i.fonte ? 'SINAPI ' : 'Composição '}<code>${esc(i.comp_cod)}</code>${i.fonte !== 'SINAPI-INSUMO' ? ` · <button type="button" class="linkbtn" data-ver-cod="${esc(i.codigo)}">ver insumos</button>` : ''}</small>` : '<small>Preço direto</small>'}
-    ${PP_ANX.filter(a => a.item === i.codigo).map(a => `<div class="pp-anx-it">${ic('clip')} <button type="button" class="linkbtn" data-anx="${esc(a.id)}">${esc(a.nome)}</button>${a.cliente_ve ? '' : ' <small>(só interno)</small>'}</div>`).join('')}`;
+    ${PP_ANX.filter(a => (a.itens || []).includes(i.codigo)).map(a => `<div class="pp-anx-it">${ic('clip')} <button type="button" class="linkbtn" data-anx="${esc(a.id)}">${esc(a.nome)}</button>${a.cliente_ve ? '' : ' <small>(só interno)</small>'}</div>`).join('')}`;
 }
 function ppLista(itens, etapas, T) {
   const et = {};

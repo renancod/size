@@ -199,7 +199,18 @@ async function apiAgora(acao, dados, o = {}) {
   const buscar = () => api(acao, dados).then(d => {
     const s = JSON.stringify(d), mudou = !c || c.s !== s;
     c = AGORA[k] = { s, ate: Date.now() + AGORA_FRESCO };
-    if (!o.memoria) { try { LS.set(k, s); } catch (e) { /* cheio: fica só na memória */ } }
+    if (!o.memoria) {
+      try {
+        LS.set(k, s);
+        // o.max: guarda só os N últimos desta ação no aparelho (ex.: 3 orçamentos), o mais antigo sai
+        if (o.max) {
+          const kl = agoraChave(acao) + '__lista', l = (() => { try { return JSON.parse(LS.get(kl) || '[]'); } catch (e) { return []; } })().filter(x => x !== k);
+          l.push(k);
+          while (l.length > o.max) { const fora = l.shift(); LS.del(fora); delete AGORA[fora]; }
+          LS.set(kl, JSON.stringify(l));
+        }
+      } catch (e) { /* cheio: fica só na memória */ }
+    }
     return { d, mudou };
   });
   if (!c) return (await buscar()).d;
@@ -211,7 +222,7 @@ async function apiAgora(acao, dados, o = {}) {
   return JSON.parse(c.s);   // cópia: a tela pode mexer nos dados
 }
 /* orçamento aberto há pouco abre na hora (orçamento, proposta e cronograma usam o mesmo) e confere por trás */
-const propDetalhe = id => apiAgora('prop_detalhe', { id }, { memoria: true, pode: () => !(typeof PP !== 'undefined' && PP.ed && PP.ed.sujo) && !(typeof CR !== 'undefined' && CR.ed && CR.ed.sujo) });
+const propDetalhe = id => apiAgora('prop_detalhe', { id }, { max: 3, pode: () => !(typeof PP !== 'undefined' && PP.ed && PP.ed.sujo) && !(typeof CR !== 'undefined' && CR.ed && CR.ed.sujo) });
 /* ---------- diagnóstico de lentidão: tempo de cada chamada e de cada tela (fica só neste aparelho) ----------
  * chamada: total (rede + Google acordar + servidor), servidor (srv), login/acesso (auth), abas e linhas lidas.
  * tela: do clique até aparecer, quantas chamadas e se foram uma atrás da outra (soma ≈ total). Vê em Configurações → Velocidade. */
@@ -678,6 +689,22 @@ async function boot() {
   // link de "Esqueci minha senha" (vale mesmo com outra pessoa logada neste aparelho: quem tem o link cria a senha e entra)
   if (qs.get('redef')) return telaRedefinir(qs.get('redef'));
   if (!S.token) return telaLogin();
+  // abertura na hora: com a sessão guardada neste aparelho, o app abre já e confere com o servidor por trás
+  // (senha trocada ou acesso tirado: o api() derruba para o login; obras/permissões mudaram: redesenha com a nova)
+  const guard = (() => { try { return JSON.parse(LS.get('cs_sess') || 'null'); } catch (e) { return null; } })();
+  if (guard && guard.usuario && !guard.usuario.trocar_senha) {
+    S.sess = guard;
+    iniciar();
+    api('sessao').then(s => {
+      const novo = JSON.stringify(s);
+      if (novo === LS.get('cs_sess')) return;
+      LS.set('cs_sess', novo);
+      const mudou = JSON.stringify([guard.obras, guard.usuario, guard.cliente || null]) !== JSON.stringify([s.obras, s.usuario, s.cliente || null]);
+      S.sess = s;
+      if (mudou && !$('#modal.on')) iniciar();
+    }).catch(e => { if (e.rede) S.offline = true; });
+    return;
+  }
   try { S.sess = await api('sessao'); LS.set('cs_sess', JSON.stringify(S.sess)); } catch (e) {
     // sem sinal: abre com a última sessão guardada (o diário funciona offline)
     const c = e.rede && LS.get('cs_sess');
